@@ -1,0 +1,222 @@
+version: '3.8'
+
+services:
+  # ========================================
+  # DATABASE SERVICES
+  # ========================================
+  
+  mongodb:
+    image: mongo:6.0
+    container_name: diabetes-mongodb
+    restart: unless-stopped
+    ports:
+      - "27018:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin123
+      MONGO_INITDB_DATABASE: diabetes_db
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - diabetes-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: diabetes-redis
+    restart: unless-stopped
+    ports:
+      - "6381:6379"  # Using 6381 to avoid conflict with your existing Redis
+    command: redis-server --requirepass redis123
+    volumes:
+      - redis_data:/data
+    networks:
+      - diabetes-network
+
+  # ========================================
+  # FASTAPI BACKEND SERVICES
+  # ========================================
+
+  timeline-service:
+    build:
+      context: ./services/timeline-service
+      dockerfile: Dockerfile.dev
+    container_name: diabetes-timeline-service
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      - ENV=development
+      - SERVICE_PORT=8001
+      - MONGODB_URL=mongodb://admin:admin123@mongodb:27017/diabetes_db?authSource=admin
+      - REDIS_URL=redis://:redis123@redis:6379/0
+    depends_on:
+      - mongodb
+      - redis
+    networks:
+      - diabetes-network
+    volumes:
+      - ./services/timeline-service:/app
+
+  analytics-service:
+    build:
+      context: ./services/analytics-service
+      dockerfile: Dockerfile.dev
+    container_name: diabetes-analytics-service
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    environment:
+      - ENV=development
+      - SERVICE_PORT=8002
+      - MONGODB_URL=mongodb://admin:admin123@mongodb:27017/diabetes_db?authSource=admin
+      - REDIS_URL=redis://:redis123@redis:6379/0
+    depends_on:
+      - mongodb
+      - redis
+      - timeline-service
+    networks:
+      - diabetes-network
+    volumes:
+      - ./services/analytics-service:/app
+
+  scheduler-service:
+    build:
+      context: ./services/scheduler-service
+      dockerfile: Dockerfile.dev
+    container_name: diabetes-scheduler-service
+    restart: unless-stopped
+    ports:
+      - "8003:8003"
+    environment:
+      - ENV=development
+      - SERVICE_PORT=8003
+      - MONGODB_URL=mongodb://admin:admin123@mongodb:27017/diabetes_db?authSource=admin
+      - REDIS_URL=redis://:redis123@redis:6379/0
+    depends_on:
+      - mongodb
+      - redis
+      - timeline-service
+    networks:
+      - diabetes-network
+    volumes:
+      - ./services/scheduler-service:/app
+
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+      dockerfile: Dockerfile.dev
+    container_name: diabetes-api-gateway
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - ENV=development
+      - SERVICE_PORT=8080
+      - TIMELINE_SERVICE_URL=http://timeline-service:8001
+      - ANALYTICS_SERVICE_URL=http://analytics-service:8002
+      - SCHEDULER_SERVICE_URL=http://scheduler-service:8003
+    depends_on:
+      - timeline-service
+      - analytics-service
+      - scheduler-service
+    networks:
+      - diabetes-network
+    volumes:
+      - ./services/api-gateway:/app
+
+  # ========================================
+  # REACT FRONTEND SERVICES
+  # ========================================
+
+  timeline-frontend:
+    build:
+      context: ./frontend/timeline-app
+      dockerfile: Dockerfile.dev
+    container_name: diabetes-timeline-frontend
+    restart: unless-stopped
+    ports:
+      - "3010:3000"  # Using 3010 to avoid conflict with your existing services
+    environment:
+      - REACT_APP_API_URL=http://localhost:8080
+      - REACT_APP_TIMELINE_API_URL=http://localhost:8001
+      - CHOKIDAR_USEPOLLING=true
+    depends_on:
+      - api-gateway
+      - timeline-service
+    networks:
+      - diabetes-network
+    volumes:
+      - ./frontend/timeline-app:/app
+      - /app/node_modules
+
+  analytics-frontend:
+    build:
+      context: ./frontend/analytics-app
+      dockerfile: Dockerfile.dev
+    container_name: diabetes-analytics-frontend
+    restart: unless-stopped
+    ports:
+      - "3011:3000"  # Using 3011 to avoid conflict with your existing services
+    environment:
+      - REACT_APP_API_URL=http://localhost:8080
+      - REACT_APP_ANALYTICS_API_URL=http://localhost:8002
+      - CHOKIDAR_USEPOLLING=true
+    depends_on:
+      - api-gateway
+      - analytics-service
+    networks:
+      - diabetes-network
+    volumes:
+      - ./frontend/analytics-app:/app
+      - /app/node_modules
+
+  # ========================================
+  # DEVELOPMENT TOOLS
+  # ========================================
+
+  mongo-express:
+    image: mongo-express:latest
+    container_name: diabetes-mongo-express
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
+      ME_CONFIG_MONGODB_ADMINPASSWORD: admin123
+      ME_CONFIG_MONGODB_URL: mongodb://admin:admin123@mongodb:27017/
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: admin123
+    depends_on:
+      - mongodb
+    networks:
+      - diabetes-network
+
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: diabetes-redis-commander
+    restart: unless-stopped
+    ports:
+      - "8082:8081"
+    environment:
+      REDIS_HOSTS: "local:redis:6379:0:redis123"
+    depends_on:
+      - redis
+    networks:
+      - diabetes-network
+
+# ========================================
+# NETWORKS & VOLUMES
+# ========================================
+
+networks:
+  diabetes-network:
+    driver: bridge
+    name: diabetes-network
+
+volumes:
+  mongodb_data:
+    driver: local
+    name: diabetes-mongodb-data
+  redis_data:
+    driver: local
+    name: diabetes-redis-data
