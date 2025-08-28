@@ -92,7 +92,7 @@ database = Database()
 
 async def get_database() -> AsyncIOMotorDatabase:
     """Get database instance for dependency injection"""
-    if not database.database:
+    if database.database is None:
         await database.connect_to_mongo()
     return database.database
 
