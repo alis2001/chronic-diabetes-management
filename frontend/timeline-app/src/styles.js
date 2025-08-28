@@ -1,6 +1,5 @@
 // frontend/timeline-app/src/styles.js
-// Sistema di design centralizzato - Interfaccia medico ASL italiana
-// Stili completi per sistema sanitario professionale
+// Complete Professional Healthcare Design - Apple-Inspired Timeline
 
 export const styles = {
   // ================================
@@ -11,26 +10,24 @@ export const styles = {
     maxWidth: '1400px',
     margin: '0 auto',
     padding: '20px',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
     lineHeight: '1.6',
-    color: '#2c3e50',
-    backgroundColor: '#f8f9fa',
+    color: '#1d1d1f',
+    backgroundColor: '#f0f8ff',
     minHeight: '100vh'
   },
 
   // ================================
-  // HEADER SISTEMA
+  // HEADER - CLEAN
   // ================================
 
   header: {
     background: 'linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #06b6d4 100%)',
     color: 'white',
-    padding: '25px 30px',
-    borderRadius: '12px',
+    padding: '20px 30px',
+    borderRadius: '16px',
     marginBottom: '30px',
-    boxShadow: '0 8px 25px rgba(59, 130, 246, 0.15)',
-    position: 'relative',
-    overflow: 'hidden'
+    boxShadow: '0 10px 40px rgba(59, 130, 246, 0.2)'
   },
 
   headerContent: {
@@ -38,62 +35,427 @@ export const styles = {
     zIndex: 2
   },
 
-  headerSubtitle: {
-    fontSize: '14px',
-    opacity: 0.9,
-    marginTop: '5px',
-    fontWeight: '400'
-  },
-
-  headerStatus: {
-    display: 'flex',
-    gap: '25px',
-    marginTop: '20px',
-    fontSize: '13px',
-    flexWrap: 'wrap',
-    alignItems: 'center'
-  },
-
-  statusItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '5px',
-    background: 'rgba(255, 255, 255, 0.1)',
-    padding: '6px 12px',
-    borderRadius: '20px',
-    backdropFilter: 'blur(10px)'
-  },
-
   // ================================
-  // CARD E CONTENITORI
+  // CARDS & CONTAINERS
   // ================================
 
   card: {
-    background: '#ffffff',
-    border: '1px solid #e1e8ed',
-    borderRadius: '16px',
+    background: 'rgba(255, 255, 255, 0.95)',
+    border: '1px solid rgba(255, 255, 255, 0.2)',
+    borderRadius: '20px',
     padding: '30px',
     marginBottom: '25px',
-    boxShadow: '0 4px 20px rgba(0, 0, 0, 0.05)',
-    transition: 'all 0.3s ease',
-    position: 'relative'
+    boxShadow: '0 10px 40px rgba(0, 0, 0, 0.08)',
+    backdropFilter: 'blur(20px)',
+    transition: 'all 0.3s ease'
   },
 
   cardHeader: {
     marginBottom: '25px',
-    paddingBottom: '20px',
-    borderBottom: '2px solid #f1f3f4'
-  },
-
-  cardDescription: {
-    color: '#5d6d7e',
-    fontSize: '14px',
-    marginTop: '8px',
-    lineHeight: '1.5'
+    paddingBottom: '15px',
+    borderBottom: '1px solid rgba(0, 0, 0, 0.05)'
   },
 
   // ================================
-  // FORM E INPUT
+  // INNOVATIVE SCROLLABLE TIMELINE
+  // ================================
+
+  timelineContainer: {
+    background: 'rgba(255, 255, 255, 0.98)',
+    borderRadius: '24px',
+    padding: '40px 20px',
+    margin: '30px 0',
+    boxShadow: '0 20px 60px rgba(0, 0, 0, 0.1)',
+    backdropFilter: 'blur(30px)',
+    border: '1px solid rgba(255, 255, 255, 0.3)',
+    overflow: 'hidden'
+  },
+
+  timelineWrapper: {
+    position: 'relative',
+    display: 'flex',
+    alignItems: 'center',
+    height: '140px',
+    width: '100%'
+  },
+
+  timelineLine: {
+    position: 'absolute',
+    top: '50%',
+    left: '0',
+    right: '0',
+    height: '6px',
+    background: 'linear-gradient(90deg, #8b5cf6 0%, #10b981 50%, #6b7280 100%)',
+    borderRadius: '3px',
+    zIndex: 1,
+    boxShadow: '0 2px 10px rgba(0, 0, 0, 0.1)'
+  },
+
+  pastSection: {
+    display: 'flex',
+    alignItems: 'center',
+    width: '40%',
+    height: '100%',
+    position: 'relative',
+    overflow: 'hidden'
+  },
+
+  pastScrollContainer: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '30px',
+    paddingRight: '20px',
+    overflowX: 'auto',
+    scrollBehavior: 'smooth',
+    width: '100%',
+    scrollbarWidth: 'none',
+    msOverflowStyle: 'none'
+  },
+
+  todaySection: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '20%',
+    height: '100%',
+    position: 'relative',
+    zIndex: 10
+  },
+
+  futureSection: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    width: '40%',
+    height: '100%',
+    position: 'relative',
+    paddingLeft: '20px'
+  },
+
+  timelinePoint: {
+    width: '60px',
+    height: '60px',
+    borderRadius: '50%',
+    border: '4px solid white',
+    cursor: 'pointer',
+    transition: 'all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontWeight: '700',
+    fontSize: '11px',
+    color: 'white',
+    boxShadow: '0 8px 25px rgba(0, 0, 0, 0.15)',
+    position: 'relative',
+    zIndex: 5,
+    flexShrink: 0,
+    userSelect: 'none'
+  },
+
+  pastPoint: {
+    backgroundColor: '#8b5cf6',
+    ':hover': {
+      transform: 'scale(1.2)',
+      boxShadow: '0 12px 35px rgba(139, 92, 246, 0.4)'
+    }
+  },
+
+  todayPoint: {
+    backgroundColor: '#10b981',
+    transform: 'scale(1.3)',
+    boxShadow: '0 12px 35px rgba(16, 185, 129, 0.4)',
+    animation: 'pulseGlow 3s ease-in-out infinite',
+    ':hover': {
+      transform: 'scale(1.4)',
+      boxShadow: '0 15px 45px rgba(16, 185, 129, 0.5)'
+    }
+  },
+
+  futurePoint: {
+    backgroundColor: '#6b7280',
+    ':hover': {
+      transform: 'scale(1.2)',
+      boxShadow: '0 12px 35px rgba(107, 114, 128, 0.4)'
+    }
+  },
+
+  pointLabel: {
+    position: 'absolute',
+    bottom: '-45px',
+    left: '50%',
+    transform: 'translateX(-50%)',
+    background: 'rgba(255, 255, 255, 0.95)',
+    padding: '6px 12px',
+    borderRadius: '16px',
+    fontSize: '11px',
+    fontWeight: '600',
+    color: '#374151',
+    border: '1px solid rgba(0, 0, 0, 0.05)',
+    boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1)',
+    whiteSpace: 'nowrap',
+    minWidth: '70px',
+    textAlign: 'center',
+    backdropFilter: 'blur(10px)'
+  },
+
+  scrollIndicator: {
+    position: 'absolute',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    width: '36px',
+    height: '36px',
+    borderRadius: '50%',
+    background: 'rgba(255, 255, 255, 0.95)',
+    border: '1px solid rgba(0, 0, 0, 0.1)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'pointer',
+    fontSize: '16px',
+    color: '#6b7280',
+    transition: 'all 0.3s ease',
+    zIndex: 10,
+    backdropFilter: 'blur(10px)',
+    ':hover': {
+      backgroundColor: 'white',
+      borderColor: '#8b5cf6',
+      color: '#8b5cf6',
+      transform: 'translateY(-50%) scale(1.1)'
+    }
+  },
+
+  leftScrollIndicator: {
+    left: '15px'
+  },
+
+  // ================================
+  // APPLE-INSPIRED MODAL DESIGN
+  // ================================
+
+  noteModal: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 2000,
+    backdropFilter: 'blur(20px)',
+    animation: 'modalFadeIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
+  },
+
+  noteModalContent: {
+    background: 'rgba(255, 255, 255, 0.98)',
+    borderRadius: '24px',
+    padding: '0',
+    width: '580px',
+    height: '680px',
+    maxWidth: '90vw',
+    maxHeight: '85vh',
+    boxShadow: '0 30px 80px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1)',
+    backdropFilter: 'blur(40px)',
+    border: '1px solid rgba(255, 255, 255, 0.2)',
+    position: 'relative',
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+    transform: 'scale(0.9) translateY(20px)',
+    animation: 'modalSlideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards'
+  },
+
+  noteModalHeader: {
+    padding: '30px 30px 25px 30px',
+    borderBottom: '1px solid rgba(0, 0, 0, 0.05)',
+    background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 250, 252, 0.9) 100%)',
+    position: 'relative'
+  },
+
+  noteModalTitle: {
+    fontSize: '24px',
+    fontWeight: '700',
+    color: '#1d1d1f',
+    margin: '0 0 8px 0',
+    letterSpacing: '-0.02em'
+  },
+
+  noteModalSubtitle: {
+    fontSize: '16px',
+    color: '#86868b',
+    margin: '0',
+    fontWeight: '400'
+  },
+
+  appleCloseButton: {
+    position: 'absolute',
+    top: '25px',
+    right: '25px',
+    width: '32px',
+    height: '32px',
+    borderRadius: '50%',
+    backgroundColor: '#ff5f57',
+    border: 'none',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '18px',
+    color: '#fff',
+    fontWeight: '600',
+    transition: 'all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)',
+    boxShadow: '0 3px 10px rgba(255, 95, 87, 0.3)',
+    ':hover': {
+      backgroundColor: '#e04e41',
+      transform: 'scale(1.1)',
+      boxShadow: '0 5px 15px rgba(255, 95, 87, 0.4)'
+    },
+    ':active': {
+      transform: 'scale(0.95)'
+    }
+  },
+
+  noteModalBody: {
+    flex: 1,
+    padding: '30px',
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden'
+  },
+
+  appleNoteTextarea: {
+    width: '100%',
+    flex: 1,
+    padding: '24px',
+    border: 'none',
+    borderRadius: '16px',
+    fontSize: '16px',
+    lineHeight: '1.6',
+    fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif',
+    resize: 'none',
+    backgroundColor: 'rgba(245, 245, 247, 0.6)',
+    transition: 'all 0.3s ease',
+    outline: 'none',
+    ':focus': {
+      backgroundColor: 'rgba(245, 245, 247, 0.9)',
+      boxShadow: '0 0 0 4px rgba(0, 125, 251, 0.15)'
+    },
+    '::placeholder': {
+      color: '#86868b',
+      fontSize: '16px'
+    }
+  },
+
+  noteModalFooter: {
+    padding: '25px 30px 30px 30px',
+    borderTop: '1px solid rgba(0, 0, 0, 0.05)',
+    background: 'rgba(248, 250, 252, 0.6)',
+    display: 'flex',
+    gap: '15px',
+    justifyContent: 'flex-end',
+    flexWrap: 'wrap'
+  },
+
+  appleCancelButton: {
+    padding: '14px 28px',
+    border: '1px solid rgba(0, 0, 0, 0.1)',
+    borderRadius: '10px',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    color: '#1d1d1f',
+    fontSize: '16px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    ':hover': {
+      backgroundColor: 'rgba(0, 0, 0, 0.04)',
+      borderColor: 'rgba(0, 0, 0, 0.2)',
+      transform: 'translateY(-1px)'
+    }
+  },
+
+  appleSaveButton: {
+    padding: '14px 28px',
+    border: 'none',
+    borderRadius: '10px',
+    backgroundColor: '#007aff',
+    color: 'white',
+    fontSize: '16px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    boxShadow: '0 2px 10px rgba(0, 122, 255, 0.3)',
+    ':hover': {
+      backgroundColor: '#0051d0',
+      transform: 'translateY(-1px)',
+      boxShadow: '0 4px 15px rgba(0, 122, 255, 0.4)'
+    },
+    ':disabled': {
+      backgroundColor: '#86868b',
+      cursor: 'not-allowed',
+      transform: 'none',
+      boxShadow: 'none'
+    }
+  },
+
+  appleEditButton: {
+    padding: '14px 28px',
+    border: 'none',
+    borderRadius: '10px',
+    backgroundColor: '#ff9500',
+    color: 'white',
+    fontSize: '16px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    boxShadow: '0 2px 10px rgba(255, 149, 0, 0.3)',
+    ':hover': {
+      backgroundColor: '#e6830e',
+      transform: 'translateY(-1px)',
+      boxShadow: '0 4px 15px rgba(255, 149, 0, 0.4)'
+    }
+  },
+
+  appleCancelAppointmentButton: {
+    padding: '14px 28px',
+    border: 'none',
+    borderRadius: '10px',
+    backgroundColor: '#ff3b30',
+    color: 'white',
+    fontSize: '16px',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    boxShadow: '0 2px 10px rgba(255, 59, 48, 0.3)',
+    ':hover': {
+      backgroundColor: '#d70015',
+      transform: 'translateY(-1px)',
+      boxShadow: '0 4px 15px rgba(255, 59, 48, 0.4)'
+    }
+  },
+
+  characterCounter: {
+    fontSize: '13px',
+    color: '#86868b',
+    marginTop: '10px',
+    textAlign: 'right',
+    fontWeight: '400'
+  },
+
+  futureAppointmentWarning: {
+    background: 'rgba(255, 204, 0, 0.1)',
+    border: '1px solid rgba(255, 204, 0, 0.3)',
+    borderRadius: '12px',
+    padding: '16px',
+    marginBottom: '20px',
+    fontSize: '14px',
+    color: '#b25000',
+    textAlign: 'center',
+    fontWeight: '500'
+  },
+
+  // ================================
+  // FORM STYLES
   // ================================
 
   form: {
@@ -105,98 +467,88 @@ export const styles = {
   formGroup: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '8px'
+    gap: '10px'
   },
 
   label: {
     fontWeight: '600',
-    color: '#2c3e50',
-    fontSize: '14px',
-    marginBottom: '5px'
+    color: '#1d1d1f',
+    fontSize: '16px',
+    marginBottom: '8px'
   },
 
   required: {
-    color: '#e74c3c',
-    marginLeft: '3px'
+    color: '#ff3b30',
+    marginLeft: '4px'
   },
 
   input: {
-    padding: '14px 16px',
-    border: '2px solid #e1e8ed',
-    borderRadius: '8px',
-    fontSize: '14px',
+    padding: '16px 20px',
+    border: '2px solid #d1d5db',
+    borderRadius: '12px',
+    fontSize: '16px',
     transition: 'all 0.2s ease',
-    backgroundColor: '#ffffff',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
     ':focus': {
-      borderColor: '#3498db',
+      borderColor: '#007aff',
       outline: 'none',
-      boxShadow: '0 0 0 3px rgba(52, 152, 219, 0.1)'
-    },
-    ':disabled': {
-      backgroundColor: '#f8f9fa',
-      color: '#6c757d',
-      cursor: 'not-allowed'
+      boxShadow: '0 0 0 4px rgba(0, 122, 255, 0.15)',
+      backgroundColor: 'white'
     }
   },
 
   select: {
-    padding: '14px 16px',
-    border: '2px solid #e1e8ed',
-    borderRadius: '8px',
-    fontSize: '14px',
-    backgroundColor: '#ffffff',
+    padding: '16px 20px',
+    border: '2px solid #d1d5db',
+    borderRadius: '12px',
+    fontSize: '16px',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
     cursor: 'pointer',
-    ':disabled': {
-      backgroundColor: '#f8f9fa',
-      color: '#6c757d',
-      cursor: 'not-allowed'
+    ':focus': {
+      borderColor: '#007aff',
+      outline: 'none',
+      boxShadow: '0 0 0 4px rgba(0, 122, 255, 0.15)'
     }
   },
 
   textarea: {
-    padding: '14px 16px',
-    border: '2px solid #e1e8ed',
-    borderRadius: '8px',
-    fontSize: '14px',
-    minHeight: '100px',
+    padding: '16px 20px',
+    border: '2px solid #d1d5db',
+    borderRadius: '12px',
+    fontSize: '16px',
+    minHeight: '140px',
     resize: 'vertical',
     fontFamily: 'inherit',
-    lineHeight: '1.5',
-    ':disabled': {
-      backgroundColor: '#f8f9fa',
-      color: '#6c757d',
-      cursor: 'not-allowed'
+    lineHeight: '1.6',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    ':focus': {
+      borderColor: '#007aff',
+      outline: 'none',
+      boxShadow: '0 0 0 4px rgba(0, 122, 255, 0.15)'
     }
   },
 
-  helpText: {
-    fontSize: '12px',
-    color: '#6c757d',
-    fontStyle: 'italic',
-    marginTop: '4px'
-  },
-
   // ================================
-  // BOTTONI
+  // BUTTONS
   // ================================
 
   primaryButton: {
-    background: 'linear-gradient(135deg, #3498db 0%, #2980b9 100%)',
+    background: 'linear-gradient(135deg, #007aff 0%, #0051d0 100%)',
     color: 'white',
-    padding: '14px 28px',
+    padding: '16px 32px',
     border: 'none',
-    borderRadius: '8px',
+    borderRadius: '12px',
     cursor: 'pointer',
-    fontSize: '14px',
+    fontSize: '16px',
     fontWeight: '600',
-    transition: 'all 0.2s ease',
-    boxShadow: '0 2px 8px rgba(52, 152, 219, 0.2)',
+    transition: 'all 0.3s ease',
+    boxShadow: '0 4px 20px rgba(0, 122, 255, 0.3)',
     ':hover': {
-      transform: 'translateY(-1px)',
-      boxShadow: '0 4px 12px rgba(52, 152, 219, 0.3)'
+      transform: 'translateY(-2px)',
+      boxShadow: '0 8px 30px rgba(0, 122, 255, 0.4)'
     },
     ':disabled': {
-      opacity: 0.6,
+      backgroundColor: '#86868b',
       cursor: 'not-allowed',
       transform: 'none',
       boxShadow: 'none'
@@ -204,630 +556,225 @@ export const styles = {
   },
 
   successButton: {
-    background: 'linear-gradient(135deg, #27ae60 0%, #229954 100%)',
+    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
     color: 'white',
-    padding: '14px 28px',
+    padding: '16px 32px',
     border: 'none',
-    borderRadius: '8px',
+    borderRadius: '12px',
     cursor: 'pointer',
-    fontSize: '14px',
+    fontSize: '16px',
     fontWeight: '600',
-    transition: 'all 0.2s ease',
-    boxShadow: '0 2px 8px rgba(39, 174, 96, 0.2)',
-    ':disabled': {
-      opacity: 0.6,
-      cursor: 'not-allowed'
+    transition: 'all 0.3s ease',
+    boxShadow: '0 4px 20px rgba(16, 185, 129, 0.3)',
+    ':hover': {
+      transform: 'translateY(-2px)',
+      boxShadow: '0 8px 30px rgba(16, 185, 129, 0.4)'
     }
   },
 
   secondaryButton: {
-    background: '#ecf0f1',
-    color: '#2c3e50',
-    padding: '14px 28px',
-    border: '2px solid #bdc3c7',
-    borderRadius: '8px',
+    background: 'rgba(255, 255, 255, 0.9)',
+    color: '#1d1d1f',
+    padding: '16px 32px',
+    border: '2px solid #d1d5db',
+    borderRadius: '12px',
     cursor: 'pointer',
-    fontSize: '14px',
+    fontSize: '16px',
     fontWeight: '600',
-    transition: 'all 0.2s ease',
+    transition: 'all 0.3s ease',
     ':hover': {
-      backgroundColor: '#d5dbdb'
+      backgroundColor: 'rgba(0, 0, 0, 0.04)',
+      borderColor: '#9ca3af',
+      transform: 'translateY(-1px)'
     }
   },
 
-  refreshButton: {
-    background: '#f1c40f',
-    color: '#2c3e50',
-    padding: '8px 16px',
-    border: 'none',
-    borderRadius: '6px',
-    cursor: 'pointer',
-    fontSize: '12px',
-    fontWeight: '600'
-  },
-
-  buttonGroup: {
-    display: 'flex',
-    gap: '15px',
-    flexWrap: 'wrap',
-    marginTop: '20px'
-  },
-
-  // ================================
-  // SEZIONI DATI PAZIENTE
-  // ================================
-
-  patientDataSection: {
-    marginBottom: '30px',
-    padding: '25px',
-    backgroundColor: '#f8f9fa',
+  disabledButton: {
+    background: '#f3f4f6',
+    color: '#9ca3af',
+    padding: '16px 32px',
+    border: '2px solid #e5e7eb',
     borderRadius: '12px',
-    border: '1px solid #e9ecef'
-  },
-
-  sectionTitle: {
+    cursor: 'not-allowed',
     fontSize: '16px',
     fontWeight: '600',
-    color: '#2c3e50',
-    marginBottom: '15px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px'
-  },
-
-  sectionDescription: {
-    fontSize: '13px',
-    color: '#6c757d',
-    marginBottom: '20px',
-    lineHeight: '1.5'
-  },
-
-  readOnlyLabel: {
-    fontSize: '12px',
-    color: '#e74c3c',
-    fontWeight: '500',
-    background: '#ffebee',
-    padding: '2px 8px',
-    borderRadius: '4px'
-  },
-
-  editableLabel: {
-    fontSize: '12px',
-    color: '#27ae60',
-    fontWeight: '500',
-    background: '#e8f5e8',
-    padding: '2px 8px',
-    borderRadius: '4px'
+    opacity: 0.6
   },
 
   // ================================
-  // GRIGLIA DATI
+  // PATIENT INFO SECTIONS
   // ================================
-
-  readOnlySection: {
-    background: '#ffffff',
-    padding: '20px',
-    borderRadius: '8px',
-    border: '1px solid #e9ecef'
-  },
-
-  editableSection: {
-    background: '#ffffff',
-    padding: '20px',
-    borderRadius: '8px',
-    border: '2px solid #d1ecf1'
-  },
-
-  dataGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-    gap: '15px'
-  },
-
-  dataItem: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '12px',
-    background: '#f8f9fa',
-    borderRadius: '6px'
-  },
-
-  dataLabel: {
-    fontWeight: '600',
-    color: '#495057',
-    fontSize: '13px'
-  },
-
-  dataValue: {
-    color: '#2c3e50',
-    fontSize: '13px',
-    fontWeight: '500'
-  },
-
-  // ================================
-  // INFORMAZIONI PATOLOGIA
-  // ================================
-
-  pathologyInfo: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    padding: '15px',
-    background: '#e3f2fd',
-    borderRadius: '8px',
-    border: '1px solid #bbdefb'
-  },
-
-  pathologyLabel: {
-    fontSize: '14px',
-    fontWeight: '600',
-    color: '#1976d2'
-  },
-
-  pathologyCode: {
-    fontSize: '12px',
-    color: '#666',
-    fontStyle: 'italic'
-  },
-
-  // ================================
-  // AZIONI REGISTRAZIONE
-  // ================================
-
-  registrationActions: {
-    marginTop: '30px',
-    paddingTop: '25px',
-    borderTop: '2px solid #e9ecef'
-  },
-
-  confirmationBox: {
-    background: '#fff3cd',
-    border: '1px solid #ffeaa7',
-    borderRadius: '8px',
-    padding: '20px',
-    marginBottom: '20px'
-  },
-
-  // ================================
-  // TIMELINE PAZIENTE
-  // ================================
-
-  timelineHeader: {
-    marginBottom: '25px'
-  },
-
-  timelineTitle: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: '15px'
-  },
 
   patientInfo: {
-    background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
-    padding: '25px',
-    borderRadius: '12px',
+    background: 'rgba(255, 255, 255, 0.95)',
+    padding: '30px',
+    borderRadius: '20px',
     marginBottom: '30px',
-    border: '1px solid #dee2e6'
+    border: '1px solid rgba(0, 0, 0, 0.05)',
+    boxShadow: '0 8px 30px rgba(0, 0, 0, 0.08)',
+    backdropFilter: 'blur(10px)'
   },
 
   patientInfoGrid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-    gap: '15px'
+    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+    gap: '25px'
   },
 
   patientInfoItem: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '5px'
+    gap: '10px'
   },
 
   patientInfoLabel: {
-    fontSize: '12px',
-    color: '#6c757d',
+    fontSize: '13px',
+    color: '#86868b',
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: '0.5px'
   },
 
   patientInfoValue: {
-    fontSize: '14px',
-    color: '#2c3e50',
+    fontSize: '18px',
+    color: '#1d1d1f',
     fontWeight: '600'
   },
 
-  // ================================
-  // GRIGLIA TIMELINE
-  // ================================
-
-  timelineGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
-    gap: '25px',
-    marginBottom: '30px'
+  registrationSection: {
+    marginBottom: '30px',
+    padding: '30px',
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    borderRadius: '16px',
+    border: '1px solid rgba(0, 0, 0, 0.05)'
   },
 
-  appointmentSection: {
-    border: '2px solid #e1e8ed',
-    borderRadius: '12px',
-    padding: '20px',
-    minHeight: '250px',
-    transition: 'all 0.2s ease'
-  },
-
-  pastSection: {
-    backgroundColor: '#f8f9fa',
-    borderColor: '#6c757d'
-  },
-
-  todaySection: {
-    backgroundColor: '#fff5f5',
-    borderColor: '#e74c3c',
-    boxShadow: '0 0 20px rgba(231, 76, 60, 0.1)'
-  },
-
-  futureSection: {
-    backgroundColor: '#f0fff4',
-    borderColor: '#27ae60',
-    boxShadow: '0 0 20px rgba(39, 174, 96, 0.1)'
-  },
-
-  sectionHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  sectionTitle: {
+    fontSize: '18px',
+    fontWeight: '700',
+    color: '#1d1d1f',
     marginBottom: '20px',
-    paddingBottom: '15px',
-    borderBottom: '1px solid #dee2e6'
-  },
-
-  appointmentCount: {
-    background: '#495057',
-    color: 'white',
-    fontSize: '12px',
-    fontWeight: '600',
-    padding: '4px 8px',
-    borderRadius: '12px',
-    minWidth: '24px',
-    textAlign: 'center'
-  },
-
-  // ================================
-  // LISTA APPUNTAMENTI
-  // ================================
-
-  appointmentList: {
     display: 'flex',
-    flexDirection: 'column',
+    alignItems: 'center',
     gap: '12px'
   },
 
-  appointmentItem: {
-    padding: '16px',
-    borderRadius: '8px',
-    fontSize: '13px',
-    lineHeight: '1.4',
-    border: '1px solid #e9ecef',
-    transition: 'all 0.2s ease',
-    ':hover': {
-      transform: 'translateX(2px)',
-      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
-    }
-  },
-
-  appointmentHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '8px',
-    flexWrap: 'wrap',
-    gap: '10px'
-  },
-
-  appointmentDate: {
-    fontSize: '14px',
+  readOnlyLabel: {
+    fontSize: '12px',
+    color: '#ff3b30',
     fontWeight: '600',
-    color: '#2c3e50'
+    background: 'rgba(255, 59, 48, 0.1)',
+    padding: '4px 8px',
+    borderRadius: '6px'
   },
 
-  appointmentStatus: {
+  editableLabel: {
     fontSize: '12px',
+    color: '#10b981',
     fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px'
-  },
-
-  appointmentType: {
-    fontSize: '13px',
-    color: '#495057',
-    marginBottom: '8px',
-    fontWeight: '500'
-  },
-
-  appointmentMeta: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    fontSize: '12px',
-    color: '#6c757d',
-    marginBottom: '8px',
-    flexWrap: 'wrap',
-    gap: '10px'
-  },
-
-  appointmentPriority: {
-    fontWeight: '600'
-  },
-
-  appointmentLocation: {
-    fontSize: '12px'
-  },
-
-  appointmentNotes: {
-    fontSize: '12px',
-    color: '#495057',
-    marginTop: '8px',
-    padding: '8px',
-    background: '#f8f9fa',
-    borderRadius: '4px',
-    fontStyle: 'italic'
+    background: 'rgba(16, 185, 129, 0.1)',
+    padding: '4px 8px',
+    borderRadius: '6px'
   },
 
   // ================================
-  // STATI APPUNTAMENTO
-  // ================================
-
-  scheduledStatus: {
-    backgroundColor: '#e3f2fd',
-    borderColor: '#2196f3'
-  },
-
-  completedStatus: {
-    backgroundColor: '#e8f5e9',
-    borderColor: '#4caf50'
-  },
-
-  cancelledStatus: {
-    backgroundColor: '#ffebee',
-    borderColor: '#f44336'
-  },
-
-  no_showStatus: {
-    backgroundColor: '#fff8e1',
-    borderColor: '#ff9800'
-  },
-
-  // ================================
-  // AZIONI TIMELINE
-  // ================================
-
-  timelineActions: {
-    display: 'flex',
-    gap: '15px',
-    paddingTop: '25px',
-    borderTop: '2px solid #e9ecef',
-    flexWrap: 'wrap'
-  },
-
-  // ================================
-  // STATI INTERFACE
+  // STATE DISPLAYS
   // ================================
 
   loadingState: {
     textAlign: 'center',
-    padding: '40px',
-    color: '#6c757d'
+    padding: '80px',
+    color: '#86868b',
+    fontSize: '18px'
   },
 
   errorState: {
     textAlign: 'center',
-    padding: '40px',
-    color: '#e74c3c'
+    padding: '80px',
+    color: '#ff3b30',
+    fontSize: '18px'
   },
 
   emptyState: {
     textAlign: 'center',
-    padding: '30px'
-  },
-
-  emptyText: {
-    color: '#6c757d',
+    padding: '60px',
+    color: '#86868b',
     fontStyle: 'italic',
-    fontSize: '13px'
-  },
-
-  errorText: {
-    color: '#e74c3c',
-    fontWeight: '600'
-  },
-
-  // ================================
-  // RISULTATI OPERAZIONI
-  // ================================
-
-  resultBox: {
-    marginTop: '25px',
-    padding: '20px',
-    borderRadius: '8px',
-    border: '1px solid',
-    fontSize: '14px'
-  },
-
-  resultTitle: {
-    marginTop: '0',
-    marginBottom: '15px',
     fontSize: '16px'
-  },
-
-  successResult: {
-    lineHeight: '1.6'
-  },
-
-  errorResult: {
-    lineHeight: '1.6'
-  },
-
-  // ================================
-  // BREADCRUMBS E NAVIGAZIONE
-  // ================================
-
-  breadcrumbContainer: {
-    backgroundColor: '#f8f9fa',
-    padding: '18px 24px',
-    borderRadius: '12px',
-    marginBottom: '25px',
-    border: '1px solid #e9ecef'
-  },
-
-  breadcrumbTrail: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    marginBottom: '12px',
-    flexWrap: 'wrap'
-  },
-
-  breadcrumbItem: {
-    color: '#6c757d',
-    fontSize: '14px',
-    fontWeight: '500'
-  },
-
-  activeBreadcrumb: {
-    color: '#2c3e50',
-    fontSize: '14px',
-    fontWeight: '700'
-  },
-
-  breadcrumbSeparator: {
-    color: '#adb5bd',
-    fontSize: '12px'
-  },
-
-  patientBadge: {
-    background: 'linear-gradient(135deg, #3498db 0%, #2980b9 100%)',
-    color: 'white',
-    padding: '10px 18px',
-    borderRadius: '8px',
-    fontSize: '13px',
-    fontWeight: '600',
-    display: 'inline-block'
-  },
-
-  // ================================
-  // AZIONI WORKFLOW
-  // ================================
-
-  workflowActions: {
-    marginTop: '40px',
-    paddingTop: '25px',
-    borderTop: '3px solid #e1e8ed',
-    textAlign: 'center'
-  },
-
-  // ================================
-  // FOOTER
-  // ================================
-
-  footer: {
-    marginTop: '60px',
-    paddingTop: '30px',
-    borderTop: '2px solid #e1e8ed',
-    backgroundColor: '#f8f9fa',
-    borderRadius: '12px',
-    padding: '30px'
-  },
-
-  footerContent: {
-    textAlign: 'center',
-    color: '#5d6d7e'
-  },
-
-  footerLinks: {
-    display: 'flex',
-    justifyContent: 'center',
-    gap: '25px',
-    margin: '20px 0',
-    flexWrap: 'wrap'
-  },
-
-  footerLink: {
-    color: '#3498db',
-    textDecoration: 'none',
-    fontSize: '14px',
-    fontWeight: '600',
-    ':hover': {
-      textDecoration: 'underline'
-    }
-  },
-
-  serviceStatus: {
-    fontSize: '12px',
-    color: '#95a5a6',
-    marginTop: '15px',
-    fontStyle: 'italic'
-  },
-
-  // ================================
-  // RESPONSIVE DESIGN
-  // ================================
-
-  '@media (max-width: 1200px)': {
-    container: {
-      maxWidth: '100%',
-      padding: '15px'
-    },
-    
-    timelineGrid: {
-      gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))'
-    }
-  },
-
-  '@media (max-width: 768px)': {
-    container: {
-      padding: '10px'
-    },
-    
-    header: {
-      padding: '20px'
-    },
-    
-    headerStatus: {
-      flexDirection: 'column',
-      gap: '10px'
-    },
-    
-    card: {
-      padding: '20px'
-    },
-    
-    timelineGrid: {
-      gridTemplateColumns: '1fr'
-    },
-    
-    buttonGroup: {
-      flexDirection: 'column'
-    },
-    
-    timelineTitle: {
-      flexDirection: 'column',
-      alignItems: 'stretch'
-    },
-    
-    patientInfoGrid: {
-      gridTemplateColumns: '1fr'
-    },
-    
-    dataGrid: {
-      gridTemplateColumns: '1fr'
-    },
-    
-    footerLinks: {
-      flexDirection: 'column',
-      gap: '15px'
-    }
   }
 };
+
+// ================================
+// CSS ANIMATIONS
+// ================================
+
+export const globalStyles = `
+  @keyframes pulseGlow {
+    0%, 100% { 
+      opacity: 1; 
+      box-shadow: 0 12px 35px rgba(16, 185, 129, 0.4);
+    }
+    50% { 
+      opacity: 0.8; 
+      box-shadow: 0 8px 25px rgba(16, 185, 129, 0.6);
+    }
+  }
+  
+  @keyframes modalFadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  
+  @keyframes modalSlideUp {
+    from {
+      transform: scale(0.9) translateY(20px);
+      opacity: 0;
+    }
+    to {
+      transform: scale(1) translateY(0);
+      opacity: 1;
+    }
+  }
+  
+  body {
+    margin: 0;
+    padding: 0;
+    background: linear-gradient(135deg, #f0f8ff 0%, #e0f2fe 100%);
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+  }
+  
+  * {
+    box-sizing: border-box;
+  }
+  
+  /* Hide scrollbar for past appointments */
+  .past-scroll-container::-webkit-scrollbar {
+    display: none;
+  }
+  
+  .past-scroll-container {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  /* Smooth focus transitions */
+  input:focus,
+  select:focus,
+  textarea:focus {
+    transition: all 0.2s ease;
+  }
+  
+  /* Button hover effects */
+  button:not(:disabled) {
+    transform-origin: center;
+  }
+  
+  /* Apple-style selection */
+  ::selection {
+    background-color: rgba(0, 122, 255, 0.2);
+  }
+`;

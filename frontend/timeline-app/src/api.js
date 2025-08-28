@@ -1,8 +1,9 @@
 // frontend/timeline-app/src/api.js
-// Livello di servizio API - Versione italiana per Sistema Sanitario
-// Comunicazione API centralizzata per Servizio Timeline ASL
+// Livello di servizio API - UPDATED to use API Gateway
+// Tutte le richieste ora passano attraverso il Gateway (porta 8080)
 
-const API_BASE_URL = process.env.REACT_APP_TIMELINE_API_URL || 'http://localhost:8001';
+// ✅ UPDATED: All requests now go through API Gateway
+const API_BASE_URL = process.env.REACT_APP_API_GATEWAY_URL || 'http://localhost:8080';
 
 // Gestione errori API
 class APIError extends Error {
@@ -29,12 +30,10 @@ const apiRequest = async (url, options = {}) => {
     try {
       data = await response.json();
     } catch (e) {
-      // Se la risposta non è JSON valido
       throw new APIError('Risposta del server non valida', response.status);
     }
     
     if (!response.ok) {
-      // Gestione errori strutturati dal backend
       let errorMessage = 'Richiesta API fallita';
       let errorDetails = null;
       
@@ -48,6 +47,8 @@ const apiRequest = async (url, options = {}) => {
           errorMessage = data.detail.error;
           errorDetails = data.detail;
         }
+      } else if (data.message) {
+        errorMessage = data.message;
       }
       
       throw new APIError(errorMessage, response.status, errorDetails);
@@ -57,50 +58,50 @@ const apiRequest = async (url, options = {}) => {
   } catch (error) {
     if (error instanceof APIError) throw error;
     
-    // Errori di rete o altri errori
     if (error.name === 'TypeError' && error.message.includes('fetch')) {
-      throw new APIError('Impossibile connettersi al server. Verificare la connessione.', 0);
+      throw new APIError('Impossibile connettersi al Gateway API. Verificare la connessione.', 0);
     }
     
     throw new APIError(`Errore di rete: ${error.message}`, 0);
   }
 };
 
-// API Servizio Timeline ASL
+// API Servizio Timeline ASL - UPDATED routes
 export const timelineAPI = {
   // ================================
   // CONTROLLI SISTEMA
   // ================================
   
   /**
-   * Controllo stato servizio
+   * Controllo stato servizio - attraverso Gateway
    */
   health: () => apiRequest('/health'),
   
+  /**
+   * Informazioni Gateway 
+   */
+  gatewayInfo: () => apiRequest('/'),
+  
   // ================================
-  // OPERAZIONI PAZIENTE
+  // OPERAZIONI PAZIENTE - UPDATED ROUTES
   // ================================
   
   /**
    * Ricerca paziente per codice fiscale
-   * @param {string} cf_paziente - Codice fiscale (16 caratteri)
-   * @param {string} id_medico - ID medico
-   * @param {string} patologia - Tipo patologia
+   * ✅ UPDATED: /api/timeline/patients/lookup
    */
   lookupPatient: (cf_paziente, id_medico, patologia) => 
-    apiRequest('/patients/lookup', {
+    apiRequest('/api/timeline/patients/lookup', {
       method: 'POST',
       body: JSON.stringify({ cf_paziente, id_medico, patologia })
     }),
   
   /**
    * Registrazione paziente standard
-   * @param {string} cf_paziente - Codice fiscale
-   * @param {string} id_medico - ID medico
-   * @param {string} patologia - Tipo patologia
+   * ✅ UPDATED: /api/timeline/patients/register
    */
   registerPatient: (cf_paziente, id_medico, patologia) => 
-    apiRequest('/patients/register', {
+    apiRequest('/api/timeline/patients/register', {
       method: 'POST',
       body: JSON.stringify({
         cf_paziente,
@@ -111,15 +112,11 @@ export const timelineAPI = {
     }),
 
   /**
-   * Registrazione paziente con contatti modificabili dal medico
-   * @param {string} cf_paziente - Codice fiscale
-   * @param {string} id_medico - ID medico
-   * @param {string} patologia - Tipo patologia
-   * @param {string|null} telefono - Numero telefono (modificabile)
-   * @param {string|null} email - Email (modificabile)
+   * Registrazione paziente con contatti modificabili
+   * ✅ UPDATED: /api/timeline/patients/register-with-contacts
    */
   registerPatientWithContacts: (cf_paziente, id_medico, patologia, telefono, email) => 
-    apiRequest('/patients/register-with-contacts', {
+    apiRequest('/api/timeline/patients/register-with-contacts', {
       method: 'POST',
       body: JSON.stringify({
         cf_paziente,
@@ -132,52 +129,50 @@ export const timelineAPI = {
     }),
   
   // ================================
-  // OPERAZIONI TIMELINE
+  // OPERAZIONI TIMELINE - UPDATED ROUTES
   // ================================
   
   /**
    * Ottieni timeline completa paziente
-   * @param {string} cf_paziente - Codice fiscale
-   * @param {string} id_medico - ID medico per autorizzazione
+   * ✅ UPDATED: /api/timeline/timeline/{cf_paziente}
    */
   getTimeline: (cf_paziente, id_medico) => 
-    apiRequest(`/timeline/${cf_paziente}?id_medico=${id_medico}`),
+    apiRequest(`/api/timeline/timeline/${cf_paziente}?id_medico=${id_medico}`),
   
   // ================================
-  // OPERAZIONI APPUNTAMENTI
+  // OPERAZIONI APPUNTAMENTI - UPDATED ROUTES
   // ================================
   
   /**
    * Programma nuovo appuntamento
-   * @param {Object} appointmentData - Dati appuntamento
+   * ✅ UPDATED: /api/timeline/appointments/schedule
    */
   scheduleAppointment: (appointmentData) => 
-    apiRequest('/appointments/schedule', {
+    apiRequest('/api/timeline/appointments/schedule', {
       method: 'POST',
       body: JSON.stringify(appointmentData)
     }),
   
   /**
    * Completa appuntamento esistente
-   * @param {Object} completionData - Dati completamento
+   * ✅ UPDATED: /api/timeline/appointments/complete
    */
   completeAppointment: (completionData) => 
-    apiRequest('/appointments/complete', {
+    apiRequest('/api/timeline/appointments/complete', {
       method: 'POST',
       body: JSON.stringify(completionData)
     }),
   
   /**
    * Ottieni tipi appuntamento disponibili per paziente
-   * @param {string} cf_paziente - Codice fiscale
-   * @param {string} id_medico - ID medico per autorizzazione
+   * ✅ UPDATED: /api/timeline/appointments/available-types/{cf_paziente}
    */
   getAvailableTypes: (cf_paziente, id_medico) => 
-    apiRequest(`/appointments/available-types/${cf_paziente}?id_medico=${id_medico}`),
+    apiRequest(`/api/timeline/appointments/available-types/${cf_paziente}?id_medico=${id_medico}`),
 };
 
 // ================================
-// COSTANTI SISTEMA ITALIANO
+// COSTANTI SISTEMA ITALIANO (unchanged)
 // ================================
 
 export const MEDICI = {
@@ -218,7 +213,7 @@ export const PRIORITA = {
   'emergency': 'Emergenza'
 };
 
-// Mappature per colori stato
+// Mappature per colori stato (unchanged)
 export const COLORI_STATO = {
   'scheduled': '#3498db',
   'completed': '#27ae60',
@@ -234,40 +229,23 @@ export const COLORI_PRIORITA = {
 };
 
 // ================================
-// UTILITÀ HELPER
+// UTILITÀ HELPER (unchanged)
 // ================================
 
-/**
- * Formatta codice fiscale italiano
- * @param {string} cf - Codice fiscale grezzo
- * @returns {string} Codice fiscale formattato
- */
 export const formatCodiceFiscale = (cf) => {
   if (!cf) return '';
   return cf.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 16);
 };
 
-/**
- * Valida formato codice fiscale
- * @param {string} cf - Codice fiscale
- * @returns {boolean} True se valido
- */
 export const validateCodiceFiscale = (cf) => {
   const regex = /^[A-Z]{6}[0-9]{2}[A-Z][0-9]{2}[A-Z][0-9]{3}[A-Z]$/;
   return regex.test(cf);
 };
 
-/**
- * Formatta numero telefono italiano
- * @param {string} phone - Numero grezzo
- * @returns {string} Numero formattato
- */
 export const formatTelefono = (phone) => {
   if (!phone) return '';
-  // Rimuovi caratteri non numerici eccetto +
   let cleaned = phone.replace(/[^\d+]/g, '');
   
-  // Aggiungi +39 se non presente
   if (!cleaned.startsWith('+39') && !cleaned.startsWith('39')) {
     if (cleaned.startsWith('3') || cleaned.startsWith('0')) {
       cleaned = '+39' + cleaned;
@@ -277,11 +255,6 @@ export const formatTelefono = (phone) => {
   return cleaned;
 };
 
-/**
- * Formatta data in formato italiano
- * @param {string|Date} date - Data
- * @returns {string} Data formattata dd/mm/yyyy
- */
 export const formatDataItaliana = (date) => {
   if (!date) return '';
   const d = new Date(date);
@@ -294,11 +267,6 @@ export const formatDataItaliana = (date) => {
   });
 };
 
-/**
- * Formatta orario italiano
- * @param {string|Date} time - Orario
- * @returns {string} Orario formattato HH:MM
- */
 export const formatOrario = (time) => {
   if (!time) return '';
   const t = new Date(time);
@@ -311,20 +279,10 @@ export const formatOrario = (time) => {
   });
 };
 
-/**
- * Ottieni descrizione stato in italiano
- * @param {string} status - Stato inglese
- * @returns {string} Descrizione italiana
- */
 export const getDescrizioneStato = (status) => {
   return STATI_APPUNTAMENTO[status] || status;
 };
 
-/**
- * Ottieni descrizione priorità in italiano
- * @param {string} priority - Priorità inglese
- * @returns {string} Descrizione italiana
- */
 export const getDescrizionePriorita = (priority) => {
   return PRIORITA[priority] || priority;
 };

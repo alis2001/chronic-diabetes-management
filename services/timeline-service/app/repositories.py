@@ -2,6 +2,7 @@
 """
 Timeline Service Repositories
 Data access layer for clean database operations
+FIXED: MongoDB date serialization issue
 """
 
 from typing import List, Optional, Dict, Any
@@ -13,6 +14,20 @@ from .models import Patient, Appointment, AppointmentStatus
 from .exceptions import DatabaseException, PatientNotFoundException, AppointmentNotFoundException
 
 logger = logging.getLogger(__name__)
+
+def serialize_for_mongodb(data: Dict[str, Any]) -> Dict[str, Any]:
+    """Convert Python objects to MongoDB-compatible format"""
+    if isinstance(data, dict):
+        return {key: serialize_for_mongodb(value) for key, value in data.items()}
+    elif isinstance(data, list):
+        return [serialize_for_mongodb(item) for item in data]
+    elif isinstance(data, date) and not isinstance(data, datetime):
+        # Convert date to datetime for MongoDB compatibility
+        return datetime.combine(data, datetime.min.time())
+    elif isinstance(data, datetime):
+        return data  # datetime objects are fine
+    else:
+        return data
 
 class PatientRepository:
     """Repository for patient data access"""
@@ -30,9 +45,13 @@ class PatientRepository:
             raise DatabaseException(f"Failed to find patient: {str(e)}")
     
     async def create_patient(self, patient: Patient) -> str:
-        """Create new patient"""
+        """Create new patient with proper date serialization"""
         try:
-            result = await self.collection.insert_one(patient.dict())
+            # Convert Pydantic model to dict and serialize dates for MongoDB
+            patient_dict = patient.dict()
+            patient_dict = serialize_for_mongodb(patient_dict)
+            
+            result = await self.collection.insert_one(patient_dict)
             logger.info(f"Patient created: {patient.cf_paziente}")
             return str(result.inserted_id)
         except Exception as e:
@@ -43,6 +62,8 @@ class PatientRepository:
         """Update patient information"""
         try:
             updates["updated_at"] = datetime.now()
+            updates = serialize_for_mongodb(updates)
+            
             result = await self.collection.update_one(
                 {"cf_paziente": cf_paziente.upper()},
                 {"$set": updates}
@@ -98,9 +119,12 @@ class AppointmentRepository:
         self.collection = db.appointments
     
     async def create_appointment(self, appointment: Appointment) -> str:
-        """Create new appointment"""
+        """Create new appointment with proper date serialization"""
         try:
-            result = await self.collection.insert_one(appointment.dict())
+            appointment_dict = appointment.dict()
+            appointment_dict = serialize_for_mongodb(appointment_dict)
+            
+            result = await self.collection.insert_one(appointment_dict)
             logger.info(f"Appointment created: {appointment.appointment_id}")
             return str(result.inserted_id)
         except Exception as e:
@@ -130,6 +154,8 @@ class AppointmentRepository:
         """Update appointment"""
         try:
             updates["updated_at"] = datetime.now()
+            updates = serialize_for_mongodb(updates)
+            
             result = await self.collection.update_one(
                 {"appointment_id": appointment_id},
                 {"$set": updates}

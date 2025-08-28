@@ -25,7 +25,7 @@ services:
     container_name: diabetes-redis
     restart: unless-stopped
     ports:
-      - "6381:6379"  # Using 6381 to avoid conflict with your existing Redis
+      - "6381:6379"  # Using 6381 to avoid conflict with existing Redis
     command: redis-server --requirepass redis123
     volumes:
       - redis_data:/data
@@ -101,6 +101,10 @@ services:
     volumes:
       - ./services/scheduler-service:/app
 
+  # ========================================
+  # API GATEWAY - CENTRAL ENTRY POINT
+  # ========================================
+
   api-gateway:
     build:
       context: ./services/api-gateway
@@ -108,7 +112,7 @@ services:
     container_name: diabetes-api-gateway
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "8080:8080"  # ✅ Main entry point for all API requests
     environment:
       - ENV=development
       - SERVICE_PORT=8080
@@ -135,14 +139,15 @@ services:
     container_name: diabetes-timeline-frontend
     restart: unless-stopped
     ports:
-      - "3010:3000"  # Using 3010 to avoid conflict with your existing services
+      - "3010:3000"  # Timeline frontend port
     environment:
-      - REACT_APP_API_URL=http://localhost:8080
+      # ✅ PRIMARY: All API calls go through Gateway
+      - REACT_APP_API_GATEWAY_URL=http://localhost:8080
+      # ✅ LEGACY FALLBACK: Direct service access (for development/debugging)
       - REACT_APP_TIMELINE_API_URL=http://localhost:8001
       - CHOKIDAR_USEPOLLING=true
     depends_on:
-      - api-gateway
-      - timeline-service
+      - api-gateway  # ✅ Frontend depends on Gateway, not individual services
     networks:
       - diabetes-network
     volumes:
@@ -156,14 +161,15 @@ services:
     container_name: diabetes-analytics-frontend
     restart: unless-stopped
     ports:
-      - "3011:3000"  # Using 3011 to avoid conflict with your existing services
+      - "3011:3000"  # Analytics frontend port
     environment:
-      - REACT_APP_API_URL=http://localhost:8080
+      # ✅ PRIMARY: All API calls go through Gateway
+      - REACT_APP_API_GATEWAY_URL=http://localhost:8080
+      # ✅ LEGACY FALLBACK: Direct service access (for development/debugging)
       - REACT_APP_ANALYTICS_API_URL=http://localhost:8002
       - CHOKIDAR_USEPOLLING=true
     depends_on:
-      - api-gateway
-      - analytics-service
+      - api-gateway  # ✅ Frontend depends on Gateway
     networks:
       - diabetes-network
     volumes:

@@ -1,38 +1,41 @@
 // frontend/timeline-app/src/index.js
-// Applicazione Timeline Principale - Sistema Sanitario ASL Italiano
-// Orchestrazione workflow medico pulita e professionale
+// Complete Timeline Application with Fixed Logic - Apple-Inspired Design
 
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { timelineAPI } from './api';
-import { Header, PatientLookup, PatientRegistration, PatientTimeline, ScheduleAppointment } from './components';
-import { styles } from './styles';
+import { 
+  Header, 
+  PatientLookup, 
+  PatientRegistration, 
+  PatientTimeline, 
+  ScheduleAppointment 
+} from './components';
+import { styles, globalStyles } from './styles';
 
-// Stati Applicazione
+// Application States
 const APP_STATES = {
-  LOOKUP: 'lookup',           // Ricerca paziente
-  REGISTER: 'register',       // Registrazione paziente
-  TIMELINE: 'timeline',       // Visualizzazione timeline
-  SCHEDULE: 'schedule'        // Programmazione appuntamento
+  LOOKUP: 'lookup',
+  REGISTER: 'register',
+  TIMELINE: 'timeline',
+  SCHEDULE: 'schedule'
 };
 
-// Applicazione Timeline Principale
+// Main Timeline Application
 const TimelineApp = () => {
-  // Stato Applicazione
+  // Application State
   const [currentState, setCurrentState] = useState(APP_STATES.LOOKUP);
   const [serviceHealth, setServiceHealth] = useState(null);
   
-  // Stato Dati
+  // Data State
   const [lookupResult, setLookupResult] = useState(null);
   const [patientData, setPatientData] = useState(null);
-  const [currentDoctor, setCurrentDoctor] = useState('DOC001');
   const [error, setError] = useState(null);
-  const [lastHealthCheck, setLastHealthCheck] = useState(null);
 
-  // Inizializzazione applicazione
+  // Service health monitoring
   useEffect(() => {
     checkServiceHealth();
-    const interval = setInterval(checkServiceHealth, 30000); // Controllo ogni 30s
+    const interval = setInterval(checkServiceHealth, 45000); // Check every 45 seconds
     return () => clearInterval(interval);
   }, []);
 
@@ -40,9 +43,8 @@ const TimelineApp = () => {
     try {
       const health = await timelineAPI.health();
       setServiceHealth(health);
-      setLastHealthCheck(new Date().toISOString());
       
-      // Rimuovi errore se il servizio è tornato operativo
+      // Clear network errors if service is back online
       if (health.status === 'healthy' && error?.status === 0) {
         setError(null);
       }
@@ -52,12 +54,12 @@ const TimelineApp = () => {
         database_status: 'errore',
         error: error.message 
       });
-      setLastHealthCheck(new Date().toISOString());
+      console.warn('Service health check failed:', error.message);
     }
   };
 
   // ================================
-  // GESTORI EVENTI WORKFLOW
+  // EVENT HANDLERS
   // ================================
 
   const handlePatientFound = (result, formData) => {
@@ -67,11 +69,10 @@ const TimelineApp = () => {
       id_medico: formData.id_medico,
       patologia: formData.patologia
     });
-    setCurrentDoctor(formData.id_medico);
     setCurrentState(APP_STATES.TIMELINE);
     setError(null);
     
-    console.log('Paziente trovato:', result);
+    console.log('✅ Patient found and loaded:', result);
   };
 
   const handlePatientNotFound = (result, formData) => {
@@ -81,11 +82,10 @@ const TimelineApp = () => {
       id_medico: formData.id_medico,
       patologia: formData.patologia
     });
-    setCurrentDoctor(formData.id_medico);
     setCurrentState(APP_STATES.REGISTER);
     setError(null);
     
-    console.log('Paziente non trovato, registrazione richiesta:', result);
+    console.log('⚠️ Patient not found, registration required:', result);
   };
 
   const handleRegistrationSuccess = (result, formData) => {
@@ -97,33 +97,53 @@ const TimelineApp = () => {
     setCurrentState(APP_STATES.TIMELINE);
     setError(null);
     
-    console.log('Registrazione completata:', result);
+    console.log('✅ Patient registration successful:', result);
   };
 
   const handleScheduleAppointment = (patientId, doctorId) => {
+    // Additional validation before allowing scheduling
+    if (!patientId || !doctorId) {
+      setError({ error: 'Dati paziente non validi per la programmazione' });
+      return;
+    }
+    
     setCurrentState(APP_STATES.SCHEDULE);
-    console.log('Avvio programmazione appuntamento per:', patientId);
+    console.log('📅 Starting appointment scheduling for:', patientId);
   };
 
   const handleScheduleSuccess = () => {
     setCurrentState(APP_STATES.TIMELINE);
-    console.log('Appuntamento programmato con successo');
+    
+    // Show success feedback
+    setTimeout(() => {
+      console.log('✅ Appointment scheduled successfully, returning to timeline');
+    }, 100);
   };
 
   const handleScheduleCancel = () => {
     setCurrentState(APP_STATES.TIMELINE);
-    console.log('Programmazione appuntamento annullata');
+    console.log('❌ Appointment scheduling cancelled');
   };
 
   const handleError = (errorData) => {
     setError(errorData);
-    console.error('Errore applicazione:', errorData);
+    console.error('🚨 Application error:', errorData);
     
-    // Se è un errore di rete, suggerisci controllo connessione
+    // Enhanced error handling
     if (errorData.status === 0) {
       setError({
         ...errorData,
         suggestion: 'Verificare la connessione di rete e lo stato del servizio'
+      });
+    } else if (errorData.status === 500) {
+      setError({
+        ...errorData,
+        suggestion: 'Errore interno del server. Riprovare più tardi.'
+      });
+    } else if (errorData.status === 403) {
+      setError({
+        ...errorData,
+        suggestion: 'Accesso negato. Verificare le credenziali del medico.'
       });
     }
   };
@@ -134,39 +154,42 @@ const TimelineApp = () => {
     setPatientData(null);
     setError(null);
     
-    console.log('Reset workflow applicazione');
+    console.log('🔄 Application reset to initial state');
   };
 
   const handleRetry = () => {
     setError(null);
     checkServiceHealth();
+    console.log('🔄 Retrying operation...');
   };
 
   // ================================
-  // RENDERING APPLICAZIONE
+  // RENDER APPLICATION
   // ================================
 
   return (
     <div style={styles.container}>
       <Header serviceHealth={serviceHealth} />
       
-      {/* Visualizzazione Errore Globale */}
+      {/* Global Error Display */}
       {error && (
-        <ErrorDisplay 
+        <AppleErrorDisplay 
           error={error} 
           onRetry={handleRetry}
           onDismiss={() => setError(null)}
         />
       )}
 
-      {/* Navigazione Breadcrumb */}
-      <BreadcrumbNavigation 
-        currentState={currentState}
-        patientData={patientData}
-        onReset={handleReset}
-      />
+      {/* Progress Indicator */}
+      {currentState !== APP_STATES.LOOKUP && (
+        <ProgressIndicator 
+          currentState={currentState} 
+          patientData={patientData}
+          onReset={handleReset}
+        />
+      )}
 
-      {/* Workflow Applicazione */}
+      {/* Main Application Flow */}
       {currentState === APP_STATES.LOOKUP && (
         <PatientLookup
           onPatientFound={handlePatientFound}
@@ -183,7 +206,7 @@ const TimelineApp = () => {
             onRegistrationSuccess={handleRegistrationSuccess}
             onError={handleError}
           />
-          <WorkflowActions onReset={handleReset} />
+          <ActionButtons onReset={handleReset} />
         </>
       )}
 
@@ -194,7 +217,7 @@ const TimelineApp = () => {
             doctorId={patientData.id_medico}
             onScheduleAppointment={handleScheduleAppointment}
           />
-          <WorkflowActions onReset={handleReset} />
+          <ActionButtons onReset={handleReset} />
         </>
       )}
 
@@ -206,149 +229,223 @@ const TimelineApp = () => {
             onSuccess={handleScheduleSuccess}
             onCancel={handleScheduleCancel}
           />
-          <WorkflowActions onReset={handleReset} />
         </>
       )}
 
-      {/* Footer Informazioni */}
-      <Footer 
-        serviceHealth={serviceHealth} 
-        lastHealthCheck={lastHealthCheck}
-        currentState={currentState}
-      />
+      {/* Application Footer */}
+      <AppFooter serviceHealth={serviceHealth} />
     </div>
   );
 };
 
 // ================================
-// COMPONENTI SUPPORTO
+// APPLE-STYLE ERROR COMPONENT
 // ================================
 
-// Componente Visualizzazione Errore
-const ErrorDisplay = ({ error, onRetry, onDismiss }) => (
+const AppleErrorDisplay = ({ error, onRetry, onDismiss }) => (
   <div style={{
-    ...styles.resultBox,
-    backgroundColor: '#ffebee',
-    borderColor: '#f44336',
-    marginBottom: '20px'
+    backgroundColor: 'rgba(255, 59, 48, 0.1)',
+    borderColor: 'rgba(255, 59, 48, 0.3)',
+    border: '1px solid',
+    borderRadius: '16px',
+    padding: '24px',
+    marginBottom: '25px',
+    backdropFilter: 'blur(20px)',
+    position: 'relative'
   }}>
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-      <div>
-        <h4 style={{ margin: '0 0 10px 0', color: '#d32f2f' }}>
-          Errore Sistema
-        </h4>
-        <p style={{ margin: '0 0 10px 0' }}>
-          <strong>Messaggio:</strong> {error.error}
+    <div style={{ 
+      display: 'flex', 
+      justifyContent: 'space-between', 
+      alignItems: 'flex-start',
+      gap: '20px'
+    }}>
+      <div style={{ flex: 1 }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          marginBottom: '12px'
+        }}>
+          <span style={{
+            fontSize: '20px',
+            color: '#ff3b30'
+          }}>
+            ⚠️
+          </span>
+          <h4 style={{ 
+            margin: 0, 
+            color: '#ff3b30',
+            fontSize: '18px',
+            fontWeight: '600'
+          }}>
+            Errore Sistema
+          </h4>
+        </div>
+        
+        <p style={{ 
+          margin: '0 0 12px 0',
+          color: '#1d1d1f',
+          fontSize: '16px',
+          fontWeight: '500'
+        }}>
+          {error.error}
         </p>
-        {error.status && (
-          <p style={{ margin: '0 0 10px 0' }}>
+        
+        {error.status && error.status !== 0 && (
+          <p style={{ 
+            margin: '0 0 12px 0',
+            color: '#86868b',
+            fontSize: '14px'
+          }}>
             <strong>Codice:</strong> {error.status}
           </p>
         )}
+        
         {error.suggestion && (
-          <p style={{ margin: '0 0 10px 0', fontSize: '13px', color: '#666' }}>
+          <p style={{ 
+            margin: '0',
+            color: '#86868b',
+            fontSize: '14px',
+            fontStyle: 'italic'
+          }}>
             <strong>Suggerimento:</strong> {error.suggestion}
           </p>
         )}
       </div>
       
-      <div style={{ display: 'flex', gap: '10px' }}>
-        {error.status === 0 && (
-          <button onClick={onRetry} style={styles.secondaryButton}>
+      <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+        {(error.status === 0 || error.status >= 500) && (
+          <button 
+            onClick={onRetry} 
+            style={{
+              ...styles.secondaryButton,
+              padding: '10px 16px',
+              fontSize: '14px'
+            }}
+          >
             Riprova
           </button>
         )}
         <button 
           onClick={onDismiss} 
-          style={{ 
-            ...styles.secondaryButton, 
-            padding: '5px 10px',
-            fontSize: '12px'
+          style={{
+            ...styles.appleCloseButton,
+            position: 'static',
+            width: '28px',
+            height: '28px',
+            fontSize: '16px'
           }}
         >
-          Chiudi
+          ×
         </button>
       </div>
     </div>
   </div>
 );
 
-// Componente Navigazione Breadcrumb
-const BreadcrumbNavigation = ({ currentState, patientData, onReset }) => {
-  const getStepName = (state) => {
+// ================================
+// PROGRESS INDICATOR
+// ================================
+
+const ProgressIndicator = ({ currentState, patientData, onReset }) => {
+  const getStepInfo = (state) => {
     switch(state) {
-      case APP_STATES.LOOKUP: return '1. Ricerca Paziente';
-      case APP_STATES.REGISTER: return '2. Registrazione';
-      case APP_STATES.TIMELINE: return '3. Timeline';
-      case APP_STATES.SCHEDULE: return '4. Programmazione';
-      default: return 'Sconosciuto';
+      case APP_STATES.REGISTER:
+        return { step: 2, title: 'Registrazione Paziente', icon: '📝' };
+      case APP_STATES.TIMELINE:
+        return { step: 3, title: 'Timeline Paziente', icon: '📋' };
+      case APP_STATES.SCHEDULE:
+        return { step: 4, title: 'Nuovo Appuntamento', icon: '📅' };
+      default:
+        return { step: 1, title: 'Ricerca', icon: '🔍' };
     }
   };
 
-  const getStepDescription = (state) => {
-    switch(state) {
-      case APP_STATES.LOOKUP: return 'Ricerca paziente per codice fiscale';
-      case APP_STATES.REGISTER: return 'Registrazione nel sistema timeline';
-      case APP_STATES.TIMELINE: return 'Visualizzazione timeline appuntamenti';
-      case APP_STATES.SCHEDULE: return 'Programmazione nuovo appuntamento';
-      default: return '';
-    }
-  };
+  const currentStep = getStepInfo(currentState);
 
   return (
-    <div style={styles.breadcrumbContainer}>
-      <div style={styles.breadcrumbTrail}>
-        <span style={currentState === APP_STATES.LOOKUP ? styles.activeBreadcrumb : styles.breadcrumbItem}>
-          Ricerca
-        </span>
-        <span style={styles.breadcrumbSeparator}>→</span>
-        <span style={[APP_STATES.REGISTER, APP_STATES.TIMELINE, APP_STATES.SCHEDULE].includes(currentState) ? styles.activeBreadcrumb : styles.breadcrumbItem}>
-          {patientData ? 'Gestione' : 'Registrazione'}
-        </span>
-        <span style={styles.breadcrumbSeparator}>→</span>
-        <span style={[APP_STATES.TIMELINE, APP_STATES.SCHEDULE].includes(currentState) ? styles.activeBreadcrumb : styles.breadcrumbItem}>
-          Timeline
-        </span>
-        {currentState === APP_STATES.SCHEDULE && (
-          <>
-            <span style={styles.breadcrumbSeparator}>→</span>
-            <span style={styles.activeBreadcrumb}>Programmazione</span>
-          </>
-        )}
-      </div>
-      
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '15px' }}>
-        <div>
-          <div style={{ fontSize: '14px', fontWeight: '600', color: '#2c3e50' }}>
-            {getStepName(currentState)}
-          </div>
-          <div style={{ fontSize: '12px', color: '#6c757d' }}>
-            {getStepDescription(currentState)}
+    <div style={{
+      backgroundColor: 'rgba(255, 255, 255, 0.95)',
+      borderRadius: '16px',
+      padding: '20px',
+      marginBottom: '25px',
+      border: '1px solid rgba(0, 0, 0, 0.05)',
+      backdropFilter: 'blur(20px)'
+    }}>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: '20px'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+          <span style={{ fontSize: '24px' }}>{currentStep.icon}</span>
+          <div>
+            <div style={{
+              fontSize: '16px',
+              fontWeight: '700',
+              color: '#1d1d1f',
+              marginBottom: '4px'
+            }}>
+              Passo {currentStep.step}: {currentStep.title}
+            </div>
+            {patientData && (
+              <div style={{
+                fontSize: '14px',
+                color: '#86868b'
+              }}>
+                Paziente: {patientData.cf_paziente}
+              </div>
+            )}
           </div>
         </div>
         
-        {patientData && (
-          <div style={styles.patientBadge}>
-            <strong>Paziente Corrente:</strong> {patientData.cf_paziente} | 
-            <strong> Medico:</strong> {patientData.id_medico}
-          </div>
-        )}
+        <button 
+          onClick={onReset} 
+          style={{
+            ...styles.secondaryButton,
+            padding: '10px 20px',
+            fontSize: '14px'
+          }}
+        >
+          Nuovo Paziente
+        </button>
       </div>
     </div>
   );
 };
 
-// Componente Azioni Workflow
-const WorkflowActions = ({ onReset }) => (
-  <div style={styles.workflowActions}>
-    <h4>Azioni Workflow</h4>
-    <p style={{ color: '#6c757d', marginBottom: '20px' }}>
-      Gestione del flusso di lavoro corrente
-    </p>
+// ================================
+// ACTION BUTTONS
+// ================================
+
+const ActionButtons = ({ onReset }) => (
+  <div style={{
+    textAlign: 'center',
+    marginTop: '30px',
+    padding: '25px',
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    borderRadius: '16px',
+    backdropFilter: 'blur(20px)'
+  }}>
+    <h4 style={{
+      margin: '0 0 20px 0',
+      color: '#1d1d1f',
+      fontSize: '18px',
+      fontWeight: '600'
+    }}>
+      Azioni Disponibili
+    </h4>
     
-    <div style={{ display: 'flex', gap: '15px', justifyContent: 'center', flexWrap: 'wrap' }}>
-      <button onClick={onReset} style={styles.secondaryButton}>
-        Nuovo Paziente
+    <div style={{ 
+      display: 'flex', 
+      gap: '15px', 
+      justifyContent: 'center', 
+      flexWrap: 'wrap' 
+    }}>
+      <button onClick={onReset} style={styles.primaryButton}>
+        Cerca Nuovo Paziente
       </button>
       
       <button 
@@ -361,167 +458,189 @@ const WorkflowActions = ({ onReset }) => (
   </div>
 );
 
-// Componente Footer
-const Footer = ({ serviceHealth, lastHealthCheck, currentState }) => (
-  <footer style={styles.footer}>
-    <div style={styles.footerContent}>
-      <h3 style={{ marginTop: 0 }}>Servizio Timeline ASL - Sistema Sanitario Regione Lazio</h3>
-      <p>Interfaccia medico professionale per gestione timeline pazienti cronici</p>
+// ================================
+// MINIMAL FOOTER
+// ================================
+
+const AppFooter = ({ serviceHealth }) => (
+  <footer style={{
+    marginTop: '60px',
+    padding: '25px',
+    textAlign: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    borderRadius: '16px',
+    backdropFilter: 'blur(20px)',
+    border: '1px solid rgba(0, 0, 0, 0.05)'
+  }}>
+    <p style={{
+      margin: '0 0 15px 0',
+      fontSize: '16px',
+      fontWeight: '600',
+      color: '#1d1d1f'
+    }}>
+      Sistema Timeline Paziente
+    </p>
+    
+    <div style={{
+      display: 'flex',
+      justifyContent: 'center',
+      gap: '30px',
+      flexWrap: 'wrap',
+      marginBottom: '15px'
+    }}>
+      <a 
+        href="http://localhost:8080/docs" 
+        target="_blank" 
+        rel="noopener noreferrer"
+        style={{
+          color: '#007aff',
+          textDecoration: 'none',
+          fontSize: '14px',
+          fontWeight: '500',
+          ':hover': { textDecoration: 'underline' }
+        }}
+      >
+        API Gateway
+      </a>
       
-      <div style={styles.footerLinks}>
-        <a 
-          href="http://localhost:8001/docs" 
-          target="_blank" 
-          rel="noopener noreferrer" 
-          style={styles.footerLink}
-        >
-          Documentazione API
-        </a>
-        <a 
-          href="http://localhost:8081" 
-          target="_blank" 
-          rel="noopener noreferrer" 
-          style={styles.footerLink}
-        >
-          MongoDB Admin
-        </a>
-        <a 
-          href="http://localhost:8082" 
-          target="_blank" 
-          rel="noopener noreferrer" 
-          style={styles.footerLink}
-        >
-          Redis Admin
-        </a>
-        <a 
-          href="http://localhost:8001/health" 
-          target="_blank" 
-          rel="noopener noreferrer" 
-          style={styles.footerLink}
-        >
-          Stato Servizio
-        </a>
-      </div>
+      <a 
+        href="http://localhost:8001/docs" 
+        target="_blank" 
+        rel="noopener noreferrer"
+        style={{
+          color: '#007aff',
+          textDecoration: 'none',
+          fontSize: '14px',
+          fontWeight: '500'
+        }}
+      >
+        Timeline API
+      </a>
+    </div>
+    
+    <div style={{
+      fontSize: '12px',
+      color: '#86868b',
+      display: 'flex',
+      justifyContent: 'center',
+      gap: '20px',
+      flexWrap: 'wrap'
+    }}>
+      <span>
+        Servizio: <strong style={{
+          color: serviceHealth?.status === 'healthy' ? '#10b981' : '#ff3b30'
+        }}>
+          {serviceHealth?.status === 'healthy' ? 'Online' : 'Offline'}
+        </strong>
+      </span>
       
-      <div style={styles.serviceStatus}>
-        <div style={{ marginBottom: '8px' }}>
-          <strong>Stato Sistema:</strong>
-        </div>
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', flexWrap: 'wrap' }}>
-          <span>
-            Servizio: <strong style={{ color: serviceHealth?.status === 'healthy' ? '#27ae60' : '#e74c3c' }}>
-              {serviceHealth?.status === 'healthy' ? 'Operativo' : 'Non Disponibile'}
-            </strong>
-          </span>
-          <span>
-            Database: <strong style={{ color: serviceHealth?.database_status === 'healthy' ? '#27ae60' : '#e74c3c' }}>
-              {serviceHealth?.database_status === 'healthy' ? 'Connesso' : 'Errore'}
-            </strong>
-          </span>
-          <span>
-            Stato Workflow: <strong>{getWorkflowDescription(currentState)}</strong>
-          </span>
-        </div>
-        
-        {lastHealthCheck && (
-          <div style={{ marginTop: '8px', fontSize: '11px' }}>
-            Ultimo controllo: {new Date(lastHealthCheck).toLocaleString('it-IT')}
-          </div>
-        )}
-        
-        <div style={{ marginTop: '10px', fontSize: '11px' }}>
-          Timeline Service v2.0.0 - Build {new Date().toISOString().split('T')[0]}
-        </div>
-      </div>
+      <span>Timeline v2.0.0</span>
+      
+      <span>Build {new Date().toISOString().split('T')[0]}</span>
     </div>
   </footer>
 );
 
 // ================================
-// FUNZIONI UTILITÀ
+// APPLY GLOBAL STYLES
 // ================================
 
-const getWorkflowDescription = (state) => {
-  switch(state) {
-    case APP_STATES.LOOKUP: return 'Ricerca in corso';
-    case APP_STATES.REGISTER: return 'Registrazione';
-    case APP_STATES.TIMELINE: return 'Gestione timeline';
-    case APP_STATES.SCHEDULE: return 'Programmazione appuntamento';
-    default: return 'Sconosciuto';
-  }
-};
-
-// Gestione errori globale
-window.addEventListener('unhandledrejection', event => {
-  console.error('Errore non gestito:', event.reason);
-});
-
-window.addEventListener('error', event => {
-  console.error('Errore JavaScript:', event.error);
-});
-
-// Applicazione stili aggiuntivi al container root
-const additionalStyles = `
-  body {
-    margin: 0;
-    padding: 0;
-    background-color: #f8f9fa;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  }
-  
-  * {
-    box-sizing: border-box;
-  }
-  
-  input:focus,
-  select:focus,
-  textarea:focus {
-    border-color: #3498db !important;
-    outline: none;
-    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
-  }
-  
-  button:hover:not(:disabled) {
-    transform: translateY(-1px);
-  }
-  
-  button:active:not(:disabled) {
-    transform: translateY(0);
-  }
-  
-  /* Scrollbar personalizzata */
-  ::-webkit-scrollbar {
-    width: 8px;
-  }
-  
-  ::-webkit-scrollbar-track {
-    background: #f1f1f1;
-  }
-  
-  ::-webkit-scrollbar-thumb {
-    background: #c1c1c1;
-    border-radius: 4px;
-  }
-  
-  ::-webkit-scrollbar-thumb:hover {
-    background: #a1a1a1;
-  }
-`;
-
-// Inserisci stili nel DOM
 const styleSheet = document.createElement('style');
-styleSheet.textContent = additionalStyles;
+styleSheet.textContent = globalStyles;
 document.head.appendChild(styleSheet);
 
 // ================================
-// INIZIALIZZAZIONE REACT
+// ERROR BOUNDARY
+// ================================
+
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('🚨 React Error Boundary caught an error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          ...styles.container,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '100vh'
+        }}>
+          <div style={{
+            ...styles.card,
+            textAlign: 'center',
+            maxWidth: '500px'
+          }}>
+            <h2 style={{ color: '#ff3b30', marginBottom: '20px' }}>
+              Errore Applicazione
+            </h2>
+            <p style={{ marginBottom: '20px', color: '#86868b' }}>
+              Si è verificato un errore imprevisto nell'applicazione.
+            </p>
+            <button 
+              onClick={() => window.location.reload()}
+              style={styles.primaryButton}
+            >
+              Ricarica Applicazione
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+// ================================
+// INITIALIZE REACT APP
 // ================================
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(<TimelineApp />);
+root.render(
+  <ErrorBoundary>
+    <TimelineApp />
+  </ErrorBoundary>
+);
 
-// Log inizializzazione
-console.log('Timeline Service - Applicazione ASL avviata');
-console.log('Versione: 2.0.0');
-console.log('Ambiente: Sviluppo');
-console.log('API Base URL:', process.env.REACT_APP_TIMELINE_API_URL || 'http://localhost:8001');
+// ================================
+// DEVELOPMENT LOGGING
+// ================================
+
+console.log('🚀 Timeline Service Application Loaded');
+console.log('📡 API Gateway URL:', process.env.REACT_APP_API_GATEWAY_URL || 'http://localhost:8080');
+console.log('🔧 Environment:', process.env.NODE_ENV || 'development');
+console.log('📅 Build Date:', new Date().toISOString());
+
+// Performance monitoring
+if (process.env.NODE_ENV === 'development') {
+  window.timelineApp = {
+    version: '2.0.0',
+    buildDate: new Date().toISOString(),
+    apiUrl: process.env.REACT_APP_API_GATEWAY_URL || 'http://localhost:8080'
+  };
+}
+
+// Service worker registration (optional - for production PWA features)
+if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+      .then((registration) => {
+        console.log('SW registered: ', registration);
+      })
+      .catch((registrationError) => {
+        console.log('SW registration failed: ', registrationError);
+      });
+  });
+}
