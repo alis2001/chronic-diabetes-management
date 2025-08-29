@@ -1,8 +1,9 @@
 // frontend/timeline-app/src/DoctorWorkspace.js
-// Doctor Workspace - Clean version with original header style
+// Doctor Workspace - Complete with Fixed Navigation and Session Handling
+// Now properly receives data from login form and shows timeline with tabs
 
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, Routes, Route } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, Routes, Route } from 'react-router-dom';
 import { timelineAPI, MEDICI } from './api';
 import { 
   Header,
@@ -85,6 +86,7 @@ const useDoctorSession = (doctorId) => {
 export const DoctorWorkspace = () => {
   const { doctorId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   
   // Doctor session management
   const { sessionData, updateSession, clearSession } = useDoctorSession(doctorId);
@@ -96,10 +98,27 @@ export const DoctorWorkspace = () => {
   // Validate doctor exists
   const doctorInfo = MEDICI[doctorId];
   
+  // Handle navigation state data (FROM LOGIN FORM)
+  useEffect(() => {
+    const navigationState = location.state;
+    if (navigationState?.shouldUpdateSession && navigationState.patientData) {
+      console.log('📥 Receiving data from login form:', navigationState.patientData);
+      
+      updateSession({
+        currentView: navigationState.lookupResult?.exists ? 'timeline' : 'register',
+        patientData: navigationState.patientData,
+        lookupResult: navigationState.lookupResult
+      });
+      
+      // Clear the navigation state to prevent re-triggering
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location.state, updateSession, navigate, location.pathname]);
+  
   useEffect(() => {
     if (!doctorInfo) {
       console.warn(`❌ Invalid doctor ID: ${doctorId}`);
-      navigate('/select-doctor');
+      navigate('/');
       return;
     }
     
@@ -359,6 +378,13 @@ export const DoctorWorkspace = () => {
       padding: '20px'
     }}>
       <button 
+        onClick={() => navigate(`/doctor/${doctorId}/lookup`)}
+        style={styles.secondaryButton}
+      >
+        Nuova Ricerca Paziente
+      </button>
+      {' '}
+      <button 
         onClick={() => window.location.reload()} 
         style={styles.primaryButton}
       >
@@ -379,8 +405,8 @@ export const DoctorWorkspace = () => {
           <button onClick={handleReset} style={styles.primaryButton}>
             Torna alla Ricerca
           </button>
-          <button onClick={() => navigate('/select-doctor')} style={styles.secondaryButton}>
-            Cambia Medico
+          <button onClick={() => navigate('/')} style={styles.secondaryButton}>
+            Home
           </button>
         </div>
       </div>
@@ -388,12 +414,12 @@ export const DoctorWorkspace = () => {
   );
 
   // ================================
-  // RENDER DOCTOR WORKSPACE WITH ORIGINAL HEADER
+  // RENDER DOCTOR WORKSPACE
   // ================================
 
   return (
     <div style={styles.container}>
-      {/* 🔥 BACK TO ORIGINAL HEADER - NO DOCTOR SPECIFIC INFO */}
+      {/* Original Header */}
       <Header serviceHealth={serviceHealth} />
       
       {/* Global Error Display */}
@@ -433,7 +459,7 @@ export const DoctorWorkspace = () => {
           )
         } />
 
-        {/* Patient Timeline */}
+        {/* Patient Timeline - YOUR PROFESSIONAL TIMELINE WITH TABS */}
         <Route path="/timeline/:patientId" element={
           sessionData.patientData ? (
             <>
@@ -463,13 +489,33 @@ export const DoctorWorkspace = () => {
           )
         } />
 
-        {/* Default redirect to lookup */}
+        {/* Default route - goes to lookup if no patient data, or timeline if has data */}
         <Route path="/" element={
-          <PatientLookup
-            onPatientFound={handlePatientFound}
-            onPatientNotFound={handlePatientNotFound}
-            onError={handleError}
-          />
+          sessionData.patientData ? (
+            <PatientTimeline
+              patientId={sessionData.patientData.cf_paziente}
+              doctorId={doctorId}
+              onScheduleAppointment={handleScheduleAppointment}
+            />
+          ) : (
+            <PatientLookup
+              onPatientFound={handlePatientFound}
+              onPatientNotFound={handlePatientNotFound}
+              onError={handleError}
+            />
+          )
+        } />
+
+        {/* Catch all - debug route */}
+        <Route path="*" element={
+          <div style={styles.card}>
+            <h2>🔍 Route Debug</h2>
+            <p><strong>URL:</strong> {location.pathname}</p>
+            <p><strong>Has Session Data:</strong> {sessionData.patientData ? 'Yes' : 'No'}</p>
+            <button onClick={() => navigate(`/doctor/${doctorId}/lookup`)} style={styles.primaryButton}>
+              Go to Patient Lookup
+            </button>
+          </div>
         } />
       </Routes>
     </div>

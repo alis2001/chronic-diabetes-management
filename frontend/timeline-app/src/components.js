@@ -33,6 +33,10 @@ export const Header = ({ serviceHealth }) => (
 // PATIENT LOOKUP
 // ================================
 
+// Replace your existing PatientLookup component in components.js with this:
+
+// Updated PatientLookup component - replace the createBackendSession function:
+
 export const PatientLookup = ({ onPatientFound, onPatientNotFound, onError }) => {
   const [formData, setFormData] = useState({
     cf_paziente: '',
@@ -40,6 +44,41 @@ export const PatientLookup = ({ onPatientFound, onPatientNotFound, onError }) =>
     patologia: 'diabetes_mellitus_type2'
   });
   const [loading, setLoading] = useState(false);
+
+  // Session management - NOW USES API GATEWAY
+  const createBackendSession = async (loginData) => {
+    // Use API Gateway instead of direct Timeline Service
+    const API_BASE = process.env.REACT_APP_API_GATEWAY_URL || 'http://localhost:8080';
+    
+    console.log('🚀 Creating backend session via Gateway with:', loginData);
+    
+    const body = new FormData();
+    body.append('cf_paziente', loginData.cf_paziente);
+    body.append('id_medico', loginData.id_medico);
+    body.append('patologia', loginData.patologia);
+
+    try {
+        const response = await fetch(`${API_BASE}/api/session/login`, {
+        method: 'POST',
+        body,
+        credentials: 'include'
+        });
+
+        console.log('📡 Session API Response (via Gateway):', response.status, response.statusText);
+
+        const data = await response.json();
+        console.log('📊 Session API Data (via Gateway):', data);
+        
+        if (!response.ok || !data.success) {
+        throw new Error(data.error || `API Error: ${response.status}`);
+        }
+        
+        return data;
+    } catch (error) {
+        console.error('❌ Session creation failed:', error);
+        throw error;
+    }
+  };
 
   const handleCodiceFiscaleChange = (e) => {
     const formatted = formatCodiceFiscale(e.target.value);
@@ -61,6 +100,11 @@ export const PatientLookup = ({ onPatientFound, onPatientNotFound, onError }) =>
     setLoading(true);
     
     try {
+      // 1. Create backend session via Gateway
+      await createBackendSession(formData);
+      console.log('✅ Backend session created via Gateway for doctor:', formData.id_medico);
+      
+      // 2. Then do the existing patient lookup (also via Gateway)
       const response = await timelineAPI.lookupPatient(
         formData.cf_paziente,
         formData.id_medico,
@@ -73,6 +117,7 @@ export const PatientLookup = ({ onPatientFound, onPatientNotFound, onError }) =>
         onPatientNotFound(response, formData);
       }
     } catch (error) {
+      console.error('❌ Error in patient lookup with session:', error);
       onError({ error: error.message, status: error.status });
     }
     setLoading(false);
@@ -384,16 +429,6 @@ export const InnovativeTimeline = ({ appointments, patientId, doctorId, onTimeli
 
   return (
     <div style={styles.timelineContainer}>
-      <h3 style={{
-        textAlign: 'center', 
-        marginBottom: '40px', 
-        color: '#1d1d1f',
-        fontSize: '28px',
-        fontWeight: '700',
-        letterSpacing: '-0.02em'
-      }}>
-        Timeline Visite Mediche
-      </h3>
       
       <div style={styles.timelineWrapper}>
         <div style={styles.timelineLine} />

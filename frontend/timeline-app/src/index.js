@@ -1,13 +1,73 @@
 // frontend/timeline-app/src/index.js
-// Complete Multi-Doctor Timeline Application with React Router
-// 🚀 Supports concurrent doctors with URL-based workspaces and session management
+// Complete Multi-Doctor Timeline Application with Fixed Navigation
+// Passes data properly to DoctorWorkspace for timeline and tabs to work
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { DoctorWorkspace } from './DoctorWorkspace';
-import { DoctorSelection } from './DoctorSelection';
+import { Header, PatientLookup } from './components';
 import { styles, globalStyles } from './styles';
+
+// ================================
+// PATIENT LOOKUP PAGE - Fixed Navigation
+// ================================
+
+const PatientLookupPage = () => {
+  const navigate = useNavigate();
+  
+  const handlePatientFound = (response, formData) => {
+    console.log('📍 Patient found, navigating with data:', formData);
+    
+    // Navigate to timeline with patient data in state
+    navigate(`/doctor/${formData.id_medico}/timeline/${formData.cf_paziente}`, {
+      state: {
+        patientData: {
+          cf_paziente: formData.cf_paziente,
+          id_medico: formData.id_medico,
+          patologia: formData.patologia
+        },
+        lookupResult: response,
+        shouldUpdateSession: true
+      }
+    });
+  };
+
+  const handlePatientNotFound = (response, formData) => {
+    console.log('📍 Patient not found, navigating to registration with data:', formData);
+    
+    // Navigate to registration with patient data in state
+    navigate(`/doctor/${formData.id_medico}/register/${formData.cf_paziente}`, {
+      state: {
+        patientData: {
+          cf_paziente: formData.cf_paziente,
+          id_medico: formData.id_medico,
+          patologia: formData.patologia
+        },
+        lookupResult: response,
+        shouldUpdateSession: true
+      }
+    });
+  };
+
+  const handleError = (error) => {
+    console.error('Patient lookup error:', error);
+    alert(`Errore: ${error.error || 'Errore di connessione'}`);
+  };
+
+  return (
+    <div style={styles.container}>
+      <Header />
+      <div style={styles.mainContent}>
+        <PatientLookup
+          onPatientFound={handlePatientFound}
+          onPatientNotFound={handlePatientNotFound}
+          onError={handleError}
+        />
+      </div>
+    </div>
+  );
+};
 
 // ================================
 // MAIN ROUTER APPLICATION
@@ -17,17 +77,17 @@ const TimelineApp = () => {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Root route - redirect to doctor selection */}
-        <Route path="/" element={<Navigate to="/select-doctor" replace />} />
+        {/* Root route - Combined CF + Doctor selection */}
+        <Route path="/" element={<PatientLookupPage />} />
         
-        {/* Doctor selection page */}
-        <Route path="/select-doctor" element={<DoctorSelection />} />
-        
-        {/* Doctor workspace routes - handles all /doctor/:doctorId/* paths */}
+        {/* Doctor workspace routes - handles all doctor functionality */}
         <Route path="/doctor/:doctorId/*" element={<DoctorWorkspace />} />
         
-        {/* Catch all - redirect to doctor selection */}
-        <Route path="*" element={<Navigate to="/select-doctor" replace />} />
+        {/* Legacy redirect - if someone accesses old doctor selection */}
+        <Route path="/select-doctor" element={<Navigate to="/" replace />} />
+        
+        {/* Catch all - redirect to patient lookup */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );
@@ -80,9 +140,13 @@ class ErrorBoundary extends React.Component {
             <p style={{ marginBottom: '20px', color: '#86868b' }}>
               Si è verificato un errore imprevisto nell'applicazione.
             </p>
-            <button 
+            <button
               onClick={() => window.location.reload()}
-              style={styles.primaryButton}
+              style={{
+                ...styles.button,
+                backgroundColor: '#007AFF',
+                color: 'white'
+              }}
             >
               Ricarica Applicazione
             </button>
@@ -96,7 +160,7 @@ class ErrorBoundary extends React.Component {
 }
 
 // ================================
-// INITIALIZE REACT APP
+// RENDER APP
 // ================================
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
@@ -107,86 +171,10 @@ root.render(
 );
 
 // ================================
-// DEVELOPMENT LOGGING
+// SERVICE WORKER
 // ================================
 
-console.log('🚀 Multi-Doctor Timeline Application Loaded');
-console.log('📡 API Gateway URL:', process.env.REACT_APP_API_GATEWAY_URL || 'http://localhost:8080');
-console.log('🔧 Environment:', process.env.NODE_ENV || 'development');
-console.log('👨‍⚕️ Multi-Doctor Support: ENABLED');
-console.log('🔄 URL Routing: ENABLED');
-console.log('💾 Session Storage: Per-Doctor Isolation');
-
-// URL Structure Logging
-console.log('📍 Available Routes:');
-console.log('  → / (redirects to doctor selection)');
-console.log('  → /select-doctor (doctor selection page)');
-console.log('  → /doctor/:doctorId/lookup (patient lookup)');
-console.log('  → /doctor/:doctorId/timeline/:patientId (patient timeline)');
-console.log('  → /doctor/:doctorId/register/:patientId (patient registration)');
-console.log('  → /doctor/:doctorId/schedule/:patientId (appointment scheduling)');
-
-// Performance monitoring
-if (process.env.NODE_ENV === 'development') {
-  window.timelineApp = {
-    version: '2.0.0-multi-doctor',
-    buildDate: new Date().toISOString(),
-    apiUrl: process.env.REACT_APP_API_GATEWAY_URL || 'http://localhost:8080',
-    features: [
-      'multi-doctor-workspace', 
-      'url-routing', 
-      'session-storage-per-doctor',
-      'concurrent-doctor-support',
-      'professional-tabs',
-      'apple-style-modals'
-    ],
-    doctors: {
-      'DOC001': 'Dr. Mario Rossi',
-      'DOC002': 'Dr.ssa Laura Bianchi', 
-      'DOC003': 'Dr. Giuseppe Verdi',
-      'DOC004': 'Dr.ssa Anna Ferrari'
-    },
-    testUrls: [
-      'http://localhost:3010/select-doctor',
-      'http://localhost:3010/doctor/DOC001/lookup',
-      'http://localhost:3010/doctor/DOC002/lookup'
-    ]
-  };
-
-  // Development helper functions
-  window.debugDoctorSessions = () => {
-    console.log('🔍 Doctor Sessions:');
-    for (let i = 0; i < sessionStorage.length; i++) {
-      const key = sessionStorage.key(i);
-      if (key.startsWith('doctor_')) {
-        const data = JSON.parse(sessionStorage.getItem(key));
-        console.log(`  ${key}:`, data);
-      }
-    }
-  };
-
-  window.clearAllDoctorSessions = () => {
-    console.log('🗑️ Clearing all doctor sessions...');
-    const keys = [];
-    for (let i = 0; i < sessionStorage.length; i++) {
-      const key = sessionStorage.key(i);
-      if (key.startsWith('doctor_')) {
-        keys.push(key);
-      }
-    }
-    keys.forEach(key => sessionStorage.removeItem(key));
-    console.log(`✅ Cleared ${keys.length} doctor sessions`);
-  };
-
-  // Log helpful development info
-  console.log('🛠️ Development Tools:');
-  console.log('  → window.debugDoctorSessions() - Show all doctor sessions');
-  console.log('  → window.clearAllDoctorSessions() - Clear all sessions');
-  console.log('  → window.timelineApp - Application info');
-}
-
-// Service worker registration (optional - for production PWA features)
-if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
+if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js')
       .then((registration) => {
@@ -199,7 +187,7 @@ if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
 }
 
 // ================================
-// MULTI-DOCTOR ARCHITECTURE INFO
+// ARCHITECTURE INFO
 // ================================
 
 console.log(`
@@ -208,22 +196,21 @@ console.log(`
 ╠════════════════════════════════════════════════════════════════════╣
 ║                                                                    ║
 ║  🎯 FEATURES:                                                      ║
-║    • Concurrent doctor workspaces                                  ║
-║    • URL-based routing and bookmarking                             ║
-║    • Per-doctor session isolation                                  ║
+║    • Combined CF + Doctor selection in one page                   ║
+║    • Backend 10-hour Redis sessions                               ║  
 ║    • Professional tabs (Refertazione, Diario, Esami)              ║
-║    • Apple-style modals and UI                                     ║
+║    • No separate doctor selection page                            ║
 ║                                                                    ║
 ║  🔗 URL STRUCTURE:                                                 ║
-║    /select-doctor                → Doctor selection                ║
-║    /doctor/DOC001/lookup         → Dr. Rossi's patient lookup     ║
+║    /                             → Combined CF + Doctor selection  ║
 ║    /doctor/DOC001/timeline/ABC   → Dr. Rossi's patient timeline   ║
 ║    /doctor/DOC002/register/XYZ   → Dr. Bianchi registering patient║
 ║                                                                    ║
 ║  💾 SESSION MANAGEMENT:                                            ║
-║    • Each doctor has isolated sessionStorage                      ║
-║    • State persists on page refresh                               ║
-║    • No interference between concurrent doctors                    ║
+║    • Backend Redis sessions (10 hours)                            ║
+║    • Frontend React Router state                                  ║
+║    • Cookie-based authentication                                  ║
+║    • Proper data flow to timeline components                      ║
 ║                                                                    ║
 ║  🚀 READY FOR WIRGILIO INTEGRATION:                               ║
 ║    • JWT authentication layer ready                               ║
@@ -233,17 +220,12 @@ console.log(`
 ╚════════════════════════════════════════════════════════════════════╝
 `);
 
-// ================================
-// PRODUCTION READINESS CHECK
-// ================================
-
 if (process.env.NODE_ENV === 'production') {
   console.log('🏭 Production Mode - Multi-Doctor System Ready');
-  console.log('✅ Session isolation: Active');
-  console.log('✅ URL routing: Active'); 
-  console.log('✅ Error boundaries: Active');
-  console.log('✅ Service worker: Registering...');
+  console.log('✅ Combined CF + Doctor selection');
+  console.log('✅ Backend session management'); 
+  console.log('✅ Fixed data flow to timeline components');
 } else {
   console.log('🔧 Development Mode - Full debugging enabled');
-  console.log('🔍 Open browser DevTools to see session management');
+  console.log('🔍 Combined patient lookup with proper navigation');
 }

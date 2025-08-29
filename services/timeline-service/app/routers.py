@@ -8,6 +8,8 @@ Aggiornato: Endpoint registrazione con contatti modificabili, messaggi in italia
 from fastapi import APIRouter, Depends, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from datetime import datetime
+from .web_routes import session_router
+
 import logging
 
 from .database import get_database
@@ -324,11 +326,15 @@ async def get_available_appointment_types_legacy(
 # ================================
 
 def get_all_routers():
-    """Ottieni tutti i router per registrazione app principale"""
-    return [
+    """
+    Return all routers including session management routes
+    """
+    routers = [
         main_router,
         patient_router,
-        timeline_router,
         appointment_router,
-        legacy_router
+        timeline_router,
+        session_router  # ADD THIS LINE - Session management routes for React frontend
     ]
+    
+    return routers

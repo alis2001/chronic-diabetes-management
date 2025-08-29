@@ -208,6 +208,12 @@ async def scheduler_proxy(path: str, request: Request):
     """Route all /api/scheduler/* requests to scheduler service"""
     return await proxy_request("scheduler", f"/{path}", request)
 
+
+@app.api_route("/api/session/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+async def session_proxy(path: str, request: Request):
+    """Route all /api/session/* requests to timeline service"""
+    return await proxy_request("timeline", f"/api/session/{path}", request)
+
 # ================================
 # LEGACY COMPATIBILITY ROUTES
 # ================================
