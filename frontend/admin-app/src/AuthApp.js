@@ -1,10 +1,10 @@
 // frontend/admin-app/src/AuthApp.js
-// Main Authentication Coordinator - Gesan Healthcare - WITH USER REDIRECTION
-// Handles complete auth flow: signup → email verification → login → dashboard + smart redirection
+// Main Authentication Coordinator - FIXED SESSION MANAGEMENT
+// Handles complete auth flow with proper token persistence and session restoration
 
 import React, { useState, useEffect } from 'react';
 import { SignUp, Login, EmailVerification } from './components/auth';
-import { authAPI } from './api';
+import { authAPI, sessionStorage } from './api';
 import './auth.css';
 
 const AuthApp = ({ onAuthSuccess }) => {
@@ -18,26 +18,30 @@ const AuthApp = ({ onAuthSuccess }) => {
     password: ''
   });
   const [error, setError] = useState('');
-  const [infoMessage, setInfoMessage] = useState(''); // ✅ NEW: For helpful messages
+  const [infoMessage, setInfoMessage] = useState('');
 
-  // Check existing session on mount
+  // Check existing session on mount - FIXED VERSION
   useEffect(() => {
     checkExistingSession();
   }, []);
 
   const checkExistingSession = async () => {
     try {
-      console.log('🔍 Checking for existing session...');
-      const response = await authAPI.checkSession();
+      console.log('🔍 AuthApp: Checking for existing session...');
       
-      if (response.authenticated && response.user) {
-        console.log('✅ Found existing session:', response.user);
-        setUser(response.user);
-        onAuthSuccess(response.user);
+      // Use the fixed session checking method
+      const sessionResult = await authAPI.checkSession();
+      
+      if (sessionResult.authenticated && sessionResult.user) {
+        console.log('✅ AuthApp: Found existing session:', sessionResult.user);
+        setUser(sessionResult.user);
+        onAuthSuccess(sessionResult.user);
         return;
+      } else {
+        console.log('ℹ️ AuthApp: No existing session found');
       }
     } catch (error) {
-      console.log('ℹ️ No existing session found');
+      console.log('⚠️ AuthApp: Session check failed:', error);
     }
     setLoading(false);
   };
@@ -60,48 +64,57 @@ const AuthApp = ({ onAuthSuccess }) => {
     setInfoMessage('');
   };
 
-  // ✅ NEW: Handle user not found - redirect to signup
+  // Handle user not found - redirect to signup
   const handleUserNotFound = (email, errorMessage) => {
-    console.log('🔄 User not found, redirecting to signup with prefilled email');
-    setTempData({ email, nome: '', cognome: '', password: '' });
+    console.log('🔄 User not found, redirecting to signup');
+    setTempData(prev => ({ ...prev, email }));
     setCurrentView('signup');
     setError('');
-    setInfoMessage(`${errorMessage} Email precompilata per la registrazione.`);
+    setInfoMessage(`Account non trovato per ${email}. Crea un nuovo account.`);
   };
 
-  // ✅ NEW: Handle account pending - redirect to verification
+  // Handle account pending - redirect to verification
   const handleAccountPending = (email, errorMessage) => {
-    console.log('📧 Account pending verification, switching to verification');
-    setTempData({ email, nome: '', cognome: '', password: '' });
+    console.log('⏳ Account pending verification, redirecting to verification');
+    setTempData(prev => ({ ...prev, email }));
     setCurrentView('verify-signup');
     setError('');
-    setInfoMessage(errorMessage);
+    setInfoMessage(`Account ${email} necessita verifica email. Controlla la tua casella di posta.`);
   };
 
-  // Handle email verification success
+  // Handle verification success
   const handleVerificationSuccess = async (verificationData) => {
     try {
-      console.log('✅ Email verification successful');
+      console.log('✅ Verification successful:', verificationData);
       
       if (currentView === 'verify-signup') {
-        // User completed signup verification
-        console.log('🎉 Signup process completed, switching to login');
-        setUser(null);
+        // User completed signup verification - switch to login
+        console.log('📧 Email verificata, ora puoi effettuare l\'accesso');
         setCurrentView('login');
-        setTempData({ email: tempData.email, nome: '', cognome: '', password: '' });
-        setInfoMessage('✅ Account attivato con successo! Ora puoi effettuare l\'accesso.');
+        setTempData(prev => ({ ...prev, email: verificationData.email, password: '' }));
+        setError('');
+        setInfoMessage('Email verificata con successo! Ora puoi effettuare l\'accesso.');
         
       } else if (currentView === 'verify-login') {
-        // User completed login verification - create session
-        console.log('🎉 Login process completed');
-        const userData = {
-          email: verificationData.email,
-          access_token: verificationData.access_token,
-          user_info: verificationData.user_info,
-          role: verificationData.user_info?.role || 'analyst'
-        };
-        setUser(userData);
-        onAuthSuccess(userData);
+        // User completed login verification - session should be created
+        console.log('🎉 Login process completed successfully');
+        
+        // The session token should already be stored by the login API call
+        // Let's verify the session was properly stored
+        const sessionCheck = await authAPI.checkSession();
+        
+        if (sessionCheck.authenticated && sessionCheck.user) {
+          console.log('✅ Session confirmed after login verification');
+          const userData = {
+            ...sessionCheck.user,
+            access_token: verificationData.access_token
+          };
+          setUser(userData);
+          onAuthSuccess(userData);
+        } else {
+          console.error('❌ Session not found after successful verification');
+          setError('Errore durante la creazione della sessione. Riprova.');
+        }
       }
       
       setError('');
@@ -116,7 +129,7 @@ const AuthApp = ({ onAuthSuccess }) => {
   const handleSwitchToLogin = () => {
     console.log('🔄 Switching to login view');
     setCurrentView('login');
-    setTempData({ email: tempData.email || '', nome: '', cognome: '', password: '' });
+    setTempData(prev => ({ ...prev, password: '' }));
     setError('');
     setInfoMessage('');
   };
@@ -124,7 +137,7 @@ const AuthApp = ({ onAuthSuccess }) => {
   const handleSwitchToSignUp = () => {
     console.log('🔄 Switching to signup view');
     setCurrentView('signup');
-    setTempData({ email: tempData.email || '', nome: '', cognome: '', password: '' });
+    setTempData(prev => ({ ...prev, nome: '', cognome: '', password: '' }));
     setError('');
     setInfoMessage('');
   };
@@ -147,51 +160,23 @@ const AuthApp = ({ onAuthSuccess }) => {
     setInfoMessage('');
   };
 
-  // Loading state
-  if (loading) {
-    return (
-      <div className="auth-container">
-        <div className="auth-card">
-          <div className="auth-header">
-            <div className="auth-logo">🏥</div>
-            <h1 className="auth-title">Caricamento...</h1>
-            <p className="auth-subtitle">Sistema Gestione Diabetes Cronico</p>
-            <div className="company-badge">Gesan Healthcare Systems</div>
-          </div>
-          <div style={{ textAlign: 'center', padding: '40px' }}>
-            <div style={{
-              width: '40px',
-              height: '40px',
-              border: '4px solid #f3f4f6',
-              borderRadius: '50%',
-              borderTopColor: '#3b82f6',
-              animation: 'spin 1s linear infinite',
-              margin: '0 auto 20px 0'
-            }} />
-            <p style={{ color: '#6b7280', fontSize: '14px' }}>
-              Controllo sessione esistente...
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ✅ IMPROVED: Global message display
+  // Message display component
   const MessageDisplay = () => {
     if (error) {
       return (
-        <div className="alert alert-error" style={{ marginBottom: '20px' }}>
-          <span className="alert-icon">⚠️</span>
-          {error}
+        <div className="error-message" style={{ marginBottom: '20px' }}>
+          <span>⚠️</span>
+          <span>{error}</span>
           <button 
             onClick={() => setError('')}
             style={{
-              marginLeft: 'auto',
               background: 'none',
               border: 'none',
-              color: '#dc2626',
+              color: 'inherit',
+              marginLeft: 'auto',
               cursor: 'pointer',
+              padding: '2px 6px',
+              borderRadius: '4px',
               fontSize: '16px'
             }}
           >
@@ -203,22 +188,19 @@ const AuthApp = ({ onAuthSuccess }) => {
     
     if (infoMessage) {
       return (
-        <div className="alert alert-info" style={{ 
-          marginBottom: '20px',
-          backgroundColor: '#e0f2fe',
-          borderColor: '#0288d1',
-          color: '#01579b'
-        }}>
-          <span className="alert-icon">ℹ️</span>
-          {infoMessage}
+        <div className="info-message" style={{ marginBottom: '20px' }}>
+          <span>ℹ️</span>
+          <span>{infoMessage}</span>
           <button 
             onClick={() => setInfoMessage('')}
             style={{
-              marginLeft: 'auto',
               background: 'none',
               border: 'none',
-              color: '#01579b',
+              color: 'inherit',
+              marginLeft: 'auto',
               cursor: 'pointer',
+              padding: '2px 6px',
+              borderRadius: '4px',
               fontSize: '16px'
             }}
           >
@@ -231,6 +213,25 @@ const AuthApp = ({ onAuthSuccess }) => {
     return null;
   };
 
+  // Loading state - enhanced design
+  if (loading) {
+    return (
+      <div className="auth-container">
+        <div className="auth-card">
+          <div className="auth-header">
+            <div className="auth-logo">🏥</div>
+            <h1 className="auth-title">Controllo Sessione</h1>
+            <p className="auth-subtitle">Verifica autenticazione in corso...</p>
+          </div>
+          <div className="loading-container">
+            <div className="loading-spinner"></div>
+            <p className="loading-text">Caricamento...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Render appropriate view
   return (
     <div className="auth-container">
@@ -238,11 +239,11 @@ const AuthApp = ({ onAuthSuccess }) => {
         <div>
           <MessageDisplay />
           <Login
-            initialEmail={tempData.email} // ✅ NEW: Prefill email
+            initialEmail={tempData.email}
             onSwitchToSignUp={handleSwitchToSignUp}
             onLoginRequireVerification={handleLoginRequireVerification}
-            onUserNotFound={handleUserNotFound} // ✅ NEW: Handle user not found
-            onAccountPending={handleAccountPending} // ✅ NEW: Handle pending account
+            onUserNotFound={handleUserNotFound}
+            onAccountPending={handleAccountPending}
             onError={handleError}
           />
         </div>
@@ -252,7 +253,7 @@ const AuthApp = ({ onAuthSuccess }) => {
         <div>
           <MessageDisplay />
           <SignUp
-            initialEmail={tempData.email} // ✅ NEW: Prefill email
+            initialEmail={tempData.email}
             onSwitchToLogin={handleSwitchToLogin}
             onSignUpSuccess={handleSignUpSuccess}
             onError={handleError}

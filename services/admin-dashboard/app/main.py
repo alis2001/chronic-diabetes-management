@@ -1,22 +1,26 @@
 # services/admin-dashboard/app/main.py
 """
-Admin Dashboard - Complete Healthcare System Management Interface
-Professional admin interface with full authentication system
+Admin Dashboard - COMPLETE VERSION WITH REAL DATA ENDPOINTS
+Professional admin interface with actual database integration
 """
 
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from motor.motor_asyncio import AsyncIOMotorDatabase
+from datetime import datetime, date
 import os
 import logging
 import sys
+import httpx
+from typing import List, Dict, Any
 
 # Import authentication components
 from .auth_routes import auth_router
 from .session_manager import session_manager
-from .database import connect_to_mongo, close_mongo_connection, check_database_health
+from .database import connect_to_mongo, close_mongo_connection, check_database_health, get_database
 from .config import settings
 
 # Configure logging
@@ -29,6 +33,31 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# Hardcoded doctor information (matching timeline service)
+HARDCODED_DOCTORS = {
+    "DOC001": {
+        "id": "DOC001",
+        "nome_completo": "Dr. Mario Rossi",
+        "specializzazione": "Diabetologia",
+        "struttura": "ASL Roma 1",
+        "codice_medico": "DOC001"
+    },
+    "DOC002": {
+        "id": "DOC002", 
+        "nome_completo": "Dr.ssa Laura Bianchi",
+        "specializzazione": "Diabetologia", 
+        "struttura": "ASL Roma 1",
+        "codice_medico": "DOC002"
+    },
+    "DOC003": {
+        "id": "DOC003",
+        "nome_completo": "Dr. Giuseppe Verdi", 
+        "specializzazione": "Endocrinologia",
+        "struttura": "ASL Roma 1", 
+        "codice_medico": "DOC003"
+    }
+}
 
 def create_application() -> FastAPI:
     """Create and configure the FastAPI application"""
@@ -59,61 +88,72 @@ def create_application() -> FastAPI:
     else:
         templates = None
 
-    # Include authentication router
+    # Include authentication routes
     app.include_router(auth_router)
 
     # ================================
-    # MAIN ROUTES
+    # HELPER FUNCTIONS
     # ================================
 
-    @app.get("/", response_class=HTMLResponse)
-    async def admin_dashboard(request: Request):
-        """Main admin dashboard page"""
-        if templates:
-            return templates.TemplateResponse("dashboard.html", {
-                "request": request,
-                "page_title": "Dashboard Amministrativo",
-                "service_name": "Admin Dashboard"
-            })
-        else:
-            return HTMLResponse("""
-            <html>
-                <head><title>Admin Dashboard</title></head>
-                <body>
-                    <h1>🏥 Admin Dashboard</h1>
-                    <p>Sistema Gestione Diabetes Cronico</p>
-                    <p><a href="/docs">API Documentation</a></p>
-                </body>
-            </html>
-            """)
+    def format_date(date_obj) -> str:
+        """Format date for display"""
+        if isinstance(date_obj, datetime):
+            return date_obj.strftime("%d/%m/%Y %H:%M")
+        elif isinstance(date_obj, date):
+            return date_obj.strftime("%d/%m/%Y")
+        return str(date_obj)
+
+    def get_pathology_display(pathology: str) -> str:
+        """Get human-readable pathology name"""
+        pathology_names = {
+            "diabetes_mellitus_type1": "Diabete Mellito Tipo 1",
+            "diabetes_mellitus_type2": "Diabete Mellito Tipo 2", 
+            "diabetes_gestational": "Diabete Gestazionale",
+            "hypertension_primary": "Ipertensione Primaria",
+            "hypertension_secondary": "Ipertensione Secondaria",
+            "cardiovascular": "Malattie Cardiovascolari",
+            "chronic_kidney": "Malattia Renale Cronica"
+        }
+        return pathology_names.get(pathology, pathology.replace("_", " ").title())
+
+    def get_appointment_type_display(appointment_type: str) -> str:
+        """Get human-readable appointment type"""
+        type_names = {
+            "visita_diabetologica": "Visita Diabetologica",
+            "visita_oculistica": "Visita Oculistica", 
+            "visita_neurologica": "Visita Neurologica",
+            "laboratorio_hba1c": "Esame HbA1c",
+            "laboratorio_glicemia": "Esame Glicemia",
+            "eco_addome": "Ecografia Addome",
+            "test_neuropatia": "Test Neuropatia"
+        }
+        return type_names.get(appointment_type, appointment_type.replace("_", " ").title())
+
+    # ================================
+    # MAIN DASHBOARD ENDPOINTS
+    # ================================
+
+    @app.get("/")
+    async def read_root():
+        """Root endpoint"""
+        return {"service": "admin-dashboard", "status": "running", "version": "1.0.0"}
 
     @app.get("/health")
     async def health_check():
         """Health check endpoint"""
         try:
-            # Check database health
-            db_health = await check_database_health()
+            # Test database connection
+            db = await get_database()
+            await db.command("ping")
             
             return {
                 "service": "admin-dashboard",
                 "status": "healthy",
+                "timestamp": datetime.now().isoformat(),
                 "port": settings.SERVICE_PORT,
-                "database": db_health,
-                "features": [
-                    "authentication_system",
-                    "email_verification",
-                    "session_management",
-                    "patient_management",
-                    "doctor_overview", 
-                    "system_monitoring",
-                    "basic_reporting"
-                ],
-                "authentication": {
-                    "email_domain": "@gesan.it",
-                    "verification_method": "6_digit_email_code",
-                    "session_duration": "8_hours",
-                    "roles": ["admin", "manager", "analyst"]
-                }
+                "database": "connected",
+                "session_duration": "8_hours",
+                "roles": ["admin", "manager", "analyst"]
             }
         except Exception as e:
             logger.error(f"Health check failed: {str(e)}")
@@ -125,119 +165,243 @@ def create_application() -> FastAPI:
             }
 
     # ================================
-    # DASHBOARD API ROUTES
+    # PATIENTS DATA ENDPOINTS
+    # ================================
+
+    @app.get("/dashboard/patients/list")
+    async def get_patients_list():
+        """Get complete list of patients with enrollment information"""
+        try:
+            db = await get_database()
+            
+            # Get all patients from timeline database (diabetes_db)
+            patients_cursor = db.patients.find({})
+            patients = await patients_cursor.to_list(length=None)
+            
+            patients_data = []
+            for patient in patients:
+                # Get patient demographics
+                demographics = patient.get("demographics", {})
+                
+                # Get enrolling doctor info
+                doctor_id = patient.get("id_medico", "Unknown")
+                doctor_info = HARDCODED_DOCTORS.get(doctor_id, {
+                    "nome_completo": f"Medico {doctor_id}",
+                    "specializzazione": "N/A"
+                })
+                
+                patients_data.append({
+                    "codice_fiscale": patient.get("cf_paziente", ""),
+                    "nome": demographics.get("nome", "N/A"),
+                    "cognome": demographics.get("cognome", "N/A"),
+                    "data_nascita": demographics.get("data_nascita", "N/A"),
+                    "telefono": demographics.get("telefono", "N/A"),
+                    "email": demographics.get("email", "N/A"),
+                    "patologia": get_pathology_display(patient.get("patologia", "")),
+                    "medico_nome": doctor_info.get("nome_completo", "N/A"),
+                    "medico_specializzazione": doctor_info.get("specializzazione", "N/A"),
+                    "data_registrazione": format_date(patient.get("enrollment_date")),
+                    "status": patient.get("status", "active").title(),
+                    "created_at": format_date(patient.get("created_at")),
+                    "indirizzo": demographics.get("indirizzo", {})
+                })
+            
+            return {
+                "success": True,
+                "total": len(patients_data),
+                "patients": patients_data
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting patients list: {str(e)}")
+            raise HTTPException(status_code=500, detail="Error retrieving patients data")
+
+    # ================================
+    # DOCTORS DATA ENDPOINTS  
+    # ================================
+
+    @app.get("/dashboard/doctors/list")
+    async def get_doctors_list():
+        """Get list of doctors with activity information"""
+        try:
+            db = await get_database()
+            
+            doctors_data = []
+            
+            # Get activity data for each doctor
+            for doctor_id, doctor_info in HARDCODED_DOCTORS.items():
+                
+                # Count patients enrolled by this doctor
+                patients_count = await db.patients.count_documents({"id_medico": doctor_id})
+                
+                # Count total appointments for this doctor
+                appointments_count = await db.appointments.count_documents({"id_medico": doctor_id})
+                
+                # Count appointments by status
+                completed_count = await db.appointments.count_documents({
+                    "id_medico": doctor_id,
+                    "status": "completed"
+                })
+                
+                scheduled_count = await db.appointments.count_documents({
+                    "id_medico": doctor_id, 
+                    "status": "scheduled"
+                })
+                
+                # Get recent activity (last appointment)
+                last_appointment = await db.appointments.find_one(
+                    {"id_medico": doctor_id},
+                    sort=[("scheduled_date", -1)]
+                )
+                
+                last_activity = "Mai utilizzato"
+                if last_appointment:
+                    last_activity = format_date(last_appointment.get("scheduled_date"))
+                
+                # Calculate completion rate
+                completion_rate = 0
+                if appointments_count > 0:
+                    completion_rate = round((completed_count / appointments_count) * 100, 1)
+                
+                doctors_data.append({
+                    "id_medico": doctor_id,
+                    "nome_completo": doctor_info.get("nome_completo"),
+                    "specializzazione": doctor_info.get("specializzazione"),
+                    "struttura": doctor_info.get("struttura"),
+                    "codice_medico": doctor_info.get("codice_medico"),
+                    "pazienti_registrati": patients_count,
+                    "appuntamenti_totali": appointments_count,
+                    "appuntamenti_completati": completed_count,
+                    "appuntamenti_programmati": scheduled_count,
+                    "tasso_completamento": completion_rate,
+                    "ultima_attivita": last_activity,
+                    "stato": "Attivo" if appointments_count > 0 else "Inattivo"
+                })
+            
+            return {
+                "success": True,
+                "total": len(doctors_data),
+                "doctors": doctors_data
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting doctors list: {str(e)}")
+            raise HTTPException(status_code=500, detail="Error retrieving doctors data")
+
+    # ================================
+    # VISITS DATA ENDPOINTS
+    # ================================
+
+    @app.get("/dashboard/visits/list")
+    async def get_visits_list():
+        """Get complete list of visits/appointments"""
+        try:
+            db = await get_database()
+            
+            # Get all appointments
+            appointments_cursor = db.appointments.find({}).sort("scheduled_date", -1)
+            appointments = await appointments_cursor.to_list(length=None)
+            
+            visits_data = []
+            for appointment in appointments:
+                
+                # Get patient info
+                patient_cf = appointment.get("cf_paziente", "")
+                patient = await db.patients.find_one({"cf_paziente": patient_cf})
+                
+                patient_name = "Paziente Sconosciuto"
+                if patient and patient.get("demographics"):
+                    demographics = patient["demographics"]
+                    patient_name = f"{demographics.get('nome', '')} {demographics.get('cognome', '')}"
+                
+                # Get doctor info
+                doctor_id = appointment.get("id_medico", "")
+                doctor_info = HARDCODED_DOCTORS.get(doctor_id, {
+                    "nome_completo": f"Medico {doctor_id}"
+                })
+                
+                # Status display
+                status_display = {
+                    "scheduled": "Programmata",
+                    "completed": "Completata", 
+                    "cancelled": "Cancellata",
+                    "no_show": "Paziente Assente"
+                }.get(appointment.get("status", ""), appointment.get("status", "").title())
+                
+                # Priority display
+                priority_display = {
+                    "routine": "Routine",
+                    "normal": "Normale",
+                    "urgent": "Urgente", 
+                    "emergency": "Emergenza"
+                }.get(appointment.get("priority", "normal"), "Normale")
+                
+                visits_data.append({
+                    "appointment_id": appointment.get("appointment_id", str(appointment.get("_id", ""))),
+                    "paziente_cf": patient_cf,
+                    "paziente_nome": patient_name.strip(),
+                    "medico_nome": doctor_info.get("nome_completo", "N/A"),
+                    "medico_specializzazione": doctor_info.get("specializzazione", "N/A"),
+                    "tipo_visita": get_appointment_type_display(appointment.get("appointment_type", "")),
+                    "data_programmata": format_date(appointment.get("scheduled_date")),
+                    "stato": status_display,
+                    "priorita": priority_display,
+                    "location": appointment.get("location", "N/A"),
+                    "note_medico": appointment.get("doctor_notes", ""),
+                    "note_completamento": appointment.get("completion_notes", ""),
+                    "data_completamento": format_date(appointment.get("completed_at")) if appointment.get("completed_at") else "N/A",
+                    "created_at": format_date(appointment.get("created_at"))
+                })
+            
+            return {
+                "success": True,
+                "total": len(visits_data),
+                "visits": visits_data
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting visits list: {str(e)}")
+            raise HTTPException(status_code=500, detail="Error retrieving visits data")
+
+    # ================================
+    # DASHBOARD OVERVIEW ENDPOINTS
     # ================================
 
     @app.get("/dashboard/overview")
     async def dashboard_overview():
-        """System overview for dashboard"""
+        """System overview with real data"""
         try:
-            # This would integrate with other services
+            db = await get_database()
+            
+            # Count totals
+            total_patients = await db.patients.count_documents({})
+            total_appointments = await db.appointments.count_documents({})
+            completed_appointments = await db.appointments.count_documents({"status": "completed"})
+            
+            # Count patients by pathology
+            pathology_pipeline = [
+                {"$group": {"_id": "$patologia", "count": {"$sum": 1}}}
+            ]
+            pathology_cursor = db.patients.aggregate(pathology_pipeline)
+            pathology_stats = await pathology_cursor.to_list(length=None)
+            
+            pathology_breakdown = {}
+            for stat in pathology_stats:
+                pathology_breakdown[stat["_id"]] = stat["count"]
+            
             return {
-                "total_patients": 150,  # Placeholder
-                "active_doctors": 12,   # Placeholder
-                "appointments_today": 8, # Placeholder
+                "total_patients": total_patients,
+                "total_doctors": len(HARDCODED_DOCTORS),
+                "total_appointments": total_appointments,
+                "completed_appointments": completed_appointments,
+                "completion_rate": round((completed_appointments / total_appointments * 100), 1) if total_appointments > 0 else 0,
+                "pathology_breakdown": pathology_breakdown,
                 "system_status": "operational",
-                "last_updated": "2024-01-15T10:30:00Z"
+                "last_updated": datetime.now().isoformat()
             }
         except Exception as e:
             logger.error(f"Dashboard overview error: {str(e)}")
-            raise HTTPException(status_code=500, detail="Error retrieving dashboard data")
-
-    @app.get("/dashboard/patients/stats")
-    async def patient_stats():
-        """Patient statistics for dashboard"""
-        try:
-            return {
-                "total_registered": 150,
-                "active_this_month": 89,
-                "new_registrations": 12,
-                "by_pathology": {
-                    "diabetes_type1": 45,
-                    "diabetes_type2": 89,
-                    "diabetes_gestational": 16
-                }
-            }
-        except Exception as e:
-            logger.error(f"Patient stats error: {str(e)}")
-            raise HTTPException(status_code=500, detail="Error retrieving patient statistics")
-
-    @app.get("/dashboard/doctors/activity")
-    async def doctor_activity():
-        """Doctor activity for dashboard"""
-        try:
-            return {
-                "total_doctors": 12,
-                "active_today": 8,
-                "appointments_scheduled": 24,
-                "most_active": [
-                    {"name": "Dr. Mario Rossi", "appointments": 8},
-                    {"name": "Dr.ssa Laura Bianchi", "appointments": 6}
-                ]
-            }
-        except Exception as e:
-            logger.error(f"Doctor activity error: {str(e)}")
-            raise HTTPException(status_code=500, detail="Error retrieving doctor activity")
-
-    @app.get("/dashboard/system/health")
-    async def system_health():
-        """System health for dashboard"""
-        try:
-            # Check all services
-            services_status = {
-                "timeline_service": "healthy",    # Would check actual service
-                "analytics_service": "healthy",   # Would check actual service
-                "scheduler_service": "healthy",   # Would check actual service
-                "database": "healthy",
-                "redis": "healthy"
-            }
-            
-            return {
-                "overall_status": "healthy",
-                "services": services_status,
-                "uptime": "99.9%",
-                "last_check": "2024-01-15T10:30:00Z"
-            }
-        except Exception as e:
-            logger.error(f"System health error: {str(e)}")
-            raise HTTPException(status_code=500, detail="Error checking system health")
-
-    # ================================
-    # LEGACY TEMPLATE ROUTES
-    # ================================
-
-    @app.get("/patients", response_class=HTMLResponse)
-    async def patients_page(request: Request):
-        """Patient management page"""
-        if templates:
-            return templates.TemplateResponse("patients.html", {
-                "request": request,
-                "page_title": "Gestione Pazienti"
-            })
-        else:
-            return HTMLResponse("<h1>Gestione Pazienti</h1><p>Coming soon...</p>")
-
-    @app.get("/doctors", response_class=HTMLResponse)  
-    async def doctors_page(request: Request):
-        """Doctor management page"""
-        if templates:
-            return templates.TemplateResponse("doctors.html", {
-                "request": request,
-                "page_title": "Gestione Medici"
-            })
-        else:
-            return HTMLResponse("<h1>Gestione Medici</h1><p>Coming soon...</p>")
-
-    @app.get("/system", response_class=HTMLResponse)
-    async def system_page(request: Request):
-        """System monitoring page"""
-        if templates:
-            return templates.TemplateResponse("system.html", {
-                "request": request,
-                "page_title": "Monitoraggio Sistema"
-            })
-        else:
-            return HTMLResponse("<h1>Monitoraggio Sistema</h1><p>Coming soon...</p>")
+            raise HTTPException(status_code=500, detail="Error retrieving dashboard overview")
 
     # ================================
     # APPLICATION LIFECYCLE EVENTS
@@ -259,74 +423,22 @@ def create_application() -> FastAPI:
             await session_manager.init_redis()
             logger.info("✅ Redis session manager initialized")
             
-            logger.info("🏥 Admin Dashboard with Authentication started successfully!")
-            logger.info("📧 Email verification system ready for @gesan.it domain")
+            logger.info("🏥 Admin Dashboard with Real Data Endpoints started successfully!")
             
         except Exception as e:
             logger.error(f"❌ Startup failed: {str(e)}")
-            raise
 
     @app.on_event("shutdown")
     async def shutdown_event():
         """Application shutdown"""
-        logger.info("🛑 Shutting down Admin Dashboard...")
-        
+        logger.info("🛑 Shutting down Admin Dashboard")
         try:
             await close_mongo_connection()
-            logger.info("✅ Database connections closed")
+            logger.info("✅ MongoDB connection closed")
         except Exception as e:
             logger.error(f"❌ Shutdown error: {str(e)}")
 
-    # ================================
-    # ERROR HANDLERS
-    # ================================
-
-    @app.exception_handler(404)
-    async def not_found_handler(request: Request, exc: HTTPException):
-        """Custom 404 handler"""
-        return JSONResponse(
-            status_code=404,
-            content={
-                "error": "ROUTE_NOT_FOUND",
-                "message": f"Route {request.url.path} not found",
-                "available_routes": [
-                    "/health",
-                    "/auth/signup",
-                    "/auth/login",
-                    "/auth/verify-email",
-                    "/dashboard/overview"
-                ]
-            }
-        )
-
-    @app.exception_handler(500)
-    async def internal_error_handler(request: Request, exc: Exception):
-        """Custom 500 handler"""
-        logger.error(f"🚨 Internal server error on {request.url.path}: {str(exc)}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": "INTERNAL_SERVER_ERROR",
-                "message": "An internal error occurred",
-                "service": "admin-dashboard"
-            }
-        )
-
     return app
 
-# Create the application
+# Create the app instance
 app = create_application()
-
-# ================================
-# DEVELOPMENT SERVER
-# ================================
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        app, 
-        host="0.0.0.0", 
-        port=settings.SERVICE_PORT, 
-        reload=True,
-        log_level=settings.LOG_LEVEL.lower()
-    )
