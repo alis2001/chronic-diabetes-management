@@ -78,7 +78,7 @@ services:
       - diabetes-network
     volumes:
       - ./services/analytics-service:/app
-
+      
   admin-dashboard:
     build:
       context: ./services/admin-dashboard
@@ -92,6 +92,10 @@ services:
       - SERVICE_PORT=8084
       - MONGODB_URL=mongodb://admin:admin123@mongodb:27017/diabetes_db?authSource=admin
       - REDIS_URL=redis://:redis123@redis:6379/0
+      - TIMELINE_SERVICE_URL=http://timeline-service:8001
+      - ANALYTICS_SERVICE_URL=http://analytics-service:8002
+      - SCHEDULER_SERVICE_URL=http://scheduler-service:8003
+      - API_GATEWAY_URL=http://api-gateway:8080
     depends_on:
       - mongodb
       - redis
@@ -100,7 +104,28 @@ services:
       - diabetes-network
     volumes:
       - ./services/admin-dashboard:/app
-      
+
+  admin-frontend:
+    build:
+      context: ./frontend/admin-app
+      dockerfile: Dockerfile.dev
+    container_name: diabetes-admin-frontend
+    restart: unless-stopped
+    ports:
+      - "3012:3000"  # Admin frontend port
+    environment:
+      - REACT_APP_API_GATEWAY_URL=http://localhost:8080
+      - REACT_APP_ADMIN_API_URL=http://localhost:8084
+      - CHOKIDAR_USEPOLLING=true
+    depends_on:
+      - api-gateway
+      - admin-dashboard
+    networks:
+      - diabetes-network
+    volumes:
+      - ./frontend/admin-app:/app
+      - /app/node_modules
+
   scheduler-service:
     build:
       context: ./services/scheduler-service

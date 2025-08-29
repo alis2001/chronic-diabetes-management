@@ -37,8 +37,9 @@ app.add_middleware(
 # Service URLs
 SERVICES = {
     "timeline": os.getenv("TIMELINE_SERVICE_URL", "http://timeline-service:8001"),
-    "analytics": os.getenv("ANALYTICS_SERVICE_URL", "http://analytics-service:8002"),
-    "scheduler": os.getenv("SCHEDULER_SERVICE_URL", "http://scheduler-service:8003")
+    "analytics": os.getenv("ANALYTICS_SERVICE_URL", "http://analytics-service:8002"), 
+    "scheduler": os.getenv("SCHEDULER_SERVICE_URL", "http://scheduler-service:8003"),
+    "admin": os.getenv("ADMIN_SERVICE_URL", "http://admin-dashboard:8084")  # ✅ ADD THIS
 }
 
 class HealthResponse(BaseModel):
@@ -270,6 +271,14 @@ async def internal_error_handler(request: Request, exc: Exception):
             "timestamp": datetime.now().isoformat()
         }
     )
+
+# Add admin routes to existing API Gateway
+
+@app.api_route("/api/admin/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def admin_proxy(path: str, request: Request):
+    """Route all /api/admin/* requests to admin-dashboard service"""
+    logger.info(f"🏥 Admin route: /api/admin/{path}")
+    return await proxy_request("admin", f"/{path}", request)
 
 # ================================
 # STARTUP/SHUTDOWN EVENTS

@@ -2,7 +2,7 @@
   "name": "diabetes-admin-frontend",
   "version": "1.0.0",
   "private": true,
-  "description": "React Admin Frontend for Diabetes Management System",
+  "description": "React Admin Dashboard for Diabetes Management System",
   "dependencies": {
     "@testing-library/jest-dom": "^5.16.4",
     "@testing-library/react": "^13.4.0",
