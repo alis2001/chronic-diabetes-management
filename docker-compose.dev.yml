@@ -79,6 +79,28 @@ services:
     volumes:
       - ./services/analytics-service:/app
 
+  admin-dashboard:
+    build:
+      context: ./services/admin-dashboard
+      dockerfile: Dockerfile.dev
+    container_name: diabetes-admin-dashboard
+    restart: unless-stopped
+    ports:
+      - "8084:8084"
+    environment:
+      - ENV=development
+      - SERVICE_PORT=8084
+      - MONGODB_URL=mongodb://admin:admin123@mongodb:27017/diabetes_db?authSource=admin
+      - REDIS_URL=redis://:redis123@redis:6379/0
+    depends_on:
+      - mongodb
+      - redis
+      - timeline-service
+    networks:
+      - diabetes-network
+    volumes:
+      - ./services/admin-dashboard:/app
+      
   scheduler-service:
     build:
       context: ./services/scheduler-service
