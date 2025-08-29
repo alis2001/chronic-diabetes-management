@@ -1,21 +1,34 @@
 // frontend/admin-app/src/components/auth/SignUp.js
-// Professional SignUp Component - Gesan Healthcare - UPDATED WITH REAL API
+// Professional SignUp Component - Gesan Healthcare - WITH EMAIL PREFILL SUPPORT
+// Supports prefilled email from login redirection for better UX
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { authAPI } from '../../api';
 import '../../auth.css';
 
-const SignUp = ({ onSwitchToLogin, onSignUpSuccess, onError }) => {
+const SignUp = ({ initialEmail = '', onSwitchToLogin, onSignUpSuccess, onError }) => {
   const [formData, setFormData] = useState({
     nome: '',
     cognome: '',
     username: '',
-    email: '',
+    email: initialEmail,
     password: '',
     role: 'analyst'
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Update email if initialEmail changes (from redirection)
+  useEffect(() => {
+    if (initialEmail) {
+      setFormData(prev => ({ 
+        ...prev, 
+        email: initialEmail,
+        // ✅ AUTO-GENERATE USERNAME from email if email is prefilled
+        username: prev.username || initialEmail.split('@')[0].replace('.', '_')
+      }));
+    }
+  }, [initialEmail]);
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -89,7 +102,7 @@ const SignUp = ({ onSwitchToLogin, onSignUpSuccess, onError }) => {
       } else if (error.status === 0) {
         errorMsg = 'Impossibile contattare il server. Verificare la connessione.';
       } else {
-        errorMsg = error.message || 'Errore durante la registrazione';
+        errorMsg = error.message || 'Errore di connessione';
       }
       
       setError(errorMsg);
@@ -103,7 +116,7 @@ const SignUp = ({ onSwitchToLogin, onSignUpSuccess, onError }) => {
     <div className="auth-card">
       <div className="auth-header">
         <div className="auth-logo">🏥</div>
-        <h1 className="auth-title">Registrazione Admin</h1>
+        <h1 className="auth-title">Registrati</h1>
         <p className="auth-subtitle">Sistema Gestione Diabetes Cronico</p>
         <div className="company-badge">Gesan Healthcare Systems</div>
       </div>
@@ -115,33 +128,46 @@ const SignUp = ({ onSwitchToLogin, onSignUpSuccess, onError }) => {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="auth-form">
-        <div className="form-row">
-          <div className="form-group">
-            <label className="form-label required">Nome</label>
-            <input
-              type="text"
-              value={formData.nome}
-              onChange={(e) => handleInputChange('nome', e.target.value)}
-              className="form-input"
-              placeholder="Mario"
-              required
-              disabled={loading}
-            />
-          </div>
+      {/* ✅ NEW: Show helpful message if email is prefilled */}
+      {initialEmail && (
+        <div className="alert alert-info" style={{ 
+          backgroundColor: '#e0f2fe',
+          borderColor: '#0288d1',
+          color: '#01579b',
+          marginBottom: '20px'
+        }}>
+          <span className="alert-icon">ℹ️</span>
+          Email precompilata dalla pagina di accesso. Completa la registrazione.
+        </div>
+      )}
 
-          <div className="form-group">
-            <label className="form-label required">Cognome</label>
-            <input
-              type="text"
-              value={formData.cognome}
-              onChange={(e) => handleInputChange('cognome', e.target.value)}
-              className="form-input"
-              placeholder="Rossi"
-              required
-              disabled={loading}
-            />
-          </div>
+      <form onSubmit={handleSubmit} className="auth-form">
+        <div className="form-group">
+          <label className="form-label required">Nome</label>
+          <input
+            type="text"
+            value={formData.nome}
+            onChange={(e) => handleInputChange('nome', e.target.value)}
+            className="form-input"
+            placeholder="Nome"
+            required
+            disabled={loading}
+            autoComplete="given-name"
+          />
+        </div>
+
+        <div className="form-group">
+          <label className="form-label required">Cognome</label>
+          <input
+            type="text"
+            value={formData.cognome}
+            onChange={(e) => handleInputChange('cognome', e.target.value)}
+            className="form-input"
+            placeholder="Cognome"
+            required
+            disabled={loading}
+            autoComplete="family-name"
+          />
         </div>
 
         <div className="form-group">
@@ -151,25 +177,31 @@ const SignUp = ({ onSwitchToLogin, onSignUpSuccess, onError }) => {
             value={formData.username}
             onChange={(e) => handleInputChange('username', e.target.value)}
             className="form-input"
-            placeholder="mario.rossi"
+            placeholder="username_senza_punti"
             required
             disabled={loading}
+            autoComplete="username"
           />
           <small style={{ color: '#6b7280', fontSize: '12px' }}>
-            Solo lettere, numeri e underscore
+            Solo lettere, numeri e underscore (_)
           </small>
         </div>
 
         <div className="form-group">
-          <label className="form-label required">Email Aziendale</label>
+          <label className="form-label required">Email aziendale</label>
           <input
             type="email"
             value={formData.email}
-            onChange={(e) => handleInputChange('email', e.target.value.toLowerCase())}
-            className="form-input email-input"
-            placeholder="mario.rossi@gesan.it"
+            onChange={(e) => handleInputChange('email', e.target.value)}
+            className={`form-input ${initialEmail ? 'prefilled' : ''}`}
+            placeholder="nome.cognome@gesan.it"
             required
             disabled={loading}
+            autoComplete="email"
+            style={initialEmail ? { 
+              backgroundColor: '#f0f9ff', 
+              borderColor: '#0284c7' 
+            } : {}}
           />
           <small style={{ color: '#6b7280', fontSize: '12px' }}>
             Deve terminare con @gesan.it
@@ -186,6 +218,7 @@ const SignUp = ({ onSwitchToLogin, onSignUpSuccess, onError }) => {
             placeholder="Password sicura (min 8 caratteri)"
             required
             disabled={loading}
+            autoComplete="new-password"
           />
           <small style={{ color: '#6b7280', fontSize: '12px' }}>
             Minimo 8 caratteri con maiuscole, minuscole e numeri
@@ -204,6 +237,9 @@ const SignUp = ({ onSwitchToLogin, onSignUpSuccess, onError }) => {
             <option value="manager">Manager</option>
             <option value="admin">Amministratore</option>
           </select>
+          <small style={{ color: '#6b7280', fontSize: '12px' }}>
+            Admin: accesso completo, Manager: gestione utenti, Analyst: solo lettura
+          </small>
         </div>
 
         <button 

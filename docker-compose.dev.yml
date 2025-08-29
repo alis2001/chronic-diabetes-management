@@ -96,6 +96,8 @@ services:
       - ANALYTICS_SERVICE_URL=http://analytics-service:8002
       - SCHEDULER_SERVICE_URL=http://scheduler-service:8003
       - API_GATEWAY_URL=http://api-gateway:8080
+      - SMTP_USERNAME=alisadeghian7077@gmail.com
+      - SMTP_PASSWORD=jfvc swyy szwy pekb
     depends_on:
       - mongodb
       - redis

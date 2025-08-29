@@ -1,6 +1,6 @@
 // frontend/admin-app/src/AuthApp.js
-// Main Authentication Coordinator - Gesan Healthcare
-// Handles complete auth flow: signup → email verification → login → dashboard
+// Main Authentication Coordinator - Gesan Healthcare - WITH USER REDIRECTION
+// Handles complete auth flow: signup → email verification → login → dashboard + smart redirection
 
 import React, { useState, useEffect } from 'react';
 import { SignUp, Login, EmailVerification } from './components/auth';
@@ -18,6 +18,7 @@ const AuthApp = ({ onAuthSuccess }) => {
     password: ''
   });
   const [error, setError] = useState('');
+  const [infoMessage, setInfoMessage] = useState(''); // ✅ NEW: For helpful messages
 
   // Check existing session on mount
   useEffect(() => {
@@ -47,6 +48,7 @@ const AuthApp = ({ onAuthSuccess }) => {
     setTempData({ email, nome, cognome });
     setCurrentView('verify-signup');
     setError('');
+    setInfoMessage('');
   };
 
   // Handle login request - requires email verification  
@@ -55,6 +57,25 @@ const AuthApp = ({ onAuthSuccess }) => {
     setTempData({ email, password });
     setCurrentView('verify-login');
     setError('');
+    setInfoMessage('');
+  };
+
+  // ✅ NEW: Handle user not found - redirect to signup
+  const handleUserNotFound = (email, errorMessage) => {
+    console.log('🔄 User not found, redirecting to signup with prefilled email');
+    setTempData({ email, nome: '', cognome: '', password: '' });
+    setCurrentView('signup');
+    setError('');
+    setInfoMessage(`${errorMessage} Email precompilata per la registrazione.`);
+  };
+
+  // ✅ NEW: Handle account pending - redirect to verification
+  const handleAccountPending = (email, errorMessage) => {
+    console.log('📧 Account pending verification, switching to verification');
+    setTempData({ email, nome: '', cognome: '', password: '' });
+    setCurrentView('verify-signup');
+    setError('');
+    setInfoMessage(errorMessage);
   };
 
   // Handle email verification success
@@ -64,39 +85,26 @@ const AuthApp = ({ onAuthSuccess }) => {
       
       if (currentView === 'verify-signup') {
         // User completed signup verification
-        console.log('🎉 Signup process completed');
-        setUser({
-          email: tempData.email,
-          nome: tempData.nome,
-          cognome: tempData.cognome,
-          role: 'analyst', // Default, will be updated by backend
-          username: tempData.email.split('@')[0]
-        });
-        onAuthSuccess({
-          email: tempData.email,
-          nome: tempData.nome,
-          cognome: tempData.cognome,
-          role: 'analyst',
-          username: tempData.email.split('@')[0]
-        });
+        console.log('🎉 Signup process completed, switching to login');
+        setUser(null);
+        setCurrentView('login');
+        setTempData({ email: tempData.email, nome: '', cognome: '', password: '' });
+        setInfoMessage('✅ Account attivato con successo! Ora puoi effettuare l\'accesso.');
         
       } else if (currentView === 'verify-login') {
-        // User completed login verification
+        // User completed login verification - create session
         console.log('🎉 Login process completed');
-        setUser({
-          email: tempData.email,
-          role: 'analyst', // Will be updated by backend
-          username: tempData.email.split('@')[0]
-        });
-        onAuthSuccess({
-          email: tempData.email,
-          role: 'analyst',
-          username: tempData.email.split('@')[0]
-        });
+        const userData = {
+          email: verificationData.email,
+          access_token: verificationData.access_token,
+          user_info: verificationData.user_info,
+          role: verificationData.user_info?.role || 'analyst'
+        };
+        setUser(userData);
+        onAuthSuccess(userData);
       }
       
-      // Clear temp data
-      setTempData({ email: '', nome: '', cognome: '', password: '' });
+      setError('');
       
     } catch (error) {
       console.error('❌ Verification completion error:', error);
@@ -108,15 +116,17 @@ const AuthApp = ({ onAuthSuccess }) => {
   const handleSwitchToLogin = () => {
     console.log('🔄 Switching to login view');
     setCurrentView('login');
-    setTempData({ email: '', nome: '', cognome: '', password: '' });
+    setTempData({ email: tempData.email || '', nome: '', cognome: '', password: '' });
     setError('');
+    setInfoMessage('');
   };
 
   const handleSwitchToSignUp = () => {
     console.log('🔄 Switching to signup view');
     setCurrentView('signup');
-    setTempData({ email: '', nome: '', cognome: '', password: '' });
+    setTempData({ email: tempData.email || '', nome: '', cognome: '', password: '' });
     setError('');
+    setInfoMessage('');
   };
 
   const handleBackToAuth = () => {
@@ -127,12 +137,14 @@ const AuthApp = ({ onAuthSuccess }) => {
       setCurrentView('login');
     }
     setError('');
+    setInfoMessage('');
   };
 
   // Global error handler
   const handleError = (errorMessage) => {
     console.error('❌ Auth error:', errorMessage);
     setError(errorMessage);
+    setInfoMessage('');
   };
 
   // Loading state
@@ -165,36 +177,72 @@ const AuthApp = ({ onAuthSuccess }) => {
     );
   }
 
-  // Global error display
-  const ErrorDisplay = () => error && (
-    <div className="alert alert-error" style={{ marginBottom: '20px' }}>
-      <span className="alert-icon">⚠️</span>
-      {error}
-      <button 
-        onClick={() => setError('')}
-        style={{
-          marginLeft: 'auto',
-          background: 'none',
-          border: 'none',
-          color: '#dc2626',
-          cursor: 'pointer',
-          fontSize: '16px'
-        }}
-      >
-        ×
-      </button>
-    </div>
-  );
+  // ✅ IMPROVED: Global message display
+  const MessageDisplay = () => {
+    if (error) {
+      return (
+        <div className="alert alert-error" style={{ marginBottom: '20px' }}>
+          <span className="alert-icon">⚠️</span>
+          {error}
+          <button 
+            onClick={() => setError('')}
+            style={{
+              marginLeft: 'auto',
+              background: 'none',
+              border: 'none',
+              color: '#dc2626',
+              cursor: 'pointer',
+              fontSize: '16px'
+            }}
+          >
+            ×
+          </button>
+        </div>
+      );
+    }
+    
+    if (infoMessage) {
+      return (
+        <div className="alert alert-info" style={{ 
+          marginBottom: '20px',
+          backgroundColor: '#e0f2fe',
+          borderColor: '#0288d1',
+          color: '#01579b'
+        }}>
+          <span className="alert-icon">ℹ️</span>
+          {infoMessage}
+          <button 
+            onClick={() => setInfoMessage('')}
+            style={{
+              marginLeft: 'auto',
+              background: 'none',
+              border: 'none',
+              color: '#01579b',
+              cursor: 'pointer',
+              fontSize: '16px'
+            }}
+          >
+            ×
+          </button>
+        </div>
+      );
+    }
+    
+    return null;
+  };
 
   // Render appropriate view
   return (
     <div className="auth-container">
       {currentView === 'login' && (
         <div>
-          <ErrorDisplay />
+          <MessageDisplay />
           <Login
+            initialEmail={tempData.email} // ✅ NEW: Prefill email
             onSwitchToSignUp={handleSwitchToSignUp}
             onLoginRequireVerification={handleLoginRequireVerification}
+            onUserNotFound={handleUserNotFound} // ✅ NEW: Handle user not found
+            onAccountPending={handleAccountPending} // ✅ NEW: Handle pending account
             onError={handleError}
           />
         </div>
@@ -202,8 +250,9 @@ const AuthApp = ({ onAuthSuccess }) => {
 
       {currentView === 'signup' && (
         <div>
-          <ErrorDisplay />
+          <MessageDisplay />
           <SignUp
+            initialEmail={tempData.email} // ✅ NEW: Prefill email
             onSwitchToLogin={handleSwitchToLogin}
             onSignUpSuccess={handleSignUpSuccess}
             onError={handleError}
@@ -213,7 +262,7 @@ const AuthApp = ({ onAuthSuccess }) => {
 
       {currentView === 'verify-signup' && (
         <div>
-          <ErrorDisplay />
+          <MessageDisplay />
           <EmailVerification
             email={tempData.email}
             nome={tempData.nome}
@@ -228,7 +277,7 @@ const AuthApp = ({ onAuthSuccess }) => {
 
       {currentView === 'verify-login' && (
         <div>
-          <ErrorDisplay />
+          <MessageDisplay />
           <EmailVerification
             email={tempData.email}
             purpose="login"

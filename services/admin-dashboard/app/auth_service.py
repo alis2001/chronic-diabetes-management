@@ -1,7 +1,7 @@
 # services/admin-dashboard/app/auth_service.py
 """
-Admin Authentication Service - COMPLETE VERSION
-Complete authentication logic for Gesan Healthcare admin system
+Admin Authentication Service - COMPLETE VERSION WITH USER REDIRECTION
+Complete authentication logic for Gesan Healthcare admin system with improved UX
 """
 
 import bcrypt
@@ -221,27 +221,42 @@ class AuthService:
             }
     
     async def login_request(self, email: str, password: str) -> Dict[str, Any]:
-        """Request login - sends verification code to email"""
+        """Request login - sends verification code to email - IMPROVED WITH USER REDIRECTION"""
         try:
             db = await self._get_database()
             
             # Find user
             user = await db.admin_users.find_one({"email": email})
             
+            # ✅ IMPROVED: Better user not found handling
             if not user:
                 return {
                     "success": False,
-                    "error": "Credenziali non valide"
+                    "error_type": "user_not_found",
+                    "error": "Account non trovato. Registrati prima di effettuare l'accesso.",
+                    "suggestion": "register_first",
+                    "redirect_to": "signup"
                 }
             
-            # Check if account is active
+            # ✅ IMPROVED: Better inactive account handling
             if user["status"] != UserStatus.ACTIVE.value:
-                return {
-                    "success": False,
-                    "error": "Account non attivo. Contatta l'amministratore."
-                }
+                if user["status"] == UserStatus.PENDING.value:
+                    return {
+                        "success": False,
+                        "error_type": "account_pending",
+                        "error": "Account non ancora verificato. Controlla la tua email per completare la verifica.",
+                        "suggestion": "verify_email_first",
+                        "redirect_to": "verify_signup"
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "error_type": "account_inactive", 
+                        "error": "Account non attivo. Contatta l'amministratore.",
+                        "suggestion": "contact_admin"
+                    }
             
-            # Check password
+            # ✅ IMPROVED: Better password error handling
             if not self._verify_password(password, user["password_hash"]):
                 # Increment login attempts
                 await db.admin_users.update_one(
@@ -251,7 +266,9 @@ class AuthService:
                 
                 return {
                     "success": False,
-                    "error": "Credenziali non valide"
+                    "error_type": "invalid_password",
+                    "error": "Password non corretta. Riprova.",
+                    "suggestion": "check_password"
                 }
             
             # Generate and send login verification code
@@ -295,7 +312,7 @@ class AuthService:
             logger.error(f"Login request error for {email}: {str(e)}")
             return {
                 "success": False,
-                "error": "Errore interno durante l'accesso"
+                "error": "Errore interno durante la richiesta di accesso"
             }
     
     async def complete_login(self, request: LoginRequest) -> Dict[str, Any]:
