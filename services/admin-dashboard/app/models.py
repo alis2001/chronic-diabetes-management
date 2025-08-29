@@ -1,7 +1,7 @@
 # services/admin-dashboard/app/models.py
 """
 Admin Dashboard Authentication Models
-Professional user management for healthcare administrators
+Professional user management for healthcare administrators - Pydantic v2 Compatible
 """
 
 from pydantic import BaseModel, Field, validator, EmailStr
@@ -64,7 +64,7 @@ class SignUpRequest(BaseModel):
 class EmailVerificationRequest(BaseModel):
     """Email verification request"""
     email: EmailStr
-    verification_code: str = Field(..., min_length=6, max_length=6, regex=r'^\d{6}$')
+    verification_code: str = Field(..., min_length=6, max_length=6, pattern=r'^\d{6}$')  # Changed regex to pattern
     
     @validator('email')
     def validate_company_email(cls, v):
@@ -75,8 +75,7 @@ class EmailVerificationRequest(BaseModel):
 class LoginRequest(BaseModel):
     """Professional admin login request"""
     email: EmailStr
-    password: str
-    verification_code: str = Field(..., min_length=6, max_length=6, regex=r'^\d{6}$')
+    verification_code: str = Field(..., min_length=6, max_length=6, pattern=r'^\d{6}$')  # Changed regex to pattern
     
     @validator('email')
     def validate_company_email(cls, v):
@@ -94,59 +93,35 @@ class PasswordResetRequest(BaseModel):
             raise ValueError('Email deve essere del dominio aziendale @gesan.it')
         return v.lower()
 
-class ResendCodeRequest(BaseModel):
-    """Resend verification code request"""
-    email: EmailStr
-    
-    @validator('email') 
-    def validate_company_email(cls, v):
-        if not v.lower().endswith('@gesan.it'):
-            raise ValueError('Email deve essere del dominio aziendale @gesan.it')
-        return v.lower()
-
 # ================================
-# DATABASE MODELS
+# DATA MODELS
 # ================================
 
 class AdminUser(BaseModel):
-    """Admin user database model"""
-    user_id: Optional[str] = None
+    """Admin user data model"""
+    user_id: str
     nome: str
     cognome: str
     username: str
     email: str
     password_hash: str
     role: UserRole
-    status: UserStatus
-    
-    # Verification
+    status: UserStatus = UserStatus.PENDING
     email_verified: bool = False
-    verification_code: Optional[str] = None
-    verification_expires: Optional[datetime] = None
     verification_attempts: int = 0
-    
-    # Session management
-    last_login: Optional[datetime] = None
-    last_activity: Optional[datetime] = None
     login_attempts: int = 0
-    locked_until: Optional[datetime] = None
-    
-    # Audit trail
+    last_login: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
-    created_by: Optional[str] = None
-    updated_by: Optional[str] = None
     
     class Config:
         use_enum_values = True
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
 
 class EmailVerificationCode(BaseModel):
-    """Email verification code tracking"""
+    """Email verification code model"""
     email: str
     code: str
+    purpose: str  # 'signup' or 'login'
     expires_at: datetime
     attempts: int = 0
     created_at: datetime

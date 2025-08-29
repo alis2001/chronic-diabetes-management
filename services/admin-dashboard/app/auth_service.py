@@ -1,6 +1,6 @@
 # services/admin-dashboard/app/auth_service.py
 """
-Admin Authentication Service
+Admin Authentication Service - COMPLETE VERSION
 Complete authentication logic for Gesan Healthcare admin system
 """
 
@@ -49,29 +49,26 @@ class AuthService:
         return secrets.token_urlsafe(32)
     
     async def signup(self, request: SignUpRequest) -> Dict[str, Any]:
-        """Register new admin user with email verification"""
+        """Register new admin user"""
         try:
             db = await self._get_database()
             
             # Check if user already exists
-            existing_user = await db.admin_users.find_one({
-                "$or": [
-                    {"email": request.email},
-                    {"username": request.username}
-                ]
-            })
+            existing_user = await db.admin_users.find_one({"email": request.email})
             
             if existing_user:
-                if existing_user["email"] == request.email:
-                    return {
-                        "success": False,
-                        "error": "Email già registrata nel sistema"
-                    }
-                else:
-                    return {
-                        "success": False,
-                        "error": "Username già in uso"
-                    }
+                return {
+                    "success": False,
+                    "error": "Un utente con questa email esiste già"
+                }
+            
+            # Check username availability
+            existing_username = await db.admin_users.find_one({"username": request.username})
+            if existing_username:
+                return {
+                    "success": False,
+                    "error": "Username già in uso"
+                }
             
             # Generate verification code
             verification_code = email_service.generate_verification_code()
@@ -87,7 +84,7 @@ class AuthService:
                 "purpose": "signup"
             })
             
-            # Create user account (pending verification)
+            # Create pending user account (pending verification)
             now = datetime.now()
             user_data = AdminUser(
                 user_id=str(uuid.uuid4()),
@@ -299,6 +296,165 @@ class AuthService:
             return {
                 "success": False,
                 "error": "Errore interno durante l'accesso"
+            }
+    
+    async def complete_login(self, request: LoginRequest) -> Dict[str, Any]:
+        """Complete login with verification code"""
+        try:
+            db = await self._get_database()
+            
+            # Find verification code
+            verification_record = await db.admin_verification_codes.find_one({
+                "email": request.email,
+                "used": False,
+                "purpose": "login",
+                "expires_at": {"$gt": datetime.now()}
+            })
+            
+            if not verification_record:
+                return {
+                    "success": False,
+                    "error": "Codice di verifica scaduto o non valido"
+                }
+            
+            # Check attempts
+            if verification_record["attempts"] >= self.max_verification_attempts:
+                return {
+                    "success": False,
+                    "error": "Troppi tentativi. Richiedi un nuovo codice."
+                }
+            
+            # Verify code
+            if verification_record["code"] != request.verification_code:
+                # Increment attempts
+                await db.admin_verification_codes.update_one(
+                    {"_id": verification_record["_id"]},
+                    {"$inc": {"attempts": 1}}
+                )
+                
+                remaining_attempts = self.max_verification_attempts - verification_record["attempts"] - 1
+                return {
+                    "success": False,
+                    "error": f"Codice non corretto. Tentativi rimanenti: {remaining_attempts}"
+                }
+            
+            # Mark code as used
+            await db.admin_verification_codes.update_one(
+                {"_id": verification_record["_id"]},
+                {"$set": {"used": True}}
+            )
+            
+            # Get user data
+            user = await db.admin_users.find_one({"email": request.email})
+            if not user:
+                return {
+                    "success": False,
+                    "error": "Utente non trovato"
+                }
+            
+            # Update last login
+            await db.admin_users.update_one(
+                {"email": request.email},
+                {
+                    "$set": {
+                        "last_login": datetime.now(),
+                        "login_attempts": 0  # Reset failed attempts
+                    }
+                }
+            )
+            
+            # Prepare user data for session
+            user_data = {
+                "user_id": user["user_id"],
+                "email": user["email"],
+                "nome": user["nome"],
+                "cognome": user["cognome"],
+                "username": user["username"],
+                "role": user["role"]
+            }
+            
+            logger.info(f"Login completed successfully: {request.email}")
+            
+            return {
+                "success": True,
+                "message": "Accesso completato con successo",
+                "user_id": user["user_id"],
+                "user_data": user_data
+            }
+            
+        except Exception as e:
+            logger.error(f"Login completion error for {request.email}: {str(e)}")
+            return {
+                "success": False,
+                "error": "Errore interno durante l'accesso"
+            }
+    
+    async def resend_verification_code(self, email: str, purpose: str = "signup") -> Dict[str, Any]:
+        """Resend verification code"""
+        try:
+            db = await self._get_database()
+            
+            # Find user
+            user = await db.admin_users.find_one({"email": email})
+            if not user:
+                return {
+                    "success": False,
+                    "error": "Utente non trovato"
+                }
+            
+            # Check if user can receive new code
+            recent_code = await db.admin_verification_codes.find_one({
+                "email": email,
+                "created_at": {"$gt": datetime.now() - timedelta(minutes=2)}
+            })
+            
+            if recent_code:
+                return {
+                    "success": False,
+                    "error": "Attendi almeno 2 minuti prima di richiedere un nuovo codice"
+                }
+            
+            # Generate new verification code
+            verification_code = email_service.generate_verification_code()
+            
+            # Store new verification code
+            await db.admin_verification_codes.insert_one({
+                "email": email,
+                "code": verification_code,
+                "expires_at": datetime.now() + timedelta(minutes=self.verification_expiry_minutes),
+                "attempts": 0,
+                "created_at": datetime.now(),
+                "used": False,
+                "purpose": purpose
+            })
+            
+            # Send email
+            email_sent = await email_service.send_verification_email(
+                email,
+                user["nome"],
+                user["cognome"],
+                verification_code,
+                purpose
+            )
+            
+            if not email_sent:
+                return {
+                    "success": False,
+                    "error": "Errore nell'invio dell'email"
+                }
+            
+            logger.info(f"Verification code resent: {email} - {purpose}")
+            
+            return {
+                "success": True,
+                "message": "Nuovo codice di verifica inviato alla tua email"
+            }
+            
+        except Exception as e:
+            logger.error(f"Resend code error for {email}: {str(e)}")
+            return {
+                "success": False,
+                "error": "Errore nell'invio del codice"
             }
 
 # Global auth service instance

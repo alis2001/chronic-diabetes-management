@@ -1,9 +1,44 @@
+# services/admin-dashboard/requirements.txt
+# Admin Dashboard Backend Dependencies
+
+# FastAPI and server
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
-jinja2==3.1.2
-python-multipart==0.0.6
-motor==3.3.1
-redis==5.0.1
-httpx==0.25.0
+
+# Data validation and serialization
 pydantic==2.4.2
+pydantic[email]==2.4.2       # Email validation support
+email-validator==2.1.0       # Required for EmailStr
+
+# Database drivers
+motor==3.3.1                 # MongoDB async driver
+pymongo==4.6.0               # MongoDB sync driver (for compatibility)
+
+# Redis for sessions
+redis==5.0.1
+
+# Authentication and security
 python-jose[cryptography]==3.3.0
+bcrypt==4.0.1                # Password hashing
+python-multipart==0.0.6      # Form parsing
+
+# HTTP client for service calls
+httpx==0.25.0
+
+# Templates and static files (if using HTML templates)
+jinja2==3.1.2
+aiofiles==23.2.1
+
+# Environment and configuration
+python-dotenv==1.0.0
+
+# Development and testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-mock==3.12.0
+
+# Logging and monitoring
+python-json-logger==2.0.7
+
+# Type hints support
+typing-extensions==4.8.0

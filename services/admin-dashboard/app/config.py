@@ -15,6 +15,7 @@ class AdminSettings:
     SERVICE_VERSION: str = "1.0.0"
     SERVICE_PORT: int = int(os.getenv("SERVICE_PORT", 8084))
     ENV: str = os.getenv("ENV", "development")
+    LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")  # ADD THIS LINE
     
     # Database Configuration (same as other services)
     MONGODB_URL: str = os.getenv(

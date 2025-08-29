@@ -1,132 +1,131 @@
 # services/admin-dashboard/app/database.py
 """
-Admin Dashboard Database Layer
-MongoDB connection and operations for admin users
+Admin Dashboard Database Connection
+MongoDB connection for admin authentication system - FIXED VERSION
 """
 
-from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
-from typing import Optional, Dict, Any, List
 import os
 import logging
-from datetime import datetime
+from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class Database:
-    """Database connection manager for Admin Dashboard"""
-    
-    def __init__(self):
-        self.client: Optional[AsyncIOMotorClient] = None
-        self.database: Optional[AsyncIOMotorDatabase] = None
-        
-    async def connect_to_mongo(self):
-        """Establish connection to MongoDB"""
-        try:
-            # Get MongoDB URL from environment
-            mongodb_url = os.getenv("MONGODB_URL", "mongodb://admin:admin123@mongodb:27017/diabetes_db?authSource=admin")
-            
-            # Create MongoDB client
-            self.client = AsyncIOMotorClient(mongodb_url)
-            
-            # Get database - same as other services
-            database_name = "diabetes_db"
-            self.database = self.client[database_name]
-            
-            # Test connection
-            await self.client.admin.command('ping')
-            logger.info(f"Admin Dashboard connected to MongoDB: {database_name}")
-            
-            # Create indexes for optimal performance
-            await self.create_indexes()
-            
-        except Exception as e:
-            logger.error(f"Failed to connect to MongoDB: {e}")
-            raise
-    
-    async def close_mongo_connection(self):
-        """Close MongoDB connection"""
-        if self.client:
-            self.client.close()
-            logger.info("Admin MongoDB connection closed")
-    
-    async def create_indexes(self):
-        """Create database indexes for admin users"""
-        try:
-            # Admin users collection indexes
-            await self.database.admin_users.create_index(
-                "email", 
-                unique=True, 
-                name="idx_admin_email_unique"
-            )
-            await self.database.admin_users.create_index(
-                "username", 
-                unique=True, 
-                name="idx_admin_username_unique"
-            )
-            await self.database.admin_users.create_index(
-                [("status", 1), ("role", 1)], 
-                name="idx_admin_status_role"
-            )
-            
-            # Verification codes collection indexes
-            await self.database.admin_verification_codes.create_index(
-                "email", 
-                name="idx_verification_email"
-            )
-            await self.database.admin_verification_codes.create_index(
-                "expires_at", 
-                expireAfterSeconds=0,  # TTL index
-                name="idx_verification_ttl"
-            )
-            
-            # Admin sessions collection indexes
-            await self.database.admin_sessions.create_index(
-                "user_id", 
-                name="idx_session_user"
-            )
-            await self.database.admin_sessions.create_index(
-                "expires_at", 
-                expireAfterSeconds=0,  # TTL index
-                name="idx_session_ttl"
-            )
-            
-            logger.info("Admin database indexes created successfully")
-            
-        except Exception as e:
-            logger.error(f"Failed to create admin indexes: {e}")
+# Global database client
+mongodb_client: AsyncIOMotorClient = None
+database: AsyncIOMotorDatabase = None
 
-# Global database instance
-database = Database()
-
-async def get_database() -> AsyncIOMotorDatabase:
-    """Get database instance for dependency injection"""
-    if database.database is None:
-        await database.connect_to_mongo()
-    return database.database
-
-# Database connection lifecycle functions
 async def connect_to_mongo():
-    """Connect to MongoDB on application startup"""
-    await database.connect_to_mongo()
+    """Create database connection"""
+    global mongodb_client, database
+    
+    try:
+        mongodb_url = os.getenv(
+            "MONGODB_URL", 
+            "mongodb://admin:admin123@mongodb:27017/diabetes_db?authSource=admin"
+        )
+        
+        logger.info(f"🔗 Connecting to MongoDB: {mongodb_url.split('@')[1] if '@' in mongodb_url else mongodb_url}")
+        
+        mongodb_client = AsyncIOMotorClient(
+            mongodb_url,
+            serverSelectionTimeoutMS=5000,
+            connectTimeoutMS=5000,
+            maxPoolSize=10
+        )
+        
+        # Get database
+        database = mongodb_client.diabetes_db
+        
+        # Test connection
+        await database.command("ping")
+        
+        # Create indexes for admin collections
+        await create_admin_indexes()
+        
+        logger.info("✅ MongoDB connected successfully")
+        
+    except Exception as e:
+        logger.error(f"❌ MongoDB connection failed: {str(e)}")
+        raise
 
 async def close_mongo_connection():
-    """Close MongoDB connection on application shutdown"""
-    await database.close_mongo_connection()
+    """Close database connection"""
+    global mongodb_client
+    
+    if mongodb_client is not None:  # FIXED: was just 'if mongodb_client'
+        mongodb_client.close()
+        logger.info("🔌 MongoDB connection closed")
 
-# Collection helpers
-async def get_admin_users_collection():
-    """Get admin users collection"""
-    db = await get_database()
-    return db.admin_users
+async def get_database() -> AsyncIOMotorDatabase:
+    """Get database instance"""
+    global database
+    
+    if database is None:  # FIXED: was just 'if not database'
+        await connect_to_mongo()
+    
+    return database
 
-async def get_verification_codes_collection():
-    """Get verification codes collection"""
-    db = await get_database()
-    return db.admin_verification_codes
+async def create_admin_indexes():
+    """Create necessary indexes for admin collections"""
+    try:
+        global database
+        
+        if database is None:  # FIXED: was just 'if not database'
+            return
+        
+        # Admin users collection indexes
+        await database.admin_users.create_index("email", unique=True)
+        await database.admin_users.create_index("username", unique=True)
+        await database.admin_users.create_index("user_id", unique=True)
+        await database.admin_users.create_index("status")
+        await database.admin_users.create_index("role")
+        await database.admin_users.create_index("created_at")
+        
+        # Verification codes collection indexes
+        await database.admin_verification_codes.create_index("email")
+        await database.admin_verification_codes.create_index("expires_at")
+        await database.admin_verification_codes.create_index("used")
+        await database.admin_verification_codes.create_index("purpose")
+        await database.admin_verification_codes.create_index("created_at")
+        
+        # Compound index for efficient verification queries
+        await database.admin_verification_codes.create_index([
+            ("email", 1),
+            ("used", 1),
+            ("expires_at", 1)
+        ])
+        
+        logger.info("✅ Admin database indexes created")
+        
+    except Exception as e:
+        logger.error(f"❌ Index creation failed: {str(e)}")
 
-async def get_admin_sessions_collection():
-    """Get admin sessions collection"""
-    db = await get_database()
-    return db.admin_sessions
+# Database health check
+async def check_database_health() -> dict:
+    """Check database connection health"""
+    try:
+        db = await get_database()
+        
+        # Test basic operations
+        await db.command("ping")
+        
+        # Check collections
+        collections = await db.list_collection_names()
+        
+        # Count admin users
+        admin_users_count = await db.admin_users.count_documents({})
+        
+        return {
+            "status": "healthy",
+            "collections": collections,
+            "admin_users_count": admin_users_count,
+            "connection": "active"
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Database health check failed: {str(e)}")
+        return {
+            "status": "unhealthy",
+            "error": str(e),
+            "connection": "failed"
+        }

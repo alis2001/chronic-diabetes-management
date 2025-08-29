@@ -1,10 +1,11 @@
 // frontend/admin-app/src/components/auth/Login.js
-// Professional Login Component - Gesan Healthcare
+// Professional Login Component - Gesan Healthcare - UPDATED WITH REAL API
 
 import React, { useState } from 'react';
+import { authAPI } from '../../api';
 import '../../auth.css';
 
-const Login = ({ onSwitchToSignUp, onLoginRequireVerification }) => {
+const Login = ({ onSwitchToSignUp, onLoginRequireVerification, onError }) => {
   const [formData, setFormData] = useState({
     email: '',
     password: ''
@@ -22,29 +23,65 @@ const Login = ({ onSwitchToSignUp, onLoginRequireVerification }) => {
     
     // Validate email domain
     if (!formData.email.toLowerCase().endsWith('@gesan.it')) {
-      setError('Email deve essere del dominio aziendale @gesan.it');
+      const errorMsg = 'Email deve essere del dominio aziendale @gesan.it';
+      setError(errorMsg);
+      if (onError) onError(errorMsg);
+      return;
+    }
+
+    if (!formData.password) {
+      const errorMsg = 'Password richiesta';
+      setError(errorMsg);
+      if (onError) onError(errorMsg);
       return;
     }
 
     setLoading(true);
+    setError('');
+    
     try {
-      // API call will be implemented
-      console.log('Login attempt:', formData);
-      // const response = await authAPI.requestLoginCode(formData);
-      // if (response.success) {
-      //   onLoginRequireVerification(formData.email, formData.password);
-      // }
+      console.log('🔐 Login attempt:', formData.email);
       
-      // Temporary simulation - require verification
-      setTimeout(() => {
+      // REAL API CALL - Request login (sends verification code to email)
+      const response = await authAPI.requestLoginCode({
+        email: formData.email,
+        password: formData.password
+      });
+
+      console.log('✅ Login request response:', response);
+      
+      if (response.success) {
+        // Success - verification code sent
+        console.log('📧 Verification code sent to:', formData.email);
         onLoginRequireVerification(formData.email, formData.password);
-        setLoading(false);
-      }, 1500);
+      } else {
+        const errorMsg = response.error || 'Errore durante la richiesta di accesso';
+        console.error('❌ Login request failed:', errorMsg);
+        setError(errorMsg);
+        if (onError) onError(errorMsg);
+      }
       
     } catch (error) {
-      setError(error.message || 'Errore durante l\'accesso');
-      setLoading(false);
+      console.error('❌ Login request error:', error);
+      
+      let errorMsg;
+      if (error.status === 400) {
+        errorMsg = error.message || 'Credenziali non valide';
+      } else if (error.status === 404) {
+        errorMsg = 'Servizio di autenticazione non disponibile';
+      } else if (error.status === 500) {
+        errorMsg = 'Errore interno del server';
+      } else if (error.status === 0) {
+        errorMsg = 'Impossibile contattare il server. Verificare la connessione.';
+      } else {
+        errorMsg = error.message || 'Errore durante l\'accesso';
+      }
+      
+      setError(errorMsg);
+      if (onError) onError(errorMsg);
     }
+    
+    setLoading(false);
   };
 
   return (
@@ -97,7 +134,14 @@ const Login = ({ onSwitchToSignUp, onLoginRequireVerification }) => {
           className={`auth-button ${loading ? 'loading' : ''}`}
           disabled={loading}
         >
-          {loading ? '' : 'Accedi'}
+          {loading ? (
+            <span>
+              <span className="spinner"></span>
+              Invio codice...
+            </span>
+          ) : (
+            'Accedi'
+          )}
         </button>
 
         <div style={{ textAlign: 'center', marginTop: '20px' }}>
@@ -105,11 +149,18 @@ const Login = ({ onSwitchToSignUp, onLoginRequireVerification }) => {
             type="button"
             onClick={onSwitchToSignUp}
             className="link-button"
+            disabled={loading}
           >
             Non hai un account? Registrati
           </button>
         </div>
       </form>
+      
+      <div className="auth-info" style={{ marginTop: '20px', textAlign: 'center' }}>
+        <p style={{ fontSize: '14px', color: '#6b7280' }}>
+          💡 Inserendo email e password riceverai un codice di verifica via email
+        </p>
+      </div>
     </div>
   );
 };

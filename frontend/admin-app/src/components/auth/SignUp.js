@@ -1,10 +1,11 @@
 // frontend/admin-app/src/components/auth/SignUp.js
-// Professional SignUp Component - Gesan Healthcare
+// Professional SignUp Component - Gesan Healthcare - UPDATED WITH REAL API
 
 import React, { useState } from 'react';
+import { authAPI } from '../../api';
 import '../../auth.css';
 
-const SignUp = ({ onSwitchToLogin, onSignUpSuccess }) => {
+const SignUp = ({ onSwitchToLogin, onSignUpSuccess, onError }) => {
   const [formData, setFormData] = useState({
     nome: '',
     cognome: '',
@@ -26,29 +27,76 @@ const SignUp = ({ onSwitchToLogin, onSignUpSuccess }) => {
     
     // Validate email domain
     if (!formData.email.toLowerCase().endsWith('@gesan.it')) {
-      setError('Email deve essere del dominio aziendale @gesan.it');
+      const errorMsg = 'Email deve essere del dominio aziendale @gesan.it';
+      setError(errorMsg);
+      if (onError) onError(errorMsg);
+      return;
+    }
+
+    // Basic validation
+    if (!formData.nome.trim() || !formData.cognome.trim()) {
+      const errorMsg = 'Nome e cognome sono richiesti';
+      setError(errorMsg);
+      if (onError) onError(errorMsg);
+      return;
+    }
+
+    if (!formData.username.trim()) {
+      const errorMsg = 'Username è richiesto';
+      setError(errorMsg);
+      if (onError) onError(errorMsg);
+      return;
+    }
+
+    if (formData.password.length < 8) {
+      const errorMsg = 'Password deve essere almeno 8 caratteri';
+      setError(errorMsg);
+      if (onError) onError(errorMsg);
       return;
     }
 
     setLoading(true);
+    setError('');
+    
     try {
-      // API call will be implemented next
-      console.log('SignUp attempt:', formData);
-      // const response = await authAPI.signUp(formData);
-      // if (response.success) {
-      //   onSignUpSuccess(formData.email, formData.nome, formData.cognome);
-      // }
+      console.log('📝 Signup attempt:', formData.email);
       
-      // Temporary success simulation
-      setTimeout(() => {
+      // REAL API CALL - SignUp user
+      const response = await authAPI.signUp(formData);
+
+      console.log('✅ Signup response:', response);
+      
+      if (response.success) {
+        console.log('🎉 Signup successful for:', formData.email);
         onSignUpSuccess(formData.email, formData.nome, formData.cognome);
-        setLoading(false);
-      }, 1500);
+      } else {
+        const errorMsg = response.error || 'Errore durante la registrazione';
+        console.error('❌ Signup failed:', errorMsg);
+        setError(errorMsg);
+        if (onError) onError(errorMsg);
+      }
       
     } catch (error) {
-      setError(error.message || 'Errore durante la registrazione');
-      setLoading(false);
+      console.error('❌ Signup error:', error);
+      
+      let errorMsg;
+      if (error.status === 400) {
+        errorMsg = error.message || 'Dati non validi';
+      } else if (error.status === 409) {
+        errorMsg = 'Un utente con questa email o username esiste già';
+      } else if (error.status === 500) {
+        errorMsg = 'Errore interno del server';
+      } else if (error.status === 0) {
+        errorMsg = 'Impossibile contattare il server. Verificare la connessione.';
+      } else {
+        errorMsg = error.message || 'Errore durante la registrazione';
+      }
+      
+      setError(errorMsg);
+      if (onError) onError(errorMsg);
     }
+    
+    setLoading(false);
   };
 
   return (
@@ -81,6 +129,7 @@ const SignUp = ({ onSwitchToLogin, onSignUpSuccess }) => {
               disabled={loading}
             />
           </div>
+
           <div className="form-group">
             <label className="form-label required">Cognome</label>
             <input
@@ -100,12 +149,15 @@ const SignUp = ({ onSwitchToLogin, onSignUpSuccess }) => {
           <input
             type="text"
             value={formData.username}
-            onChange={(e) => handleInputChange('username', e.target.value.toLowerCase())}
+            onChange={(e) => handleInputChange('username', e.target.value)}
             className="form-input"
             placeholder="mario.rossi"
             required
             disabled={loading}
           />
+          <small style={{ color: '#6b7280', fontSize: '12px' }}>
+            Solo lettere, numeri e underscore
+          </small>
         </div>
 
         <div className="form-group">
@@ -119,6 +171,9 @@ const SignUp = ({ onSwitchToLogin, onSignUpSuccess }) => {
             required
             disabled={loading}
           />
+          <small style={{ color: '#6b7280', fontSize: '12px' }}>
+            Deve terminare con @gesan.it
+          </small>
         </div>
 
         <div className="form-group">
@@ -132,6 +187,9 @@ const SignUp = ({ onSwitchToLogin, onSignUpSuccess }) => {
             required
             disabled={loading}
           />
+          <small style={{ color: '#6b7280', fontSize: '12px' }}>
+            Minimo 8 caratteri con maiuscole, minuscole e numeri
+          </small>
         </div>
 
         <div className="form-group">
@@ -153,17 +211,31 @@ const SignUp = ({ onSwitchToLogin, onSignUpSuccess }) => {
           className={`auth-button ${loading ? 'loading' : ''}`}
           disabled={loading}
         >
-          {loading ? '' : 'Registrati'}
+          {loading ? (
+            <span>
+              <span className="spinner"></span>
+              Registrazione...
+            </span>
+          ) : (
+            'Registrati'
+          )}
         </button>
 
         <button
           type="button"
           onClick={onSwitchToLogin}
           className="link-button"
+          disabled={loading}
         >
           Hai già un account? Accedi
         </button>
       </form>
+      
+      <div className="auth-info" style={{ marginTop: '20px', textAlign: 'center' }}>
+        <p style={{ fontSize: '14px', color: '#6b7280' }}>
+          💡 Dopo la registrazione riceverai un codice di verifica via email
+        </p>
+      </div>
     </div>
   );
 };
