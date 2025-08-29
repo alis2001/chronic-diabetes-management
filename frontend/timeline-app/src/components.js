@@ -1,5 +1,6 @@
 // frontend/timeline-app/src/components.js
-// Complete Healthcare Components with Fixed Timeline Logic & Apple-Style Modals
+// Complete Healthcare Components with STEP 2 UI Improvements
+// 🔥 STEP 2: Compressed patient info, non-clickable timeline, professional tabs
 
 import React, { useState, useEffect, useRef } from 'react';
 import { 
@@ -329,15 +330,10 @@ export const PatientRegistration = ({ lookupResult, formData, onRegistrationSucc
 };
 
 // ================================
-// INNOVATIVE SCROLLABLE TIMELINE WITH FIXED LOGIC
+// 🔥 STEP 2: NON-CLICKABLE TIMELINE WITH SUCCESSIVO
 // ================================
 
 export const InnovativeTimeline = ({ appointments, patientId, doctorId, onTimelineUpdate }) => {
-  const [selectedAppointment, setSelectedAppointment] = useState(null);
-  const [showNoteModal, setShowNoteModal] = useState(false);
-  const [noteModalType, setNoteModalType] = useState(null);
-  const [noteModalData, setNoteModalData] = useState(null);
-  const [currentNotes, setCurrentNotes] = useState('');
   const pastScrollRef = useRef(null);
 
   // FIXED: Proper date-based appointment organization
@@ -386,72 +382,6 @@ export const InnovativeTimeline = ({ appointments, patientId, doctorId, onTimeli
     }
   };
 
-  const handlePastAppointmentClick = (appointment) => {
-    setSelectedAppointment(appointment);
-  };
-
-  const handleTodayClick = () => {
-    if (hasTodayAppt) {
-      setNoteModalType('today');
-      setNoteModalData(todayAppts[0]);
-      setCurrentNotes(todayAppts[0].notes || '');
-    } else {
-      // Create today's appointment note template
-      setNoteModalType('today');
-      setNoteModalData({
-        date: today.toLocaleDateString('it-IT'),
-        type: 'Visita di Oggi'
-      });
-      setCurrentNotes('');
-    }
-    setShowNoteModal(true);
-  };
-
-  const handleFutureClick = () => {
-    if (hasFutureAppt) {
-      setNoteModalType('future');
-      setNoteModalData(future[0]);
-      setCurrentNotes(future[0].notes || '');
-      setShowNoteModal(true);
-    }
-  };
-
-  const handleSaveNotes = async () => {
-    try {
-      // Mock API call - replace with actual implementation
-      console.log(`Saving ${noteModalType} notes:`, currentNotes);
-      alert(`Note salvate per ${noteModalType === 'today' ? 'oggi' : 'appuntamento futuro'}!`);
-      
-      // Trigger timeline update
-      if (onTimelineUpdate) {
-        onTimelineUpdate();
-      }
-    } catch (error) {
-      alert('Errore nel salvare le note');
-    }
-    
-    setShowNoteModal(false);
-  };
-
-  const handleCancelFutureAppointment = async () => {
-    if (window.confirm('Sei sicuro di voler cancellare questo appuntamento futuro?')) {
-      try {
-        // Mock API call - replace with actual implementation
-        console.log('Cancelling future appointment:', noteModalData.appointment_id);
-        alert('Appuntamento cancellato!');
-        
-        // Trigger timeline update
-        if (onTimelineUpdate) {
-          onTimelineUpdate();
-        }
-        
-        setShowNoteModal(false);
-      } catch (error) {
-        alert('Errore nella cancellazione');
-      }
-    }
-  };
-
   return (
     <div style={styles.timelineContainer}>
       <h3 style={{
@@ -490,9 +420,9 @@ export const InnovativeTimeline = ({ appointments, patientId, doctorId, onTimeli
                 key={appointment.appointment_id || index}
                 style={{
                   ...styles.timelinePoint,
-                  ...styles.pastPoint
+                  ...styles.pastPoint,
+                  cursor: 'default' // 🔥 NON-CLICKABLE
                 }}
-                onClick={() => handlePastAppointmentClick(appointment)}
                 title={`${appointment.type} - ${appointment.date}`}
               >
                 {index + 1}
@@ -524,10 +454,10 @@ export const InnovativeTimeline = ({ appointments, patientId, doctorId, onTimeli
           <div
             style={{
               ...styles.timelinePoint,
-              ...styles.todayPoint
+              ...styles.todayPoint,
+              cursor: 'default' // 🔥 NON-CLICKABLE
             }}
-            onClick={handleTodayClick}
-            title="Visita di oggi - Clicca per aggiungere note"
+            title="Visita di oggi"
           >
             OGGI
             <div style={{
@@ -549,12 +479,13 @@ export const InnovativeTimeline = ({ appointments, patientId, doctorId, onTimeli
             <div
               style={{
                 ...styles.timelinePoint,
-                ...styles.futurePoint
+                ...styles.futurePoint,
+                cursor: 'default' // 🔥 NON-CLICKABLE
               }}
-              onClick={handleFutureClick}
-              title={`${future[0].type} - ${future[0].date} - Clicca per gestire`}
+              title={`${future[0].type} - ${future[0].date}`}
             >
-              NEXT
+              {/* 🔥 CHANGED FROM "NEXT" TO "Successivo" */}
+              Successivo
               <div style={{
                 ...styles.pointLabel,
                 backgroundColor: 'rgba(107, 114, 128, 0.1)',
@@ -570,9 +501,9 @@ export const InnovativeTimeline = ({ appointments, patientId, doctorId, onTimeli
               backgroundColor: '#e5e7eb',
               cursor: 'default',
               color: '#9ca3af',
-              ':hover': {}
+              fontSize: '10px'
             }}>
-              ---
+              Successivo
               <div style={{
                 ...styles.pointLabel,
                 backgroundColor: 'rgba(156, 163, 175, 0.1)',
@@ -620,112 +551,7 @@ export const InnovativeTimeline = ({ appointments, patientId, doctorId, onTimeli
             borderRadius: '50%', 
             backgroundColor: '#6b7280'
           }} />
-          <span style={{color: '#4b5563'}}>Prossimo</span>
-        </div>
-      </div>
-
-      {/* Past Appointment Detail Modal */}
-      {selectedAppointment && (
-        <PastAppointmentModal 
-          appointment={selectedAppointment}
-          onClose={() => setSelectedAppointment(null)}
-        />
-      )}
-
-      {/* Note Writing Modal */}
-      {showNoteModal && (
-        <AppleNoteModal
-          type={noteModalType}
-          appointmentData={noteModalData}
-          notes={currentNotes}
-          setNotes={setCurrentNotes}
-          onSave={handleSaveNotes}
-          onClose={() => setShowNoteModal(false)}
-          onCancelAppointment={noteModalType === 'future' ? handleCancelFutureAppointment : null}
-        />
-      )}
-    </div>
-  );
-};
-
-// ================================
-// APPLE-INSPIRED NOTE MODAL
-// ================================
-
-const AppleNoteModal = ({ type, appointmentData, notes, setNotes, onSave, onClose, onCancelAppointment }) => {
-  const isToday = type === 'today';
-  const isFuture = type === 'future';
-  
-  const title = isToday 
-    ? 'Note per la Visita di Oggi' 
-    : `Note per ${appointmentData?.type || 'Prossimo Appuntamento'}`;
-    
-  const subtitle = isToday
-    ? `Data: ${new Date().toLocaleDateString('it-IT')}`
-    : `Data: ${appointmentData?.date} ${appointmentData?.time ? `alle ${appointmentData.time}` : ''}`;
-
-  const placeholder = isToday 
-    ? "Inserisci note sulla visita odierna: osservazioni cliniche, diagnosi, prescrizioni, raccomandazioni per il paziente..."
-    : "Inserisci note preparatorie per il prossimo appuntamento: controlli da effettuare, focus della visita, promemoria...";
-
-  return (
-    <div style={styles.noteModal} onClick={onClose}>
-      <div style={styles.noteModalContent} onClick={e => e.stopPropagation()}>
-        <div style={styles.noteModalHeader}>
-          <button style={styles.appleCloseButton} onClick={onClose}>×</button>
-          <h3 style={styles.noteModalTitle}>{title}</h3>
-          <p style={styles.noteModalSubtitle}>{subtitle}</p>
-        </div>
-
-        <div style={styles.noteModalBody}>
-          {isFuture && (
-            <div style={styles.futureAppointmentWarning}>
-              📅 Puoi modificare o cancellare questo appuntamento futuro
-            </div>
-          )}
-          
-          <label style={{...styles.label, marginBottom: '15px'}}>
-            {isToday ? 'Note della visita:' : 'Note preparatorie:'}
-          </label>
-          
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder={placeholder}
-            style={styles.appleNoteTextarea}
-            maxLength={1000}
-            autoFocus
-          />
-          
-          <div style={styles.characterCounter}>
-            {notes.length}/1000 caratteri
-          </div>
-        </div>
-
-        <div style={styles.noteModalFooter}>
-          <button 
-            style={styles.appleCancelButton}
-            onClick={onClose}
-          >
-            Annulla
-          </button>
-          
-          {isFuture && onCancelAppointment && (
-            <button 
-              style={styles.appleCancelAppointmentButton}
-              onClick={onCancelAppointment}
-            >
-              Cancella Appuntamento
-            </button>
-          )}
-          
-          <button 
-            style={styles.appleSaveButton}
-            onClick={onSave}
-            disabled={!notes.trim()}
-          >
-            Salva Note
-          </button>
+          <span style={{color: '#4b5563'}}>Successivo</span>
         </div>
       </div>
     </div>
@@ -733,82 +559,302 @@ const AppleNoteModal = ({ type, appointmentData, notes, setNotes, onSave, onClos
 };
 
 // ================================
-// PAST APPOINTMENT MODAL (Read-Only)
+// 🔥 STEP 2: PROFESSIONAL TABBED SECTION
 // ================================
 
-const PastAppointmentModal = ({ appointment, onClose }) => {
-  return (
-    <div style={styles.noteModal} onClick={onClose}>
-      <div style={styles.noteModalContent} onClick={e => e.stopPropagation()}>
-        <div style={styles.noteModalHeader}>
-          <button style={styles.appleCloseButton} onClick={onClose}>×</button>
-          <h3 style={{
-            ...styles.noteModalTitle,
-            background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
-            backgroundClip: 'text',
-            WebkitBackgroundClip: 'text',
-            color: 'transparent'
-          }}>
-            {appointment.type}
-          </h3>
-          <p style={styles.noteModalSubtitle}>
-            Completata il {appointment.date} {appointment.time ? `alle ${appointment.time}` : ''}
-          </p>
-        </div>
+const ProfessionalTabs = () => {
+  const [activeTab, setActiveTab] = useState('refertazione');
+  const [referto, setReferto] = useState('');
+  const [diario, setDiario] = useState('');
+  const [esami, setEsami] = useState('');
 
-        <div style={styles.noteModalBody}>
-          <div style={{marginBottom: '25px'}}>
-            <div style={styles.patientInfoGrid}>
-              <div style={styles.patientInfoItem}>
-                <span style={styles.patientInfoLabel}>Stato:</span>
-                <span style={{
-                  ...styles.patientInfoValue,
-                  color: '#10b981'
-                }}>
-                  Completata
-                </span>
-              </div>
-              
-              <div style={styles.patientInfoItem}>
-                <span style={styles.patientInfoLabel}>Priorità:</span>
-                <span style={styles.patientInfoValue}>
-                  {appointment.priority || 'Normale'}
-                </span>
-              </div>
-              
-              {appointment.location && (
-                <div style={styles.patientInfoItem}>
-                  <span style={styles.patientInfoLabel}>Luogo:</span>
-                  <span style={styles.patientInfoValue}>{appointment.location}</span>
-                </div>
-              )}
-            </div>
-          </div>
+  const tabs = [
+    { id: 'refertazione', label: 'Refertazione', icon: '📄', color: '#3b82f6' },
+    { id: 'diario', label: 'Diario Clinico', icon: '📝', color: '#10b981' },
+    { id: 'esami', label: 'Esami Laboratorio', icon: '🧪', color: '#f59e0b' }
+  ];
 
-          <label style={{...styles.label, marginBottom: '15px'}}>
-            Note della Visita:
-          </label>
+  const tabContentStyles = {
+    refertazione: {
+      background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, rgba(147, 197, 253, 0.1) 100%)',
+      borderColor: 'rgba(59, 130, 246, 0.2)'
+    },
+    diario: {
+      background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.05) 0%, rgba(110, 231, 183, 0.1) 100%)',
+      borderColor: 'rgba(16, 185, 129, 0.2)'
+    },
+    esami: {
+      background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.05) 0%, rgba(251, 191, 36, 0.1) 100%)',
+      borderColor: 'rgba(245, 158, 11, 0.2)'
+    }
+  };
+
+  const renderTabContent = () => {
+    switch (activeTab) {
+      case 'refertazione':
+        return (
           <div style={{
-            padding: '24px',
-            backgroundColor: 'rgba(139, 92, 246, 0.05)',
-            borderRadius: '16px',
-            border: '2px solid rgba(139, 92, 246, 0.1)',
-            minHeight: '150px',
-            fontSize: '16px',
-            lineHeight: '1.6',
-            color: '#1d1d1f',
-            fontFamily: 'inherit'
+            background: tabContentStyles.refertazione.background,
+            border: `2px solid ${tabContentStyles.refertazione.borderColor}`,
+            borderRadius: '20px',
+            padding: '30px',
+            minHeight: '400px'
           }}>
-            {appointment.notes || 'Nessuna nota disponibile per questa visita.'}
+            <h4 style={{
+              margin: '0 0 20px 0',
+              fontSize: '20px',
+              fontWeight: '700',
+              color: '#1e40af',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px'
+            }}>
+              📄 Referto Medico
+            </h4>
+            <textarea
+              value={referto}
+              onChange={(e) => setReferto(e.target.value)}
+              style={{
+                width: '100%',
+                minHeight: '320px',
+                padding: '25px',
+                border: '2px solid rgba(59, 130, 246, 0.15)',
+                borderRadius: '16px',
+                fontSize: '16px',
+                lineHeight: '1.6',
+                fontFamily: 'inherit',
+                backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                resize: 'vertical',
+                outline: 'none',
+                transition: 'all 0.3s ease',
+                ':focus': {
+                  borderColor: '#3b82f6',
+                  boxShadow: '0 0 0 4px rgba(59, 130, 246, 0.1)'
+                }
+              }}
+            />
+            <div style={{
+              marginTop: '15px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <span style={{fontSize: '14px', color: '#6b7280'}}>
+                {referto.length}/2000 caratteri
+              </span>
+              <button style={{
+                padding: '12px 24px',
+                backgroundColor: '#3b82f6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '10px',
+                fontSize: '14px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                ':hover': {
+                  backgroundColor: '#1d4ed8'
+                }
+              }}>
+                Salva Referto
+              </button>
+            </div>
           </div>
-        </div>
+        );
+
+      case 'diario':
+        return (
+          <div style={{
+            background: tabContentStyles.diario.background,
+            border: `2px solid ${tabContentStyles.diario.borderColor}`,
+            borderRadius: '20px',
+            padding: '30px',
+            minHeight: '400px'
+          }}>
+            <h4 style={{
+              margin: '0 0 20px 0',
+              fontSize: '20px',
+              fontWeight: '700',
+              color: '#059669',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px'
+            }}>
+              📝 Diario Clinico
+            </h4>
+            <textarea
+              value={diario}
+              onChange={(e) => setDiario(e.target.value)}
+              style={{
+                width: '100%',
+                minHeight: '320px',
+                padding: '25px',
+                border: '2px solid rgba(16, 185, 129, 0.15)',
+                borderRadius: '16px',
+                fontSize: '16px',
+                lineHeight: '1.6',
+                fontFamily: 'inherit',
+                backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                resize: 'vertical',
+                outline: 'none',
+                transition: 'all 0.3s ease'
+              }}
+            />
+            <div style={{
+              marginTop: '15px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <span style={{fontSize: '14px', color: '#6b7280'}}>
+                {diario.length}/2000 caratteri
+              </span>
+              <button style={{
+                padding: '12px 24px',
+                backgroundColor: '#10b981',
+                color: 'white',
+                border: 'none',
+                borderRadius: '10px',
+                fontSize: '14px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}>
+                Salva Diario
+              </button>
+            </div>
+          </div>
+        );
+
+      case 'esami':
+        return (
+          <div style={{
+            background: tabContentStyles.esami.background,
+            border: `2px solid ${tabContentStyles.esami.borderColor}`,
+            borderRadius: '20px',
+            padding: '30px',
+            minHeight: '400px'
+          }}>
+            <h4 style={{
+              margin: '0 0 20px 0',
+              fontSize: '20px',
+              fontWeight: '700',
+              color: '#d97706',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px'
+            }}>
+              🧪 Esami Laboratorio
+            </h4>
+            <textarea
+              value={esami}
+              onChange={(e) => setEsami(e.target.value)}
+              style={{
+                width: '100%',
+                minHeight: '320px',
+                padding: '25px',
+                border: '2px solid rgba(245, 158, 11, 0.15)',
+                borderRadius: '16px',
+                fontSize: '16px',
+                lineHeight: '1.6',
+                fontFamily: 'inherit',
+                backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                resize: 'vertical',
+                outline: 'none',
+                transition: 'all 0.3s ease'
+              }}
+            />
+            <div style={{
+              marginTop: '15px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <span style={{fontSize: '14px', color: '#6b7280'}}>
+                {esami.length}/2000 caratteri
+              </span>
+              <button style={{
+                padding: '12px 24px',
+                backgroundColor: '#f59e0b',
+                color: 'white',
+                border: 'none',
+                borderRadius: '10px',
+                fontSize: '14px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}>
+                Salva Esami
+              </button>
+            </div>
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div style={{
+      background: 'rgba(255, 255, 255, 0.95)',
+      borderRadius: '24px',
+      padding: '0',
+      margin: '30px 0',
+      boxShadow: '0 20px 60px rgba(0, 0, 0, 0.1)',
+      backdropFilter: 'blur(20px)',
+      border: '1px solid rgba(255, 255, 255, 0.3)',
+      overflow: 'hidden'
+    }}>
+      {/* Tab Headers */}
+      <div style={{
+        display: 'flex',
+        borderBottom: '2px solid rgba(0, 0, 0, 0.05)',
+        background: 'rgba(248, 250, 252, 0.8)'
+      }}>
+        {tabs.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            style={{
+              flex: 1,
+              padding: '20px 25px',
+              border: 'none',
+              background: activeTab === tab.id 
+                ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.9) 100%)'
+                : 'transparent',
+              color: activeTab === tab.id ? '#1d1d1f' : '#6b7280',
+              fontSize: '16px',
+              fontWeight: activeTab === tab.id ? '700' : '500',
+              cursor: 'pointer',
+              transition: 'all 0.3s ease',
+              borderBottom: activeTab === tab.id ? `3px solid ${tab.color}` : '3px solid transparent',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '10px',
+              ':hover': {
+                backgroundColor: 'rgba(255, 255, 255, 0.6)',
+                color: '#1d1d1f'
+              }
+            }}
+          >
+            <span style={{fontSize: '18px'}}>{tab.icon}</span>
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab Content */}
+      <div style={{padding: '35px'}}>
+        {renderTabContent()}
       </div>
     </div>
   );
 };
 
 // ================================
-// PATIENT TIMELINE - UPDATED WITH FUTURE APPOINTMENT LOGIC
+// 🔥 STEP 2: UPDATED PATIENT TIMELINE - COMPRESSED INFO + TABS
 // ================================
 
 export const PatientTimeline = ({ patientId, doctorId, onScheduleAppointment }) => {
@@ -865,38 +911,113 @@ export const PatientTimeline = ({ patientId, doctorId, onScheduleAppointment }) 
     ...timeline.successivo
   ];
 
-  // FIXED: Check if future appointment slot is occupied
-  const hasFutureAppointment = timeline.successivo && timeline.successivo.length > 0;
-
   return (
     <div style={styles.card}>
-      <div style={styles.cardHeader}>
-        <h2>Timeline Paziente</h2>
-      </div>
       
-      <div style={styles.patientInfo}>
-        <div style={styles.patientInfoGrid}>
-          <div style={styles.patientInfoItem}>
-            <span style={styles.patientInfoLabel}>Paziente:</span>
-            <span style={styles.patientInfoValue}>
-              {timeline.patient_name || timeline.patient_id}
-            </span>
+      {/* 🔥 COOL COMPRESSED PATIENT BAR */}
+      <div style={{
+        background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(16, 185, 129, 0.1) 50%, rgba(245, 158, 11, 0.1) 100%)',
+        padding: '20px 30px',
+        borderRadius: '16px',
+        marginBottom: '25px',
+        border: '2px solid rgba(59, 130, 246, 0.2)',
+        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
+        backdropFilter: 'blur(10px)'
+      }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '20px'
+        }}>
+          {/* Patient Name - Main Info */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '15px',
+            flex: 1,
+            minWidth: '200px'
+          }}>
+            <div style={{
+              width: '50px',
+              height: '50px',
+              borderRadius: '50%',
+              background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '20px',
+              fontWeight: '700',
+              color: 'white',
+              boxShadow: '0 4px 15px rgba(59, 130, 246, 0.3)'
+            }}>
+              {(timeline.patient_name || timeline.patient_id).charAt(0)}
+            </div>
+            <div>
+              <div style={{
+                fontSize: '18px',
+                fontWeight: '700',
+                color: '#1d1d1f',
+                marginBottom: '2px'
+              }}>
+                {timeline.patient_name || timeline.patient_id}
+              </div>
+              <div style={{
+                fontSize: '13px',
+                color: '#6b7280',
+                fontWeight: '500'
+              }}>
+                CF: {timeline.patient_id}
+              </div>
+            </div>
           </div>
-          
-          <div style={styles.patientInfoItem}>
-            <span style={styles.patientInfoLabel}>Patologia:</span>
-            <span style={styles.patientInfoValue}>
-              {PATOLOGIE[timeline.patologia] || timeline.patologia}
-            </span>
-          </div>
-          
-          <div style={styles.patientInfoItem}>
-            <span style={styles.patientInfoLabel}>Totale Visite:</span>
-            <span style={styles.patientInfoValue}>{timeline.total_appointments}</span>
+
+          {/* Condition & Visits - Secondary Info */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '30px',
+            fontSize: '14px'
+          }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 16px',
+              background: 'rgba(16, 185, 129, 0.1)',
+              borderRadius: '12px',
+              border: '1px solid rgba(16, 185, 129, 0.2)'
+            }}>
+              <span style={{fontSize: '16px'}}>🩺</span>
+              <div>
+                <div style={{fontWeight: '600', color: '#059669'}}>
+                  {PATOLOGIE[timeline.patologia] || timeline.patologia}
+                </div>
+              </div>
+            </div>
+            
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 16px',
+              background: 'rgba(245, 158, 11, 0.1)',
+              borderRadius: '12px',
+              border: '1px solid rgba(245, 158, 11, 0.2)'
+            }}>
+              <span style={{fontSize: '16px'}}>📊</span>
+              <div>
+                <div style={{fontWeight: '600', color: '#d97706'}}>
+                  {timeline.total_appointments} Visite
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
+      {/* Timeline */}
       <InnovativeTimeline 
         appointments={allAppointments}
         patientId={patientId}
@@ -904,38 +1025,16 @@ export const PatientTimeline = ({ patientId, doctorId, onScheduleAppointment }) 
         onTimelineUpdate={loadTimeline}
       />
 
-      <div style={{textAlign: 'center', marginTop: '30px'}}>
-        {/* FIXED: Disable button if future appointment exists */}
-        {hasFutureAppointment ? (
-          <div>
-            <button style={styles.disabledButton} disabled title="È già presente un appuntamento futuro">
-              Appuntamento Già Programmato
-            </button>
-            <p style={{
-              marginTop: '10px',
-              fontSize: '14px',
-              color: '#86868b',
-              textAlign: 'center'
-            }}>
-              Solo un appuntamento futuro alla volta è consentito.<br />
-              Gestisci l'appuntamento esistente prima di crearne uno nuovo.
-            </p>
-          </div>
-        ) : (
-          <button 
-            onClick={() => onScheduleAppointment(timeline.patient_id, doctorId)} 
-            style={styles.primaryButton}
-          >
-            Programma Nuovo Appuntamento
-          </button>
-        )}
-      </div>
+      {/* 🔥 PROFESSIONAL TABBED SECTION */}
+      <ProfessionalTabs />
+
+      {/* 🔥 REMOVED SCHEDULE APPOINTMENT BUTTON */}
     </div>
   );
 };
 
 // ================================
-// SCHEDULE APPOINTMENT - UPDATED FOR FUTURE SLOT
+// SCHEDULE APPOINTMENT - UNCHANGED (keeping for now)
 // ================================
 
 export const ScheduleAppointment = ({ patientId, doctorId, onSuccess, onCancel }) => {

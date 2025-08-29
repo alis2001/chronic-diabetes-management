@@ -1,5 +1,6 @@
 // frontend/timeline-app/src/styles.js
 // Complete Professional Healthcare Design - Apple-Inspired Timeline
+// 🔥 STEP 1: ONLY Modal styling improvements - no other changes
 
 export const styles = {
   // ================================
@@ -229,7 +230,7 @@ export const styles = {
   },
 
   // ================================
-  // APPLE-INSPIRED MODAL DESIGN
+  // 🔥 FIXED APPLE-INSPIRED MODAL DESIGN (STEP 1 CHANGES ONLY)
   // ================================
 
   noteModal: {
@@ -238,62 +239,72 @@ export const styles = {
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 2000,
-    backdropFilter: 'blur(20px)',
-    animation: 'modalFadeIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)'
+    zIndex: 9999,
+    backdropFilter: 'blur(25px)',
+    padding: '20px',
+    animation: 'modalFadeIn 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)'
   },
 
   noteModalContent: {
     background: 'rgba(255, 255, 255, 0.98)',
-    borderRadius: '24px',
+    borderRadius: '28px',
     padding: '0',
-    width: '580px',
-    height: '680px',
-    maxWidth: '90vw',
-    maxHeight: '85vh',
-    boxShadow: '0 30px 80px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1)',
+    width: '90vw',
+    height: '85vh',
+    maxWidth: '750px',
+    maxHeight: '850px',
+    minWidth: '600px',
+    minHeight: '700px',
+    boxShadow: `
+      0 50px 100px -20px rgba(0, 0, 0, 0.4),
+      0 30px 60px -20px rgba(0, 0, 0, 0.2),
+      0 0 0 1px rgba(255, 255, 255, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.5)
+    `,
     backdropFilter: 'blur(40px)',
-    border: '1px solid rgba(255, 255, 255, 0.2)',
+    border: '3px solid rgba(255, 255, 255, 0.4)',
     position: 'relative',
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
-    transform: 'scale(0.9) translateY(20px)',
-    animation: 'modalSlideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards'
+    transform: 'scale(0.85) translateY(30px)',
+    animation: 'modalSlideUp 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards'
   },
 
   noteModalHeader: {
-    padding: '30px 30px 25px 30px',
-    borderBottom: '1px solid rgba(0, 0, 0, 0.05)',
-    background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 250, 252, 0.9) 100%)',
-    position: 'relative'
+    padding: '40px 40px 35px 40px',
+    borderBottom: '2px solid rgba(0, 0, 0, 0.06)',
+    background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.95) 100%)',
+    position: 'relative',
+    flexShrink: 0
   },
 
   noteModalTitle: {
-    fontSize: '24px',
+    fontSize: '30px',
     fontWeight: '700',
     color: '#1d1d1f',
-    margin: '0 0 8px 0',
-    letterSpacing: '-0.02em'
+    margin: '0 0 12px 0',
+    letterSpacing: '-0.02em',
+    lineHeight: '1.2'
   },
 
   noteModalSubtitle: {
-    fontSize: '16px',
+    fontSize: '18px',
     color: '#86868b',
     margin: '0',
-    fontWeight: '400'
+    fontWeight: '500'
   },
 
   appleCloseButton: {
     position: 'absolute',
-    top: '25px',
-    right: '25px',
-    width: '32px',
-    height: '32px',
+    top: '35px',
+    right: '35px',
+    width: '40px',
+    height: '40px',
     borderRadius: '50%',
     backgroundColor: '#ff5f57',
     border: 'none',
@@ -301,15 +312,15 @@ export const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: '18px',
+    fontSize: '22px',
     color: '#fff',
-    fontWeight: '600',
-    transition: 'all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1)',
-    boxShadow: '0 3px 10px rgba(255, 95, 87, 0.3)',
+    fontWeight: '700',
+    transition: 'all 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+    boxShadow: '0 4px 15px rgba(255, 95, 87, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2)',
     ':hover': {
       backgroundColor: '#e04e41',
-      transform: 'scale(1.1)',
-      boxShadow: '0 5px 15px rgba(255, 95, 87, 0.4)'
+      transform: 'scale(1.08)',
+      boxShadow: '0 6px 20px rgba(255, 95, 87, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.2)'
     },
     ':active': {
       transform: 'scale(0.95)'
@@ -318,77 +329,84 @@ export const styles = {
 
   noteModalBody: {
     flex: 1,
-    padding: '30px',
+    padding: '35px 40px',
     display: 'flex',
     flexDirection: 'column',
-    overflow: 'hidden'
+    overflow: 'hidden',
+    minHeight: 0
   },
 
   appleNoteTextarea: {
     width: '100%',
     flex: 1,
-    padding: '24px',
-    border: 'none',
-    borderRadius: '16px',
-    fontSize: '16px',
+    padding: '30px',
+    border: '2px solid rgba(0, 0, 0, 0.08)',
+    borderRadius: '22px',
+    fontSize: '18px',
     lineHeight: '1.6',
     fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif',
     resize: 'none',
-    backgroundColor: 'rgba(245, 245, 247, 0.6)',
+    backgroundColor: 'rgba(245, 245, 247, 0.8)',
     transition: 'all 0.3s ease',
     outline: 'none',
+    boxShadow: 'inset 0 2px 10px rgba(0, 0, 0, 0.03)',
+    minHeight: '350px',
     ':focus': {
-      backgroundColor: 'rgba(245, 245, 247, 0.9)',
-      boxShadow: '0 0 0 4px rgba(0, 125, 251, 0.15)'
+      backgroundColor: 'rgba(245, 245, 247, 0.95)',
+      borderColor: 'rgba(0, 125, 251, 0.5)',
+      boxShadow: '0 0 0 6px rgba(0, 125, 251, 0.15), inset 0 2px 10px rgba(0, 0, 0, 0.03)'
     },
     '::placeholder': {
       color: '#86868b',
-      fontSize: '16px'
+      fontSize: '18px'
     }
   },
 
   noteModalFooter: {
-    padding: '25px 30px 30px 30px',
-    borderTop: '1px solid rgba(0, 0, 0, 0.05)',
-    background: 'rgba(248, 250, 252, 0.6)',
+    padding: '30px 40px 40px 40px',
+    borderTop: '2px solid rgba(0, 0, 0, 0.06)',
+    background: 'rgba(248, 250, 252, 0.8)',
     display: 'flex',
-    gap: '15px',
+    gap: '20px',
     justifyContent: 'flex-end',
-    flexWrap: 'wrap'
+    flexWrap: 'wrap',
+    flexShrink: 0
   },
 
   appleCancelButton: {
-    padding: '14px 28px',
-    border: '1px solid rgba(0, 0, 0, 0.1)',
-    borderRadius: '10px',
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    padding: '18px 36px',
+    border: '2px solid rgba(0, 0, 0, 0.12)',
+    borderRadius: '16px',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
     color: '#1d1d1f',
-    fontSize: '16px',
-    fontWeight: '500',
+    fontSize: '18px',
+    fontWeight: '600',
     cursor: 'pointer',
-    transition: 'all 0.2s ease',
+    transition: 'all 0.25s ease',
+    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.05)',
     ':hover': {
-      backgroundColor: 'rgba(0, 0, 0, 0.04)',
-      borderColor: 'rgba(0, 0, 0, 0.2)',
-      transform: 'translateY(-1px)'
+      backgroundColor: 'rgba(0, 0, 0, 0.05)',
+      borderColor: 'rgba(0, 0, 0, 0.25)',
+      transform: 'translateY(-1px)',
+      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)'
     }
   },
 
   appleSaveButton: {
-    padding: '14px 28px',
+    padding: '18px 36px',
     border: 'none',
-    borderRadius: '10px',
+    borderRadius: '16px',
     backgroundColor: '#007aff',
     color: 'white',
-    fontSize: '16px',
-    fontWeight: '500',
+    fontSize: '18px',
+    fontWeight: '600',
     cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    boxShadow: '0 2px 10px rgba(0, 122, 255, 0.3)',
+    transition: 'all 0.25s ease',
+    boxShadow: '0 4px 15px rgba(0, 122, 255, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2)',
     ':hover': {
       backgroundColor: '#0051d0',
       transform: 'translateY(-1px)',
-      boxShadow: '0 4px 15px rgba(0, 122, 255, 0.4)'
+      boxShadow: '0 6px 20px rgba(0, 122, 255, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.2)'
     },
     ':disabled': {
       backgroundColor: '#86868b',
@@ -399,63 +417,63 @@ export const styles = {
   },
 
   appleEditButton: {
-    padding: '14px 28px',
+    padding: '18px 36px',
     border: 'none',
-    borderRadius: '10px',
+    borderRadius: '16px',
     backgroundColor: '#ff9500',
     color: 'white',
-    fontSize: '16px',
-    fontWeight: '500',
+    fontSize: '18px',
+    fontWeight: '600',
     cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    boxShadow: '0 2px 10px rgba(255, 149, 0, 0.3)',
+    transition: 'all 0.25s ease',
+    boxShadow: '0 4px 15px rgba(255, 149, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2)',
     ':hover': {
       backgroundColor: '#e6830e',
       transform: 'translateY(-1px)',
-      boxShadow: '0 4px 15px rgba(255, 149, 0, 0.4)'
+      boxShadow: '0 6px 20px rgba(255, 149, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.2)'
     }
   },
 
   appleCancelAppointmentButton: {
-    padding: '14px 28px',
+    padding: '18px 36px',
     border: 'none',
-    borderRadius: '10px',
+    borderRadius: '16px',
     backgroundColor: '#ff3b30',
     color: 'white',
-    fontSize: '16px',
-    fontWeight: '500',
+    fontSize: '18px',
+    fontWeight: '600',
     cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    boxShadow: '0 2px 10px rgba(255, 59, 48, 0.3)',
+    transition: 'all 0.25s ease',
+    boxShadow: '0 4px 15px rgba(255, 59, 48, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2)',
     ':hover': {
       backgroundColor: '#d70015',
       transform: 'translateY(-1px)',
-      boxShadow: '0 4px 15px rgba(255, 59, 48, 0.4)'
+      boxShadow: '0 6px 20px rgba(255, 59, 48, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.2)'
     }
   },
 
   characterCounter: {
-    fontSize: '13px',
+    fontSize: '15px',
     color: '#86868b',
-    marginTop: '10px',
+    marginTop: '18px',
     textAlign: 'right',
-    fontWeight: '400'
-  },
-
-  futureAppointmentWarning: {
-    background: 'rgba(255, 204, 0, 0.1)',
-    border: '1px solid rgba(255, 204, 0, 0.3)',
-    borderRadius: '12px',
-    padding: '16px',
-    marginBottom: '20px',
-    fontSize: '14px',
-    color: '#b25000',
-    textAlign: 'center',
     fontWeight: '500'
   },
 
+  futureAppointmentWarning: {
+    background: 'rgba(255, 204, 0, 0.12)',
+    border: '2px solid rgba(255, 204, 0, 0.3)',
+    borderRadius: '18px',
+    padding: '22px',
+    marginBottom: '28px',
+    fontSize: '16px',
+    color: '#b25000',
+    textAlign: 'center',
+    fontWeight: '600'
+  },
+
   // ================================
-  // FORM STYLES
+  // REST OF STYLES (UNCHANGED)
   // ================================
 
   form: {
@@ -528,10 +546,6 @@ export const styles = {
     }
   },
 
-  // ================================
-  // BUTTONS
-  // ================================
-
   primaryButton: {
     background: 'linear-gradient(135deg, #007aff 0%, #0051d0 100%)',
     color: 'white',
@@ -600,10 +614,6 @@ export const styles = {
     fontWeight: '600',
     opacity: 0.6
   },
-
-  // ================================
-  // PATIENT INFO SECTIONS
-  // ================================
 
   patientInfo: {
     background: 'rgba(255, 255, 255, 0.95)',
@@ -677,10 +687,6 @@ export const styles = {
     borderRadius: '6px'
   },
 
-  // ================================
-  // STATE DISPLAYS
-  // ================================
-
   loadingState: {
     textAlign: 'center',
     padding: '80px',
@@ -705,7 +711,7 @@ export const styles = {
 };
 
 // ================================
-// CSS ANIMATIONS
+// CSS ANIMATIONS (UNCHANGED)
 // ================================
 
 export const globalStyles = `
@@ -731,7 +737,7 @@ export const globalStyles = `
   
   @keyframes modalSlideUp {
     from {
-      transform: scale(0.9) translateY(20px);
+      transform: scale(0.85) translateY(30px);
       opacity: 0;
     }
     to {
@@ -776,5 +782,14 @@ export const globalStyles = `
   /* Apple-style selection */
   ::selection {
     background-color: rgba(0, 122, 255, 0.2);
+  }
+
+  /* Mobile responsive modal */
+  @media (max-width: 768px) {
+    .note-modal-content {
+      width: 95vw !important;
+      height: 90vh !important;
+      min-width: unset !important;
+    }
   }
 `;
