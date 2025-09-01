@@ -474,6 +474,49 @@ class AppointmentService:
             ]
         }
 
+# melody integration
+class MelodyIntegrationService:
+    """Service for integrating with Melody voice transcription system"""
+    
+    def __init__(self):
+        self.melody_base_url = "http://localhost:5002"
+    
+    async def check_melody_health(self) -> bool:
+        """Check if Melody service is available"""
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                response = await client.get(f"{self.melody_base_url}/refertazione/heartbeat")
+                return response.status_code == 200
+        except Exception as e:
+            logger.warning(f"Melody health check failed: {e}")
+            return False
+    
+    def create_voice_workflow_url(self, doctor_id: str, patient_cf: str, return_url: str) -> str:
+        """Create URL for Melody voice workflow with Chronic context"""
+        params = {
+            "doctor_id": doctor_id,
+            "patient_cf": patient_cf,
+            "return_url": return_url,
+            "platform": "chronic",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        param_string = "&".join([f"{k}={v}" for k, v in params.items()])
+        return f"{self.melody_base_url}/refertazione/voice_workflow?{param_string}"
+    
+    def convert_doctor_id_to_matricola(self, doctor_id: str) -> Optional[str]:
+        """Convert Chronic doctor ID to Melody matricola format"""
+        mapping = {
+            'DOC001': '12345',  # Dr. Mario Rossi
+            'DOC002': '12346',  # Dr.ssa Laura Bianchi  
+            'DOC003': '12347',  # Dr. Giuseppe Verdi
+            'DOC004': '12348'   # Dr.ssa Anna Ferrari
+        }
+        return mapping.get(doctor_id)
+
+
+
+
 class TimelineService:
     """Servizio per gestione timeline"""
     
@@ -538,3 +581,5 @@ class TimelineService:
             successivo=successivo,
             total_appointments=len(appointments)
         )
+
+

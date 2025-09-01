@@ -597,7 +597,7 @@ export const InnovativeTimeline = ({ appointments, patientId, doctorId, onTimeli
 // 🔥 STEP 2: PROFESSIONAL TABBED SECTION
 // ================================
 
-const ProfessionalTabs = () => {
+const ProfessionalTabs = ({ patientId, doctorId }) => {
   const [activeTab, setActiveTab] = useState('refertazione');
   const [referto, setReferto] = useState('');
   const [diario, setDiario] = useState('');
@@ -624,76 +624,124 @@ const ProfessionalTabs = () => {
     }
   };
 
+  // melody integration
+  const handleVoiceRecording = async () => {
+    try {
+      // Show loading state
+      console.log('🎤 Starting voice recording workflow...');
+      
+      // Use real values from props (patientId contains the CF)
+      if (!doctorId || !patientId) {
+        alert('Errore: Dati sessione mancanti. Ricarica la pagina.');
+        return;
+      }
+
+      console.log(`🎤 Starting voice workflow for Doctor: ${doctorId}, Patient CF: ${patientId}`);
+      const currentUrl = window.location.href;
+      
+      // Call Timeline API to create voice workflow URL
+      const response = await fetch('/api/timeline/melody/create-voice-workflow', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          doctor_id: doctorId,
+          patient_cf: patientId,
+          return_url: currentUrl
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        // Show transition animation
+        console.log('✅ Voice workflow URL created, redirecting to Melody...');
+        
+        // Redirect to Melody service
+        window.location.href = result.workflow_url;
+      } else {
+        throw new Error('Failed to create voice workflow URL');
+      }
+      
+    } catch (error) {
+      console.error('❌ Voice recording error:', error);
+      alert('Servizio vocale non disponibile. Riprova più tardi.');
+    }
+  };
+
   const renderTabContent = () => {
     switch (activeTab) {
       case 'refertazione':
         return (
           <div style={{
-            background: tabContentStyles.refertazione.background,
-            border: `2px solid ${tabContentStyles.refertazione.borderColor}`,
+            background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, rgba(147, 197, 253, 0.1) 100%)',
+            border: '2px solid rgba(59, 130, 246, 0.2)',
             borderRadius: '20px',
             padding: '30px',
             minHeight: '400px'
           }}>
-            <h4 style={{
-              margin: '0 0 20px 0',
-              fontSize: '20px',
-              fontWeight: '700',
-              color: '#1e40af',
+            <div style={{
               display: 'flex',
+              justifyContent: 'space-between',
               alignItems: 'center',
-              gap: '12px'
+              marginBottom: '20px'
             }}>
-              📄 Referto Medico
-            </h4>
+              <h4 style={{
+                margin: '0',
+                fontSize: '20px',
+                fontWeight: '700',
+                color: '#1e40af',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px'
+              }}>
+                📄 Referto Medico
+              </h4>
+              
+              <button
+                onClick={handleVoiceRecording}
+                style={{
+                  background: 'linear-gradient(135deg, #16a34a, #15803d)',
+                  color: 'white',
+                  border: 'none',
+                  padding: '8px 16px',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseOver={(e) => e.target.style.transform = 'scale(1.05)'}
+                onMouseOut={(e) => e.target.style.transform = 'scale(1.0)'}
+              >
+                🎤 Refertazione Vocale
+              </button>
+            </div>
+            
             <textarea
               value={referto}
               onChange={(e) => setReferto(e.target.value)}
+              placeholder="Scrivi qui il referto medico oppure utilizza la refertazione vocale..."
               style={{
                 width: '100%',
-                minHeight: '320px',
-                padding: '25px',
-                border: '2px solid rgba(59, 130, 246, 0.15)',
-                borderRadius: '16px',
+                minHeight: '300px',
+                padding: '15px',
+                border: '2px solid rgba(59, 130, 246, 0.2)',
+                borderRadius: '12px',
                 fontSize: '16px',
-                lineHeight: '1.6',
                 fontFamily: 'inherit',
-                backgroundColor: 'rgba(255, 255, 255, 0.9)',
                 resize: 'vertical',
-                outline: 'none',
-                transition: 'all 0.3s ease',
-                ':focus': {
-                  borderColor: '#3b82f6',
-                  boxShadow: '0 0 0 4px rgba(59, 130, 246, 0.1)'
-                }
+                outline: 'none'
               }}
             />
-            <div style={{
-              marginTop: '15px',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}>
-              <span style={{fontSize: '14px', color: '#6b7280'}}>
-                {referto.length}/2000 caratteri
-              </span>
-              <button style={{
-                padding: '12px 24px',
-                backgroundColor: '#3b82f6',
-                color: 'white',
-                border: 'none',
-                borderRadius: '10px',
-                fontSize: '14px',
-                fontWeight: '600',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                ':hover': {
-                  backgroundColor: '#1d4ed8'
-                }
-              }}>
-                Salva Referto
-              </button>
-            </div>
           </div>
         );
 
@@ -1061,7 +1109,7 @@ export const PatientTimeline = ({ patientId, doctorId, onScheduleAppointment }) 
       />
 
       {/* 🔥 PROFESSIONAL TABBED SECTION */}
-      <ProfessionalTabs />
+      <ProfessionalTabs patientId={patientId} doctorId={doctorId} />
 
       {/* 🔥 REMOVED SCHEDULE APPOINTMENT BUTTON */}
     </div>

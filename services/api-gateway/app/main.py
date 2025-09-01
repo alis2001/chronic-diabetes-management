@@ -34,12 +34,12 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
-# Service URLs
 SERVICES = {
     "timeline": os.getenv("TIMELINE_SERVICE_URL", "http://timeline-service:8001"),
     "analytics": os.getenv("ANALYTICS_SERVICE_URL", "http://analytics-service:8002"), 
     "scheduler": os.getenv("SCHEDULER_SERVICE_URL", "http://scheduler-service:8003"),
-    "admin": os.getenv("ADMIN_SERVICE_URL", "http://admin-dashboard:8084")  # ✅ ADD THIS
+    "admin": os.getenv("ADMIN_SERVICE_URL", "http://admin-dashboard:8084"),  # ← KEEP THIS
+    "melody": os.getenv("MELODY_SERVICE_URL", "http://localhost:5002")      # ← ONLY ADD THIS
 }
 
 class HealthResponse(BaseModel):
@@ -273,6 +273,13 @@ async def internal_error_handler(request: Request, exc: Exception):
     )
 
 # Add admin routes to existing API Gateway
+
+# melody integration route
+@app.api_route("/api/melody/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def melody_proxy(path: str, request: Request):
+    """Route all /api/melody/* requests to Melody service"""
+    logger.info(f"🎤 Melody route: /api/melody/{path}")
+    return await proxy_request("melody", f"/refertazione/{path}", request)
 
 @app.api_route("/api/admin/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
 async def admin_proxy(path: str, request: Request):

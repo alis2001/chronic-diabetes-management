@@ -9,14 +9,15 @@ from fastapi import APIRouter, Depends, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from datetime import datetime
 from .web_routes import session_router
-
+from typing import List, Optional, Dict, Any
 import logging
 
 from .database import get_database
 from .repositories import PatientRepository, AppointmentRepository
 from .services import (
     PatientService, AppointmentService, TimelineService,
-    WirgilioService, SchedulerClientService
+    WirgilioService, SchedulerClientService,
+    MelodyIntegrationService, DoctorService 
 )
 from .models import (
     PatientLookupRequest, PatientLookupResponse,
@@ -27,6 +28,7 @@ from .models import (
 )
 from .exceptions import map_to_http_exception, TimelineServiceException
 from .config import settings
+
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +73,10 @@ async def get_timeline_service(
 ) -> TimelineService:
     """Ottieni istanza servizio timeline"""
     return TimelineService(appointment_repo, patient_repo)
+
+async def get_melody_integration_service() -> MelodyIntegrationService:
+    """Ottieni istanza servizio integrazione Melody"""
+    return MelodyIntegrationService()
 
 # ================================
 # ROUTER PRINCIPALE
@@ -320,6 +326,72 @@ async def get_available_appointment_types_legacy(
         return await appointment_service.get_available_appointment_types(cf_paziente, id_medico)
     except TimelineServiceException as e:
         raise map_to_http_exception(e)
+
+
+# ================================
+# MELODY INTEGRATION ENDPOINTS
+# ================================
+
+@main_router.get("/melody/health")
+async def check_melody_service_health(
+    melody_service: MelodyIntegrationService = Depends(get_melody_integration_service)
+):
+    """Check if Melody service is available"""
+    try:
+        is_healthy = await melody_service.check_melody_health()
+        return {
+            "melody_available": is_healthy,
+            "status": "healthy" if is_healthy else "unreachable",
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Melody health check error: {e}")
+        return {
+            "melody_available": False,
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
+
+@main_router.post("/melody/create-voice-workflow")
+async def create_voice_workflow_url(
+    request: Dict[str, str],
+    melody_service: MelodyIntegrationService = Depends(get_melody_integration_service)
+):
+    """Create voice workflow URL for Melody integration"""
+    try:
+        doctor_id = request.get("doctor_id")
+        patient_cf = request.get("patient_cf") 
+        return_url = request.get("return_url")
+        
+        if not all([doctor_id, patient_cf, return_url]):
+            raise HTTPException(status_code=400, detail="Missing required parameters")
+        
+        # Validate doctor exists
+        if not DoctorService.validate_doctor(doctor_id):
+            raise HTTPException(status_code=400, detail="Invalid doctor ID")
+        
+        # Check if Melody service is available
+        melody_healthy = await melody_service.check_melody_health()
+        if not melody_healthy:
+            raise HTTPException(status_code=503, detail="Melody service unavailable")
+        
+        # Create workflow URL
+        workflow_url = melody_service.create_voice_workflow_url(doctor_id, patient_cf, return_url)
+        
+        return {
+            "success": True,
+            "workflow_url": workflow_url,
+            "melody_status": "available",
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating voice workflow URL: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 
 # ================================
 # RACCOLTA TUTTI I ROUTER
