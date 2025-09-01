@@ -1,7 +1,7 @@
 # services/timeline-service/app/database.py
 """
 Timeline Service Database Layer
-Handles MongoDB connections and database operations for patient timeline management
+FIXED: Now uses the main diabetes_db database like all other services
 """
 
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
@@ -29,8 +29,8 @@ class Database:
             # Create MongoDB client
             self.client = AsyncIOMotorClient(mongodb_url)
             
-            # Get database
-            database_name = "diabetes_timeline_db"  # Separate database for timeline service
+            # FIXED: Use main database like all other services
+            database_name = "diabetes_db"  # Same as admin dashboard and other services
             self.database = self.client[database_name]
             
             # Test connection

@@ -2,6 +2,7 @@
 """
 Timeline Service Configuration
 Centralized configuration and constants management
+FIXED: Uses correct enum values and main database
 """
 
 import os
@@ -18,12 +19,12 @@ class Settings:
     ENV: str = os.getenv("ENV", "development")
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "info")
     
-    # Database Configuration
+    # Database Configuration - FIXED: Use main database
     MONGODB_URL: str = os.getenv(
         "MONGODB_URL", 
         "mongodb://admin:admin123@mongodb:27017/diabetes_db?authSource=admin"
     )
-    DATABASE_NAME: str = "diabetes_timeline_db"
+    DATABASE_NAME: str = "diabetes_db"  # FIXED: Use same database as admin dashboard
     
     # External Services
     SCHEDULER_SERVICE_URL: str = os.getenv("SCHEDULER_SERVICE_URL", "http://scheduler-service:8003")
@@ -48,7 +49,7 @@ HARDCODED_DOCTOR_CREDENTIALS: Dict[str, DoctorCredentials] = {
         struttura="ASL Roma 1"
     ),
     "DOC002": DoctorCredentials(
-        nome_completo="Dr. Laura Bianchi", 
+        nome_completo="Dr.ssa Laura Bianchi", 
         codice_medico="DOC002",
         specializzazione="Diabetologia",
         firma_digitale="HARDCODED_SIGNATURE_002",
@@ -62,7 +63,7 @@ HARDCODED_DOCTOR_CREDENTIALS: Dict[str, DoctorCredentials] = {
         struttura="ASL Roma 1"
     ),
     "DOC004": DoctorCredentials(
-        nome_completo="Dr. Anna Ferrari",
+        nome_completo="Dr.ssa Anna Ferrari",
         codice_medico="DOC004",
         specializzazione="Diabetologia Pediatrica",
         firma_digitale="HARDCODED_SIGNATURE_004",
@@ -70,7 +71,7 @@ HARDCODED_DOCTOR_CREDENTIALS: Dict[str, DoctorCredentials] = {
     )
 }
 
-# Available appointment types by pathology
+# Available appointment types per pathology - FIXED: Using correct enum values
 AVAILABLE_APPOINTMENT_TYPES: Dict[PatologiaEnum, list] = {
     PatologiaEnum.DIABETES_TYPE2: [
         AppointmentType.VISITA_DIABETOLOGICA,
@@ -97,10 +98,20 @@ AVAILABLE_APPOINTMENT_TYPES: Dict[PatologiaEnum, list] = {
         AppointmentType.ECO_ADDOME,
         AppointmentType.LABORATORIO_GLICEMIA
     ],
+    PatologiaEnum.HYPERTENSION_SECONDARY: [
+        AppointmentType.VISITA_DIABETOLOGICA,
+        AppointmentType.ECO_ADDOME,
+        AppointmentType.LABORATORIO_GLICEMIA
+    ],
     PatologiaEnum.CARDIOVASCULAR: [
         AppointmentType.VISITA_DIABETOLOGICA,
         AppointmentType.ECO_ADDOME,
         AppointmentType.TEST_NEUROPATIA
+    ],
+    PatologiaEnum.CHRONIC_KIDNEY: [
+        AppointmentType.VISITA_DIABETOLOGICA,
+        AppointmentType.LABORATORIO_HBA1C,
+        AppointmentType.ECO_ADDOME
     ]
 }
 
@@ -119,9 +130,14 @@ APPOINTMENT_TYPE_DESCRIPTIONS: Dict[AppointmentType, str] = {
 APPOINTMENT_LOCATIONS: Dict[AppointmentType, str] = {
     AppointmentType.VISITA_DIABETOLOGICA: "ASL Roma 1 - Ambulatorio Diabetologia",
     AppointmentType.VISITA_OCULISTICA: "ASL Roma 1 - Ambulatorio Oculistico",
-    AppointmentType.VISITA_NEUROLOGICA: "ASL Roma 1 - Ambulatorio Neurologico", 
+    AppointmentType.VISITA_NEUROLOGICA: "ASL Roma 1 - Ambulatorio Neurologico",
     AppointmentType.LABORATORIO_HBA1C: "ASL Roma 1 - Laboratorio Analisi",
     AppointmentType.LABORATORIO_GLICEMIA: "ASL Roma 1 - Laboratorio Analisi",
     AppointmentType.ECO_ADDOME: "ASL Roma 1 - Diagnostica per Immagini",
     AppointmentType.TEST_NEUROPATIA: "ASL Roma 1 - Ambulatorio Diabetologia"
 }
+
+# System constants
+MAX_APPOINTMENTS_PER_DAY = 8
+DEFAULT_APPOINTMENT_DURATION_MINUTES = 30
+NOTIFICATION_ADVANCE_DAYS = 2

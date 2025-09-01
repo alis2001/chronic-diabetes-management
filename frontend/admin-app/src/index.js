@@ -1,5 +1,5 @@
 // frontend/admin-app/src/index.js
-// COMPLETE FUNCTIONAL ADMIN DASHBOARD
+// COMPLETE FUNCTIONAL ADMIN DASHBOARD - FIXED ROUTER CONTEXT
 // Beautiful tabular interface for healthcare data management
 
 import React, { useState, useEffect } from 'react';
@@ -106,12 +106,16 @@ const tableStyles = {
   nav: {
     backgroundColor: '#ffffff',
     borderBottom: '1px solid #e5e5e5',
-    padding: '0'
+    padding: '0',
+    position: 'sticky',
+    top: '73px',
+    zIndex: 99
   },
 
   navContent: {
     maxWidth: '1400px',
     margin: '0 auto',
+    padding: '0 24px',
     display: 'flex',
     gap: '0'
   },
@@ -121,16 +125,20 @@ const tableStyles = {
     fontSize: '14px',
     fontWeight: '500',
     color: '#666666',
-    textDecoration: 'none',
+    backgroundColor: 'transparent',
+    border: 'none',
     borderBottom: '2px solid transparent',
+    cursor: 'pointer',
     transition: 'all 0.15s ease',
-    cursor: 'pointer'
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px'
   },
 
   navLinkActive: {
     color: '#000000',
     borderBottomColor: '#000000',
-    backgroundColor: '#fafafa'
+    backgroundColor: '#f9f9f9'
   },
 
   // Main content
@@ -140,536 +148,194 @@ const tableStyles = {
     padding: '32px 24px'
   },
 
-  // Page header
-  pageHeader: {
-    marginBottom: '32px'
-  },
-
-  pageTitle: {
-    fontSize: '28px',
-    fontWeight: '600',
-    color: '#000000',
-    margin: '0 0 8px 0',
-    letterSpacing: '-0.02em'
-  },
-
-  pageSubtitle: {
-    fontSize: '16px',
-    color: '#666666',
-    margin: 0,
-    fontWeight: '400'
-  },
-
-  // Stats bar
-  statsBar: {
-    display: 'flex',
-    gap: '24px',
-    marginBottom: '32px',
-    padding: '20px 0'
-  },
-
-  statItem: {
-    textAlign: 'center'
-  },
-
-  statNumber: {
-    fontSize: '32px',
-    fontWeight: '700',
-    color: '#000000',
-    margin: '0 0 4px 0',
-    letterSpacing: '-0.02em'
-  },
-
-  statLabel: {
-    fontSize: '13px',
-    color: '#666666',
-    margin: 0,
-    fontWeight: '500'
-  },
-
-  // Table container
-  tableContainer: {
-    backgroundColor: '#ffffff',
-    border: '1px solid #e5e5e5',
-    borderRadius: '12px',
-    overflow: 'hidden',
-    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.04)'
-  },
-
-  // Table
+  // Table styles
   table: {
     width: '100%',
-    borderCollapse: 'collapse',
+    borderCollapse: 'separate',
+    borderSpacing: 0,
+    backgroundColor: '#ffffff',
+    borderRadius: '12px',
+    overflow: 'hidden',
+    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
     fontSize: '14px'
   },
 
-  // Table header
-  tableHead: {
-    backgroundColor: '#fafafa',
-    borderBottom: '1px solid #e5e5e5'
+  tableHeader: {
+    backgroundColor: '#f8f9fa',
+    borderBottom: '1px solid #e9ecef'
   },
 
-  tableHeaderCell: {
-    padding: '16px 20px',
+  th: {
+    padding: '16px',
     textAlign: 'left',
     fontWeight: '600',
-    color: '#000000',
+    color: '#495057',
     fontSize: '13px',
-    letterSpacing: '0.01em',
+    letterSpacing: '0.025em',
     textTransform: 'uppercase'
   },
 
-  // Table body
+  td: {
+    padding: '16px',
+    borderBottom: '1px solid #f1f3f4',
+    color: '#212529',
+    fontSize: '14px'
+  },
+
   tableRow: {
-    borderBottom: '1px solid #f0f0f0',
-    transition: 'backgroundColor 0.1s ease'
-  },
-
-  tableRowHover: {
-    backgroundColor: '#fafafa'
-  },
-
-  tableCell: {
-    padding: '16px 20px',
-    color: '#000000',
-    verticalAlign: 'middle'
-  },
-
-  // Special cell types
-  patientName: {
-    fontWeight: '600',
-    color: '#000000'
-  },
-
-  codiceFiscale: {
-    fontFamily: 'SF Mono, Monaco, Inconsolata, Roboto Mono, monospace',
-    fontSize: '13px',
-    color: '#666666',
-    backgroundColor: '#f8f9fa',
-    padding: '2px 6px',
-    borderRadius: '4px',
-    display: 'inline-block'
-  },
-
-  doctorName: {
-    fontWeight: '500',
-    color: '#000000'
-  },
-
-  specialization: {
-    fontSize: '13px',
-    color: '#666666'
+    transition: 'background-color 0.15s ease'
   },
 
   // Status badges
   statusBadge: {
-    padding: '4px 8px',
-    borderRadius: '12px',
+    padding: '4px 12px',
+    borderRadius: '20px',
     fontSize: '12px',
     fontWeight: '500',
-    display: 'inline-block',
     textAlign: 'center',
-    minWidth: '70px'
+    minWidth: '80px'
   },
 
   statusActive: {
-    backgroundColor: '#dcfce7',
-    color: '#166534',
-    border: '1px solid #bbf7d0'
+    backgroundColor: '#d4edda',
+    color: '#155724'
   },
 
   statusInactive: {
-    backgroundColor: '#fef2f2',
-    color: '#991b1b',
-    border: '1px solid #fecaca'
+    backgroundColor: '#f8d7da',
+    color: '#721c24'
   },
 
   statusScheduled: {
-    backgroundColor: '#dbeafe',
-    color: '#1e40af',
-    border: '1px solid #bfdbfe'
+    backgroundColor: '#d1ecf1',
+    color: '#0c5460'
   },
 
   statusCompleted: {
-    backgroundColor: '#dcfce7',
-    color: '#166534',
-    border: '1px solid #bbf7d0'
+    backgroundColor: '#d4edda',
+    color: '#155724'
   },
 
-  statusCancelled: {
-    backgroundColor: '#fef2f2',
-    color: '#991b1b',
-    border: '1px solid #fecaca'
-  },
-
-  // Priority badges
-  priorityNormal: {
-    backgroundColor: '#f3f4f6',
-    color: '#374151',
-    border: '1px solid #e5e7eb'
-  },
-
-  priorityUrgent: {
-    backgroundColor: '#fef3c7',
-    color: '#92400e',
-    border: '1px solid #fde68a'
-  },
-
-  priorityEmergency: {
-    backgroundColor: '#fecaca',
-    color: '#991b1b',
-    border: '1px solid #f87171'
-  },
-
-  // Loading state
+  // Loading and empty states
   loadingContainer: {
-    padding: '60px 20px',
-    textAlign: 'center',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: '64px',
     color: '#666666'
   },
 
-  loadingSpinner: {
-    width: '24px',
-    height: '24px',
-    border: '2px solid #e5e5e5',
-    borderTop: '2px solid #000000',
-    borderRadius: '50%',
-    animation: 'spin 0.8s linear infinite',
-    display: 'inline-block',
-    marginBottom: '16px'
-  },
-
-  // Empty state
   emptyState: {
-    padding: '60px 20px',
     textAlign: 'center',
+    padding: '64px',
     color: '#666666'
-  },
-
-  // Responsive
-  '@media (max-width: 768px)': {
-    main: {
-      padding: '16px 12px'
-    },
-    tableContainer: {
-      overflowX: 'auto'
-    }
   }
 };
 
 // ================================
-// BEAUTIFUL TABLE COMPONENTS
+// DATA TABLE COMPONENTS
 // ================================
 
-const LoadingTable = () => (
-  <div style={tableStyles.tableContainer}>
-    <div style={tableStyles.loadingContainer}>
-      <div style={tableStyles.loadingSpinner}></div>
-      <div>Caricamento dati...</div>
-    </div>
-  </div>
-);
+const DataTable = ({ headers, data, loading, emptyMessage = "Nessun dato disponibile" }) => {
+  if (loading) {
+    return (
+      <div style={tableStyles.loadingContainer}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div style={{
+            width: '20px',
+            height: '20px',
+            border: '2px solid #e9ecef',
+            borderTop: '2px solid #000000',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite'
+          }}></div>
+          Caricamento dati...
+        </div>
+      </div>
+    );
+  }
 
-const EmptyTable = ({ message }) => (
-  <div style={tableStyles.tableContainer}>
-    <div style={tableStyles.emptyState}>
-      <div style={{ fontSize: '48px', marginBottom: '16px' }}>📊</div>
-      <div>{message}</div>
-    </div>
-  </div>
-);
+  if (!data || data.length === 0) {
+    return (
+      <div style={tableStyles.emptyState}>
+        <div style={{ fontSize: '48px', marginBottom: '16px' }}>📊</div>
+        <h3 style={{ margin: '0 0 8px 0', color: '#000000' }}>Nessun dato</h3>
+        <p style={{ margin: 0 }}>{emptyMessage}</p>
+      </div>
+    );
+  }
+
+  return (
+    <table style={tableStyles.table}>
+      <thead style={tableStyles.tableHeader}>
+        <tr>
+          {headers.map((header, index) => (
+            <th key={index} style={tableStyles.th}>
+              {header}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {data.map((row, rowIndex) => (
+          <tr 
+            key={rowIndex} 
+            style={{
+              ...tableStyles.tableRow,
+              backgroundColor: rowIndex % 2 === 0 ? '#ffffff' : '#fafafa'
+            }}
+            onMouseEnter={(e) => {
+              e.target.closest('tr').style.backgroundColor = '#f0f8ff';
+            }}
+            onMouseLeave={(e) => {
+              e.target.closest('tr').style.backgroundColor = rowIndex % 2 === 0 ? '#ffffff' : '#fafafa';
+            }}
+          >
+            {row.map((cell, cellIndex) => (
+              <td key={cellIndex} style={tableStyles.td}>
+                {cell}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+};
 
 const StatusBadge = ({ status, type = 'general' }) => {
-  let badgeStyle = { ...tableStyles.statusBadge };
-  
-  if (type === 'appointment') {
-    if (status === 'Programmata') badgeStyle = { ...badgeStyle, ...tableStyles.statusScheduled };
-    else if (status === 'Completata') badgeStyle = { ...badgeStyle, ...tableStyles.statusCompleted };
-    else if (status === 'Cancellata') badgeStyle = { ...badgeStyle, ...tableStyles.statusCancelled };
-    else badgeStyle = { ...badgeStyle, ...tableStyles.statusInactive };
-  } else if (type === 'priority') {
-    if (status === 'Urgente') badgeStyle = { ...badgeStyle, ...tableStyles.priorityUrgent };
-    else if (status === 'Emergenza') badgeStyle = { ...badgeStyle, ...tableStyles.priorityEmergency };
-    else badgeStyle = { ...badgeStyle, ...tableStyles.priorityNormal };
-  } else {
-    if (status === 'Attivo' || status === 'Active') badgeStyle = { ...badgeStyle, ...tableStyles.statusActive };
-    else badgeStyle = { ...badgeStyle, ...tableStyles.statusInactive };
-  }
+  const getStatusStyle = () => {
+    if (type === 'patient') {
+      switch (status?.toLowerCase()) {
+        case 'attivo':
+          return tableStyles.statusActive;
+        case 'inattivo':
+          return tableStyles.statusInactive;
+        default:
+          return tableStyles.statusInactive;
+      }
+    }
+    
+    if (type === 'appointment') {
+      switch (status?.toLowerCase()) {
+        case 'completed':
+        case 'completato':
+          return tableStyles.statusCompleted;
+        case 'scheduled':
+        case 'programmato':
+          return tableStyles.statusScheduled;
+        default:
+          return tableStyles.statusInactive;
+      }
+    }
+
+    return tableStyles.statusActive;
+  };
 
   return (
-    <span style={badgeStyle}>
+    <span style={{ ...tableStyles.statusBadge, ...getStatusStyle() }}>
       {status}
     </span>
-  );
-};
-
-// ================================
-// PATIENTS TABLE
-// ================================
-
-const PatientsTable = ({ patients, loading }) => {
-  const [hoveredRow, setHoveredRow] = useState(null);
-
-  if (loading) return <LoadingTable />;
-  if (!patients || patients.length === 0) {
-    return <EmptyTable message="Nessun paziente registrato nel sistema." />;
-  }
-
-  return (
-    <div style={tableStyles.tableContainer}>
-      <table style={tableStyles.table}>
-        <thead style={tableStyles.tableHead}>
-          <tr>
-            <th style={tableStyles.tableHeaderCell}>Paziente</th>
-            <th style={tableStyles.tableHeaderCell}>Codice Fiscale</th>
-            <th style={tableStyles.tableHeaderCell}>Contatti</th>
-            <th style={tableStyles.tableHeaderCell}>Patologia</th>
-            <th style={tableStyles.tableHeaderCell}>Medico Curante</th>
-            <th style={tableStyles.tableHeaderCell}>Data Registrazione</th>
-            <th style={tableStyles.tableHeaderCell}>Stato</th>
-          </tr>
-        </thead>
-        <tbody>
-          {patients.map((patient, index) => (
-            <tr
-              key={patient.codice_fiscale || index}
-              style={{
-                ...tableStyles.tableRow,
-                ...(hoveredRow === index ? tableStyles.tableRowHover : {})
-              }}
-              onMouseEnter={() => setHoveredRow(index)}
-              onMouseLeave={() => setHoveredRow(null)}
-            >
-              <td style={tableStyles.tableCell}>
-                <div style={tableStyles.patientName}>
-                  {patient.nome} {patient.cognome}
-                </div>
-                <div style={tableStyles.specialization}>
-                  {patient.data_nascita !== 'N/A' && `Nato/a il ${patient.data_nascita}`}
-                </div>
-              </td>
-              <td style={tableStyles.tableCell}>
-                <span style={tableStyles.codiceFiscale}>
-                  {patient.codice_fiscale}
-                </span>
-              </td>
-              <td style={tableStyles.tableCell}>
-                <div>{patient.telefono !== 'N/A' ? patient.telefono : '—'}</div>
-                <div style={tableStyles.specialization}>
-                  {patient.email !== 'N/A' ? patient.email : '—'}
-                </div>
-              </td>
-              <td style={tableStyles.tableCell}>
-                {patient.patologia}
-              </td>
-              <td style={tableStyles.tableCell}>
-                <div style={tableStyles.doctorName}>
-                  {patient.medico_nome}
-                </div>
-                <div style={tableStyles.specialization}>
-                  {patient.medico_specializzazione}
-                </div>
-              </td>
-              <td style={tableStyles.tableCell}>
-                {patient.data_registrazione}
-              </td>
-              <td style={tableStyles.tableCell}>
-                <StatusBadge status={patient.status} />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-};
-
-// ================================
-// DOCTORS TABLE
-// ================================
-
-const DoctorsTable = ({ doctors, loading }) => {
-  const [hoveredRow, setHoveredRow] = useState(null);
-
-  if (loading) return <LoadingTable />;
-  if (!doctors || doctors.length === 0) {
-    return <EmptyTable message="Nessun medico ha utilizzato il sistema." />;
-  }
-
-  return (
-    <div style={tableStyles.tableContainer}>
-      <table style={tableStyles.table}>
-        <thead style={tableStyles.tableHead}>
-          <tr>
-            <th style={tableStyles.tableHeaderCell}>Medico</th>
-            <th style={tableStyles.tableHeaderCell}>Codice</th>
-            <th style={tableStyles.tableHeaderCell}>Struttura</th>
-            <th style={tableStyles.tableHeaderCell}>Pazienti</th>
-            <th style={tableStyles.tableHeaderCell}>Appuntamenti</th>
-            <th style={tableStyles.tableHeaderCell}>Tasso Completamento</th>
-            <th style={tableStyles.tableHeaderCell}>Ultima Attività</th>
-            <th style={tableStyles.tableHeaderCell}>Stato</th>
-          </tr>
-        </thead>
-        <tbody>
-          {doctors.map((doctor, index) => (
-            <tr
-              key={doctor.id_medico || index}
-              style={{
-                ...tableStyles.tableRow,
-                ...(hoveredRow === index ? tableStyles.tableRowHover : {})
-              }}
-              onMouseEnter={() => setHoveredRow(index)}
-              onMouseLeave={() => setHoveredRow(null)}
-            >
-              <td style={tableStyles.tableCell}>
-                <div style={tableStyles.doctorName}>
-                  {doctor.nome_completo}
-                </div>
-                <div style={tableStyles.specialization}>
-                  {doctor.specializzazione}
-                </div>
-              </td>
-              <td style={tableStyles.tableCell}>
-                <span style={tableStyles.codiceFiscale}>
-                  {doctor.codice_medico}
-                </span>
-              </td>
-              <td style={tableStyles.tableCell}>
-                {doctor.struttura}
-              </td>
-              <td style={tableStyles.tableCell}>
-                <div style={{ fontWeight: '600', color: '#000' }}>
-                  {doctor.pazienti_registrati}
-                </div>
-                <div style={tableStyles.specialization}>
-                  registrati
-                </div>
-              </td>
-              <td style={tableStyles.tableCell}>
-                <div style={{ fontWeight: '600', color: '#000' }}>
-                  {doctor.appuntamenti_totali}
-                </div>
-                <div style={tableStyles.specialization}>
-                  {doctor.appuntamenti_completati} completati • {doctor.appuntamenti_programmati} programmati
-                </div>
-              </td>
-              <td style={tableStyles.tableCell}>
-                <div style={{
-                  fontWeight: '600',
-                  color: doctor.tasso_completamento >= 90 ? '#166534' : 
-                         doctor.tasso_completamento >= 70 ? '#92400e' : '#991b1b'
-                }}>
-                  {doctor.tasso_completamento}%
-                </div>
-              </td>
-              <td style={tableStyles.tableCell}>
-                <div style={{ fontSize: '13px' }}>
-                  {doctor.ultima_attivita}
-                </div>
-              </td>
-              <td style={tableStyles.tableCell}>
-                <StatusBadge status={doctor.stato} />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-};
-
-// ================================
-// VISITS TABLE
-// ================================
-
-const VisitsTable = ({ visits, loading }) => {
-  const [hoveredRow, setHoveredRow] = useState(null);
-
-  if (loading) return <LoadingTable />;
-  if (!visits || visits.length === 0) {
-    return <EmptyTable message="Nessuna visita registrata nel sistema." />;
-  }
-
-  return (
-    <div style={tableStyles.tableContainer}>
-      <table style={tableStyles.table}>
-        <thead style={tableStyles.tableHead}>
-          <tr>
-            <th style={tableStyles.tableHeaderCell}>Paziente</th>
-            <th style={tableStyles.tableHeaderCell}>Medico</th>
-            <th style={tableStyles.tableHeaderCell}>Tipo Visita</th>
-            <th style={tableStyles.tableHeaderCell}>Data Programmata</th>
-            <th style={tableStyles.tableHeaderCell}>Stato</th>
-            <th style={tableStyles.tableHeaderCell}>Priorità</th>
-            <th style={tableStyles.tableHeaderCell}>Luogo</th>
-            <th style={tableStyles.tableHeaderCell}>Note</th>
-          </tr>
-        </thead>
-        <tbody>
-          {visits.map((visit, index) => (
-            <tr
-              key={visit.appointment_id || index}
-              style={{
-                ...tableStyles.tableRow,
-                ...(hoveredRow === index ? tableStyles.tableRowHover : {})
-              }}
-              onMouseEnter={() => setHoveredRow(index)}
-              onMouseLeave={() => setHoveredRow(null)}
-            >
-              <td style={tableStyles.tableCell}>
-                <div style={tableStyles.patientName}>
-                  {visit.paziente_nome}
-                </div>
-                <div style={tableStyles.specialization}>
-                  <span style={{ 
-                    ...tableStyles.codiceFiscale, 
-                    fontSize: '11px', 
-                    padding: '1px 4px' 
-                  }}>
-                    {visit.paziente_cf}
-                  </span>
-                </div>
-              </td>
-              <td style={tableStyles.tableCell}>
-                <div style={tableStyles.doctorName}>
-                  {visit.medico_nome}
-                </div>
-                <div style={tableStyles.specialization}>
-                  {visit.medico_specializzazione}
-                </div>
-              </td>
-              <td style={tableStyles.tableCell}>
-                {visit.tipo_visita}
-              </td>
-              <td style={tableStyles.tableCell}>
-                {visit.data_programmata}
-              </td>
-              <td style={tableStyles.tableCell}>
-                <StatusBadge status={visit.stato} type="appointment" />
-              </td>
-              <td style={tableStyles.tableCell}>
-                <StatusBadge status={visit.priorita} type="priority" />
-              </td>
-              <td style={tableStyles.tableCell}>
-                {visit.location !== 'N/A' ? visit.location : '—'}
-              </td>
-              <td style={tableStyles.tableCell}>
-                <div style={{ 
-                  maxWidth: '200px', 
-                  overflow: 'hidden', 
-                  textOverflow: 'ellipsis',
-                  fontSize: '13px',
-                  color: '#666666'
-                }}>
-                  {visit.note_medico || visit.note_completamento || '—'}
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
   );
 };
 
@@ -678,184 +344,211 @@ const VisitsTable = ({ visits, loading }) => {
 // ================================
 
 const PatientsPage = () => {
-  const [patients, setPatients] = useState([]);
+  const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadPatients();
+    loadPatientsData();
   }, []);
 
-  const loadPatients = async () => {
+  const loadPatientsData = async () => {
     try {
-      setLoading(true);
-      const response = await adminAPI.getPatientsList();
-      if (response.success) {
-        setPatients(response.patients);
+      console.log('📊 Loading patients data...');
+      const result = await adminAPI.getPatientsList();
+      
+      if (result.success && result.patients) {
+        const tableData = result.patients.map(patient => [
+          patient.codice_fiscale,
+          `${patient.nome} ${patient.cognome}`,
+          patient.data_nascita,
+          patient.telefono || 'N/A',
+          patient.email || 'N/A',
+          patient.patologia,
+          patient.medico_nome,
+          patient.data_registrazione,
+          <StatusBadge key="status" status="Attivo" type="patient" />
+        ]);
+        setData(tableData);
+      } else {
+        console.warn('Invalid patients data format:', result);
+        setData([]);
       }
     } catch (error) {
       console.error('Error loading patients:', error);
+      setData([]);
     } finally {
       setLoading(false);
     }
   };
 
+  const headers = [
+    'Codice Fiscale',
+    'Nome Completo',
+    'Data Nascita',
+    'Telefono',
+    'Email',
+    'Patologia',
+    'Medico',
+    'Data Registrazione',
+    'Stato'
+  ];
+
   return (
     <div>
-      <div style={tableStyles.pageHeader}>
-        <h1 style={tableStyles.pageTitle}>👥 Pazienti Registrati</h1>
-        <p style={tableStyles.pageSubtitle}>
-          Elenco completo dei pazienti iscritti al sistema con informazioni di registrazione
+      <div style={{ marginBottom: '24px' }}>
+        <h2 style={{ margin: '0 0 8px 0', fontSize: '24px', fontWeight: '600' }}>
+          Gestione Pazienti
+        </h2>
+        <p style={{ margin: 0, color: '#666666' }}>
+          Elenco completo pazienti registrati nel sistema
         </p>
       </div>
-
-      {!loading && patients.length > 0 && (
-        <div style={tableStyles.statsBar}>
-          <div style={tableStyles.statItem}>
-            <div style={tableStyles.statNumber}>{patients.length}</div>
-            <div style={tableStyles.statLabel}>Pazienti Totali</div>
-          </div>
-          <div style={tableStyles.statItem}>
-            <div style={tableStyles.statNumber}>
-              {patients.filter(p => p.status === 'Active').length}
-            </div>
-            <div style={tableStyles.statLabel}>Attivi</div>
-          </div>
-          <div style={tableStyles.statItem}>
-            <div style={tableStyles.statNumber}>
-              {new Set(patients.map(p => p.medico_nome)).size}
-            </div>
-            <div style={tableStyles.statLabel}>Medici Coinvolti</div>
-          </div>
-        </div>
-      )}
-
-      <PatientsTable patients={patients} loading={loading} />
+      <DataTable 
+        headers={headers} 
+        data={data} 
+        loading={loading}
+        emptyMessage="Nessun paziente registrato nel sistema"
+      />
     </div>
   );
 };
 
 const DoctorsPage = () => {
-  const [doctors, setDoctors] = useState([]);
+  const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadDoctors();
+    loadDoctorsData();
   }, []);
 
-  const loadDoctors = async () => {
+  const loadDoctorsData = async () => {
     try {
-      setLoading(true);
-      const response = await adminAPI.getDoctorsList();
-      if (response.success) {
-        setDoctors(response.doctors);
+      console.log('👨‍⚕️ Loading doctors data...');
+      const result = await adminAPI.getDoctorsList();
+      
+      if (result.success && result.doctors) {
+        const tableData = result.doctors.map(doctor => [
+          doctor.codice_medico,
+          doctor.nome_completo,
+          doctor.specializzazione,
+          doctor.struttura,
+          doctor.pazienti_registrati?.toString() || '0',
+          doctor.appuntamenti_totali?.toString() || '0',
+          doctor.appuntamenti_completati?.toString() || '0',
+          `${doctor.tasso_completamento || 0}%`,
+          <StatusBadge key="status" status={doctor.stato || 'Attivo'} type="patient" />
+        ]);
+        setData(tableData);
+      } else {
+        console.warn('Invalid doctors data format:', result);
+        setData([]);
       }
     } catch (error) {
       console.error('Error loading doctors:', error);
+      setData([]);
     } finally {
       setLoading(false);
     }
   };
 
+  const headers = [
+    'Codice',
+    'Nome Completo',
+    'Specializzazione',
+    'Struttura',
+    'Pazienti',
+    'Visite Totali',
+    'Completate',
+    'Tasso Completamento',
+    'Stato'
+  ];
+
   return (
     <div>
-      <div style={tableStyles.pageHeader}>
-        <h1 style={tableStyles.pageTitle}>👨‍⚕️ Medici Sistema</h1>
-        <p style={tableStyles.pageSubtitle}>
-          Medici che hanno utilizzato il sistema con statistiche di attività
+      <div style={{ marginBottom: '24px' }}>
+        <h2 style={{ margin: '0 0 8px 0', fontSize: '24px', fontWeight: '600' }}>
+          Gestione Medici
+        </h2>
+        <p style={{ margin: 0, color: '#666666' }}>
+          Attività e performance dei medici del sistema
         </p>
       </div>
-
-      {!loading && doctors.length > 0 && (
-        <div style={tableStyles.statsBar}>
-          <div style={tableStyles.statItem}>
-            <div style={tableStyles.statNumber}>{doctors.length}</div>
-            <div style={tableStyles.statLabel}>Medici Registrati</div>
-          </div>
-          <div style={tableStyles.statItem}>
-            <div style={tableStyles.statNumber}>
-              {doctors.filter(d => d.stato === 'Attivo').length}
-            </div>
-            <div style={tableStyles.statLabel}>Attivi</div>
-          </div>
-          <div style={tableStyles.statItem}>
-            <div style={tableStyles.statNumber}>
-              {doctors.reduce((sum, d) => sum + d.pazienti_registrati, 0)}
-            </div>
-            <div style={tableStyles.statLabel}>Pazienti Totali</div>
-          </div>
-          <div style={tableStyles.statItem}>
-            <div style={tableStyles.statNumber}>
-              {Math.round(doctors.reduce((sum, d) => sum + d.tasso_completamento, 0) / doctors.length)}%
-            </div>
-            <div style={tableStyles.statLabel}>Completamento Medio</div>
-          </div>
-        </div>
-      )}
-
-      <DoctorsTable doctors={doctors} loading={loading} />
+      <DataTable 
+        headers={headers} 
+        data={data} 
+        loading={loading}
+        emptyMessage="Nessun medico registrato nel sistema"
+      />
     </div>
   );
 };
 
 const VisitsPage = () => {
-  const [visits, setVisits] = useState([]);
+  const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadVisits();
+    loadVisitsData();
   }, []);
 
-  const loadVisits = async () => {
+  const loadVisitsData = async () => {
     try {
-      setLoading(true);
-      const response = await adminAPI.getVisitsList();
-      if (response.success) {
-        setVisits(response.visits);
+      console.log('📅 Loading visits data...');
+      const result = await adminAPI.getVisitsList();
+      
+      if (result.success && result.visits) {
+        const tableData = result.visits.map(visit => [
+          visit.appointment_id,
+          visit.paziente_nome,
+          visit.paziente_cf,
+          visit.medico_nome,
+          visit.tipo_appuntamento,
+          visit.data_programmata,
+          visit.orario,
+          visit.priorita || 'Normale',
+          <StatusBadge key="status" status={visit.stato} type="appointment" />
+        ]);
+        setData(tableData);
+      } else {
+        console.warn('Invalid visits data format:', result);
+        setData([]);
       }
     } catch (error) {
       console.error('Error loading visits:', error);
+      setData([]);
     } finally {
       setLoading(false);
     }
   };
 
+  const headers = [
+    'ID Appuntamento',
+    'Paziente',
+    'Codice Fiscale',
+    'Medico',
+    'Tipo Visita',
+    'Data',
+    'Orario',
+    'Priorità',
+    'Stato'
+  ];
+
   return (
     <div>
-      <div style={tableStyles.pageHeader}>
-        <h1 style={tableStyles.pageTitle}>🏥 Visite Mediche</h1>
-        <p style={tableStyles.pageSubtitle}>
-          Registro completo delle visite programmate e completate nel sistema
+      <div style={{ marginBottom: '24px' }}>
+        <h2 style={{ margin: '0 0 8px 0', fontSize: '24px', fontWeight: '600' }}>
+          Gestione Visite
+        </h2>
+        <p style={{ margin: 0, color: '#666666' }}>
+          Registro completo degli appuntamenti e visite
         </p>
       </div>
-
-      {!loading && visits.length > 0 && (
-        <div style={tableStyles.statsBar}>
-          <div style={tableStyles.statItem}>
-            <div style={tableStyles.statNumber}>{visits.length}</div>
-            <div style={tableStyles.statLabel}>Visite Totali</div>
-          </div>
-          <div style={tableStyles.statItem}>
-            <div style={tableStyles.statNumber}>
-              {visits.filter(v => v.stato === 'Completata').length}
-            </div>
-            <div style={tableStyles.statLabel}>Completate</div>
-          </div>
-          <div style={tableStyles.statItem}>
-            <div style={tableStyles.statNumber}>
-              {visits.filter(v => v.stato === 'Programmata').length}
-            </div>
-            <div style={tableStyles.statLabel}>Programmate</div>
-          </div>
-          <div style={tableStyles.statItem}>
-            <div style={tableStyles.statNumber}>
-              {visits.filter(v => v.priorita === 'Urgente' || v.priorita === 'Emergenza').length}
-            </div>
-            <div style={tableStyles.statLabel}>Priorità Alta</div>
-          </div>
-        </div>
-      )}
-
-      <VisitsTable visits={visits} loading={loading} />
+      <DataTable 
+        headers={headers} 
+        data={data} 
+        loading={loading}
+        emptyMessage="Nessuna visita registrata nel sistema"
+      />
     </div>
   );
 };
@@ -868,23 +561,33 @@ const Navigation = ({ activeTab, onTabChange }) => {
   const navItems = [
     { id: 'patients', label: 'Pazienti', icon: '👥' },
     { id: 'doctors', label: 'Medici', icon: '👨‍⚕️' },
-    { id: 'visits', label: 'Visite', icon: '🏥' }
+    { id: 'visits', label: 'Visite', icon: '📅' }
   ];
 
   return (
     <nav style={tableStyles.nav}>
       <div style={tableStyles.navContent}>
-        {navItems.map((item) => (
-          <div
+        {navItems.map(item => (
+          <button
             key={item.id}
             onClick={() => onTabChange(item.id)}
             style={{
               ...tableStyles.navLink,
               ...(activeTab === item.id ? tableStyles.navLinkActive : {})
             }}
+            onMouseEnter={(e) => {
+              if (activeTab !== item.id) {
+                e.target.style.backgroundColor = '#f5f5f5';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (activeTab !== item.id) {
+                e.target.style.backgroundColor = 'transparent';
+              }
+            }}
           >
             {item.icon} {item.label}
-          </div>
+          </button>
         ))}
       </div>
     </nav>
@@ -892,17 +595,17 @@ const Navigation = ({ activeTab, onTabChange }) => {
 };
 
 // ================================
-// MAIN DASHBOARD LAYOUT
+// MAIN DASHBOARD LAYOUT - FIXED TO USE ROUTER HOOKS INSIDE ROUTER CONTEXT
 // ================================
 
 const DashboardLayout = ({ user, onLogout }) => {
   const [activeTab, setActiveTab] = useState('patients');
-  const navigate = useNavigate();
+  const navigate = useNavigate(); // This is now inside Router context
 
   const handleLogout = async () => {
     try {
       await authAPI.logout();
-      navigate('/');
+      navigate('/'); // This will now work correctly
     } catch (error) {
       console.warn('Logout API call failed:', error);
     }
@@ -978,95 +681,115 @@ const DashboardLayout = ({ user, onLogout }) => {
 };
 
 // ================================
-// MAIN APPLICATION
+// MAIN APPLICATION WITH PROPER ROUTER STRUCTURE
 // ================================
 
 const AdminApp = () => {
   const [user, setUser] = useState(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [initializing, setInitializing] = useState(true);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    initializeApp();
+    checkAuthStatus();
   }, []);
 
-  const initializeApp = async () => {
+  const checkAuthStatus = async () => {
     try {
-      const sessionResult = await authAPI.checkSession();
-      if (sessionResult.authenticated && sessionResult.user) {
-        setUser(sessionResult.user);
-        setIsAuthenticated(true);
+      const result = await authAPI.checkSession();
+      if (result.authenticated && result.user) {
+        setUser(result.user);
       }
     } catch (error) {
-      console.warn('Session initialization failed:', error);
-    } finally {
-      setInitializing(false);
+      console.log('No existing session found');
     }
+    setLoading(false);
   };
 
   const handleAuthSuccess = (userData) => {
+    console.log('✅ Auth success:', userData);
     setUser(userData);
-    setIsAuthenticated(true);
   };
 
   const handleLogout = () => {
+    console.log('👋 User logged out');
     setUser(null);
-    setIsAuthenticated(false);
   };
 
-  if (initializing) {
+  if (loading) {
     return (
       <div style={{
-        minHeight: '100vh',
+        ...tableStyles.container,
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: '#fafafa'
+        justifyContent: 'center'
       }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '2.5rem', marginBottom: '16px' }}>🏥</div>
-          <div style={{ fontSize: '18px', fontWeight: '600' }}>Caricamento Dashboard...</div>
+          <div style={{
+            width: '40px',
+            height: '40px',
+            border: '4px solid #e9ecef',
+            borderTop: '4px solid #000000',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+            margin: '0 auto 20px'
+          }}></div>
+          <p>Verifica sessione...</p>
         </div>
       </div>
     );
   }
 
-  return isAuthenticated && user ? (
-    <DashboardLayout user={user} onLogout={handleLogout} />
-  ) : (
-    <AuthApp onAuthSuccess={handleAuthSuccess} />
+  // Show authentication if no user
+  if (!user) {
+    return <AuthApp onAuthSuccess={handleAuthSuccess} />;
+  }
+
+  // Show dashboard with Router context - THIS IS THE FIX
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route 
+          path="/*" 
+          element={<DashboardLayout user={user} onLogout={handleLogout} />} 
+        />
+      </Routes>
+    </BrowserRouter>
   );
 };
 
 // ================================
-// ERROR BOUNDARY & BOOTSTRAP
+// ERROR BOUNDARY
 // ================================
 
 class AdminErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false };
+    this.state = { hasError: false, error: null };
   }
 
   static getDerivedStateFromError(error) {
-    return { hasError: true };
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('🚨 Admin Dashboard Error:', error, errorInfo);
   }
 
   render() {
     if (this.state.hasError) {
       return (
         <div style={{
-          minHeight: '100vh',
+          ...tableStyles.container,
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: '#fafafa'
+          justifyContent: 'center'
         }}>
-          <div style={{ textAlign: 'center', padding: '32px' }}>
-            <div style={{ fontSize: '3rem', marginBottom: '16px' }}>⚠️</div>
-            <h1 style={{ marginBottom: '8px' }}>Errore Dashboard</h1>
-            <p style={{ marginBottom: '24px', color: '#666666' }}>
-              Si è verificato un errore. Ricarica la pagina.
+          <div style={{ textAlign: 'center', maxWidth: '500px' }}>
+            <h2 style={{ color: '#dc3545', marginBottom: '20px' }}>
+              Errore Dashboard
+            </h2>
+            <p style={{ marginBottom: '20px', color: '#666666' }}>
+              Si è verificato un errore nell'applicazione admin. 
+              Ricarica la pagina.
             </p>
             <button 
               onClick={() => window.location.reload()}
@@ -1089,7 +812,10 @@ class AdminErrorBoundary extends React.Component {
   }
 }
 
-// Render app
+// ================================
+// RENDER APPLICATION
+// ================================
+
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <AdminErrorBoundary>
@@ -1117,6 +843,7 @@ console.log(`
 ║    • Real database integration                                  ║
 ║    • Responsive design with hover effects                      ║
 ║    • Session persistence working                                ║
+║    • FIXED: Router context for useNavigate()                   ║
 ║                                                                  ║
 ║  📊 DATA TABLES:                                                ║
 ║    • Pazienti: Full patient info + enrollment data             ║
