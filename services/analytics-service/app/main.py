@@ -1,41 +1,130 @@
-from fastapi import FastAPI
+# services/analytics-service/app/main.py
+"""
+Analytics Service - Complete Application
+Professional FastAPI application for medical laboratory data analytics
+"""
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from datetime import datetime, timedelta
+from fastapi.responses import JSONResponse
+import logging
+import sys
 import os
-import random
 
-app = FastAPI(title="Analytics Service", description="Clinical Data Analytics", version="1.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+# Import our modules
+from .config import settings
+from .routers import get_all_routers
+from .exceptions import AnalyticsServiceException, map_to_http_exception
 
-class HealthResponse(BaseModel):
-    service: str
-    status: str
-    timestamp: datetime
-    port: int
+# Configure logging
+logging.basicConfig(
+    level=getattr(logging, settings.LOG_LEVEL.upper()),
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(f"/tmp/{settings.SERVICE_NAME}.log", mode="a")
+    ]
+)
+logger = logging.getLogger(__name__)
 
-@app.get("/")
-def read_root():
-    return {"service": "Analytics Service", "status": "running", "version": "1.0.0"}
+def create_application() -> FastAPI:
+    """
+    Create and configure the FastAPI analytics application
+    """
+    # Initialize FastAPI app
+    app = FastAPI(
+        title=settings.API_TITLE,
+        description=settings.API_DESCRIPTION,
+        version=settings.SERVICE_VERSION,
+        docs_url=settings.DOCS_URL,
+        redoc_url=settings.REDOC_URL,
+        openapi_tags=[
+            {
+                "name": "Medical Analytics",
+                "description": "Laboratory data analytics and visualization endpoints"
+            },
+            {
+                "name": "Wirgilio Integration", 
+                "description": "External medical system integration"
+            }
+        ]
+    )
 
-@app.get("/health", response_model=HealthResponse)
-def health_check():
-    return HealthResponse(service="analytics-service", status="healthy", timestamp=datetime.now(), port=int(os.getenv("SERVICE_PORT", 8002)))
+    # CORS middleware
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],  # In production: specify allowed origins
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"]
+    )
 
-@app.get("/analytics/glucose/{patient_id}")
-def get_glucose_analytics(patient_id: str, days: int = 30):
-    data = []
-    for i in range(days):
-        date = datetime.now() - timedelta(days=days-i)
-        value = random.uniform(80, 150)
-        data.append({"date": date.strftime("%Y-%m-%d"), "value": round(value, 1), "status": "normal" if 80 <= value <= 120 else "high"})
-    
-    return {"patient_id": patient_id, "parameter": "glucose", "data": data, "statistics": {"mean": round(sum(d["value"] for d in data) / len(data), 1), "trend": "stable"}}
+    # Global exception handler
+    @app.exception_handler(AnalyticsServiceException)
+    async def analytics_exception_handler(request: Request, exc: AnalyticsServiceException):
+        """Handle analytics service exceptions"""
+        logger.error(f"Analytics service error: {exc.message}")
+        return map_to_http_exception(exc)
 
-@app.get("/analytics/dashboard/{patient_id}")
-def get_patient_dashboard(patient_id: str):
-    return {"patient_id": patient_id, "glucose": {"current": 95.0, "trend": "stable"}, "hba1c": {"current": 7.2, "target": 7.0}, "last_updated": datetime.now().isoformat()}
+    @app.exception_handler(Exception)
+    async def general_exception_handler(request: Request, exc: Exception):
+        """Handle unexpected exceptions"""
+        logger.error(f"Unexpected error: {str(exc)}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "Internal server error",
+                "message": "An unexpected error occurred",
+                "detail": str(exc) if settings.ENV == "development" else None
+            }
+        )
+
+    # Register all API routers
+    for router in get_all_routers():
+        app.include_router(router)
+
+    # Application lifecycle events
+    @app.on_event("startup")
+    async def startup_event():
+        """Application startup"""
+        logger.info(f"Starting {settings.SERVICE_NAME} v{settings.SERVICE_VERSION}")
+        logger.info(f"Environment: {settings.ENV}")
+        logger.info(f"Service Port: {settings.SERVICE_PORT}")
+        logger.info(f"Wirgilio API: {settings.WIRGILIO_API_BASE}")
+        
+        # Test Wirgilio connection at startup
+        from .services import WirgilioService
+        wirgilio_service = WirgilioService()
+        
+        try:
+            connected = await wirgilio_service.test_connection()
+            if connected:
+                logger.info("✅ Wirgilio API connection successful")
+            else:
+                logger.warning("⚠️ Wirgilio API connection failed - service will continue")
+        except Exception as e:
+            logger.warning(f"⚠️ Wirgilio API test failed: {str(e)} - service will continue")
+        
+        logger.info("🧪 Analytics Service started successfully!")
+        logger.info("📊 Medical data analytics endpoints available")
+        logger.info("📚 API Documentation available at /docs")
+
+    @app.on_event("shutdown")
+    async def shutdown_event():
+        """Application shutdown"""
+        logger.info("Shutting down Analytics Service...")
+        logger.info("Analytics Service shutdown complete")
+
+    return app
+
+# Create the app instance
+app = create_application()
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("SERVICE_PORT", 8002)), reload=True)
+    uvicorn.run(
+        app, 
+        host="0.0.0.0", 
+        port=settings.SERVICE_PORT, 
+        reload=True if settings.ENV == "development" else False
+    )
