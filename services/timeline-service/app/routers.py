@@ -5,7 +5,7 @@ Organizzazione pulita dei route con separazione corretta delle responsabilità
 Aggiornato: Endpoint registrazione con contatti modificabili, messaggi in italiano
 """
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from datetime import datetime
 from .web_routes import session_router

@@ -640,7 +640,7 @@ const ProfessionalTabs = ({ patientId, doctorId }) => {
       const currentUrl = window.location.href;
       
       // Call Timeline API to create voice workflow URL
-      const response = await fetch('/api/timeline/melody/create-voice-workflow', {
+      const response = await fetch('http://localhost:8080/api/timeline/melody/create-voice-workflow', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

@@ -479,7 +479,7 @@ class MelodyIntegrationService:
     """Service for integrating with Melody voice transcription system"""
     
     def __init__(self):
-        self.melody_base_url = "http://localhost:5002"
+        self.melody_base_url = "http://192.168.125.193:5002"
     
     async def check_melody_health(self) -> bool:
         """Check if Melody service is available"""
