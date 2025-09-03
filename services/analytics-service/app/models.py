@@ -79,6 +79,7 @@ class ProcessedResult(BaseModel):
     datareferto: str
     is_anomaly: bool
     is_valid_value: bool
+    codoffering_original: Optional[str] = None  # ADD THIS LINE
 
 class ExamSummary(BaseModel):
     """Summary of exam type (desesame) with anomaly info"""
@@ -112,6 +113,8 @@ class ChartDataPoint(BaseModel):
     unit: str = Field(..., description="Unit from data")
     range: str = Field(..., description="Range from data")
     formatted_date: str = Field(..., description="DD/MM/YYYY format")
+    struttura: str = Field(..., description="Hospital unit/structure")  # ADD THIS LINE
+    codoffering: str = Field(..., description="Original codoffering for context")  # ADD THIS LINE
 
 # ================================
 # API RESPONSE MODELS

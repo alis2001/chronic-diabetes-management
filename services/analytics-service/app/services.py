@@ -128,11 +128,11 @@ class DataProcessingService:
     
     @staticmethod
     def process_raw_data(raw_data: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Process raw Wirgilio data into structured format"""
+        """Process raw Wirgilio data into merged exam structure"""
         
-        exam_data = defaultdict(list)  # exam_key -> [ProcessedResult]
-        exam_anomaly_tracking = defaultdict(bool)  # exam_key -> has_anomaly
-        sottanalisi_anomaly_tracking = defaultdict(bool)  # sottanalisi_key -> has_anomaly
+        exam_data = defaultdict(list)  # desesame -> [ProcessedResult]
+        exam_anomaly_tracking = defaultdict(bool)  # desesame -> has_anomaly
+        sottanalisi_anomaly_tracking = defaultdict(bool)  # desesame_dessottoanalisi -> has_anomaly
         
         total_reports = len(raw_data)
         processed_results = 0
@@ -150,11 +150,8 @@ class DataProcessingService:
                 if not desesame or not codoffering:
                     continue
                 
-                # Filter for diabetes-relevant exams only
-                if codoffering not in DIABETES_RELEVANT_CODES:
-                    continue
-                
-                exam_key = f"{desesame}_{codoffering}"
+                # Use desesame as exam_key (this merges 301 and 301U under same exam)
+                exam_key = desesame
                 
                 for risultato in esame.get("risultati", []):
                     dessottoanalisi = risultato.get("dessottoanalisi", "").strip()
@@ -179,7 +176,8 @@ class DataProcessingService:
                         flaganomalia=flag_normalized,
                         datareferto=datareferto,
                         is_anomaly=is_anomaly,
-                        is_valid_value=valore_numerico is not None
+                        is_valid_value=valore_numerico is not None,
+                        codoffering_original=codoffering
                     )
                     
                     exam_data[exam_key].append(processed_result)
@@ -212,54 +210,32 @@ class AnalyticsService:
         self.data_service = data_service
     
     async def get_exam_summaries(self, codice_fiscale: str) -> ExamListResponse:
-        """Get exam list for first dropdown with anomaly coloring"""
+        """Get exam list for first dropdown - MERGED VERSION"""
         try:
-            # Fetch raw data
             raw_data = await self.wirgilio_service.fetch_patient_data(codice_fiscale)
-            if not raw_data:
-                return ExamListResponse(
-                    success=True,
-                    codice_fiscale=codice_fiscale,
-                    exam_summaries=[],
-                    total_exams=0,
-                    processing_summary={"no_data": True}
-                )
-            
-            # Process data
             processed = self.data_service.process_raw_data(raw_data)
-            exam_data = processed["exam_data"]
-            exam_anomalies = processed["exam_anomaly_tracking"]
             
-            # Build exam summaries
+            exam_data = processed["exam_data"]
+            exam_anomaly_tracking = processed["exam_anomaly_tracking"]
+            
+            # Create exam summaries (exam_key is now just desesame)
             exam_summaries = []
             for exam_key, results in exam_data.items():
-                if not results:  # Skip empty exams
-                    continue
+                total_results = len(results)
+                anomaly_count = sum(1 for result in results if result.is_anomaly)
+                has_anomaly = exam_anomaly_tracking.get(exam_key, False)
                 
-                # Parse exam info
-                desesame = results[0].dessottoanalisi
-                parts = exam_key.split("_")
-                if len(parts) >= 2:
-                    desesame = "_".join(parts[:-1])
-                    codoffering = parts[-1]
-                else:
-                    codoffering = exam_key
-                
-                # Calculate statistics
-                has_anomaly = exam_anomalies.get(exam_key, False)
-                anomaly_count = sum(1 for r in results if r.is_anomaly)
-                unique_sottanalisi = set(r.dessottoanalisi for r in results)
-                
-                anomaly_status = AnomalyStatus.ANOMALY if has_anomaly else AnomalyStatus.NORMAL
+                # Get unique codofferings for this exam
+                unique_codofferings = list(set(result.codoffering_original for result in results))
                 
                 summary = ExamSummary(
-                    exam_key=exam_key,
-                    desesame=desesame,
-                    codoffering=codoffering,
+                    exam_key=exam_key,  # Just the desesame
+                    desesame=exam_key,  # Same as exam_key now
+                    codoffering=",".join(sorted(unique_codofferings)),
                     has_anomaly=has_anomaly,
-                    anomaly_status=anomaly_status,
-                    sottanalisi_count=len(unique_sottanalisi),
-                    total_results=len(results),
+                    anomaly_status=AnomalyStatus.ANOMALY if has_anomaly else AnomalyStatus.NORMAL,
+                    sottanalisi_count=len(set(result.dessottoanalisi for result in results)),
+                    total_results=total_results,
                     anomaly_count=anomaly_count
                 )
                 exam_summaries.append(summary)
@@ -276,27 +252,24 @@ class AnalyticsService:
             )
             
         except Exception as e:
-            logger.error(f"Error getting exam summaries: {str(e)}")
+            logger.error(f"Error getting merged exam summaries: {str(e)}")
             raise DataProcessingException(f"Failed to process exam data: {str(e)}")
     
     async def get_sottanalisi_for_exam(self, codice_fiscale: str, exam_key: str) -> SottanalisiListResponse:
-        """Get sottanalisi list for second dropdown with anomaly coloring"""
+        """Get sottanalisi list for second dropdown - MERGED VERSION"""
         try:
             # Fetch and process data
             raw_data = await self.wirgilio_service.fetch_patient_data(codice_fiscale)
             processed = self.data_service.process_raw_data(raw_data)
             
+            # exam_key is now just the desesame
             exam_data = processed["exam_data"].get(exam_key, [])
             if not exam_data:
-                parts = exam_key.split("_")
-                desesame = "_".join(parts[:-1]) if len(parts) > 1 else exam_key
-                codoffering = parts[-1] if len(parts) > 1 else ""
-                
                 return SottanalisiListResponse(
                     success=True,
                     exam_key=exam_key,
-                    desesame=desesame,
-                    codoffering=codoffering,
+                    desesame=exam_key,  # Same as exam_key
+                    codoffering="",
                     sottanalisi=[],
                     total_sottanalisi=0
                 )
@@ -333,16 +306,14 @@ class AnalyticsService:
             # Sort by name
             sottanalisi_summaries.sort(key=lambda x: x.dessottoanalisi)
             
-            # Parse exam info for response
-            parts = exam_key.split("_")
-            desesame = "_".join(parts[:-1]) if len(parts) > 1 else exam_key
-            codoffering = parts[-1] if len(parts) > 1 else ""
+            # Get unique codofferings for display
+            unique_codofferings = list(set(result.codoffering_original for result in exam_data))
             
             return SottanalisiListResponse(
                 success=True,
                 exam_key=exam_key,
-                desesame=desesame,
-                codoffering=codoffering,
+                desesame=exam_key,  # Same as exam_key now
+                codoffering=",".join(sorted(unique_codofferings)),
                 sottanalisi=sottanalisi_summaries,
                 total_sottanalisi=len(sottanalisi_summaries)
             )
@@ -352,15 +323,16 @@ class AnalyticsService:
             raise DataProcessingException(f"Failed to process sottanalisi data: {str(e)}")
     
     async def get_chart_data(self, codice_fiscale: str, exam_key: str, dessottoanalisi: str) -> ChartDataResponse:
-        """Get time-series chart data for specific parameter"""
+        """Get time-series chart data for specific parameter - MERGED VERSION"""
         try:
             # Fetch and process data
             raw_data = await self.wirgilio_service.fetch_patient_data(codice_fiscale)
             processed = self.data_service.process_raw_data(raw_data)
             
+            # exam_key is now just the desesame, get all results for this exam
             exam_data = processed["exam_data"].get(exam_key, [])
             
-            # Filter for specific sottanalisi and valid numeric values
+            # Filter for specific dessottoanalisi and valid numeric values
             filtered_data = [
                 result for result in exam_data
                 if result.dessottoanalisi == dessottoanalisi and result.is_valid_value
@@ -378,9 +350,13 @@ class AnalyticsService:
                     chart_color=CHART_COLORS["neutral"]
                 )
             
-            # Build chart data points
+            # Build chart data points with struttura info
             chart_points = []
             for result in filtered_data:
+                # Determine struttura from codoffering pattern
+                codoffering = result.codoffering_original
+                struttura = "Laboratorio Urgenze" if codoffering.endswith('U') else "Laboratorio Routine"
+                
                 # Format date for display
                 try:
                     date_obj = datetime.strptime(result.datareferto, "%d/%m/%Y")
@@ -396,7 +372,9 @@ class AnalyticsService:
                     flag=result.flaganomalia,
                     unit=result.unitadimisura,
                     range=result.rangevalori,
-                    formatted_date=formatted_date
+                    formatted_date=formatted_date,
+                    struttura=struttura,
+                    codoffering=codoffering
                 )
                 chart_points.append(point)
             
@@ -408,9 +386,6 @@ class AnalyticsService:
             anomaly_points = sum(1 for point in chart_points if point.anomaly)
             anomaly_percentage = (anomaly_points / total_points * 100) if total_points > 0 else 0.0
             
-            # Determine chart color
-            chart_color = CHART_COLORS["anomaly"] if anomaly_points > 0 else CHART_COLORS["normal"]
-            
             return ChartDataResponse(
                 success=True,
                 exam_key=exam_key,
@@ -419,9 +394,9 @@ class AnalyticsService:
                 total_points=total_points,
                 anomaly_points=anomaly_points,
                 anomaly_percentage=round(anomaly_percentage, 1),
-                chart_color=chart_color
+                chart_color=CHART_COLORS["neutral"]  # Always grey line
             )
             
         except Exception as e:
-            logger.error(f"Error generating chart data: {str(e)}")
+            logger.error(f"Error generating merged chart data: {str(e)}")
             raise DataProcessingException(f"Failed to generate chart data: {str(e)}")

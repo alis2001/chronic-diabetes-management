@@ -124,8 +124,8 @@ class ErrorBoundary extends React.Component {
 
 // Listen for messages from parent window (timeline service)
 window.addEventListener('message', (event) => {
-  // Only accept messages from same origin for security
-  if (event.origin !== window.location.origin) {
+  // Only accept messages from parent timeline app
+  if (event.origin !== 'http://localhost:3010') {
     return;
   }
   
@@ -164,9 +164,9 @@ const sendReadyMessage = () => {
   if (window.parent && window.parent !== window) {
     window.parent.postMessage({
       type: 'ANALYTICS_READY',
-      source: 'analytics-iframe',
+      source: 'analytics-iframe', 
       timestamp: new Date().toISOString()
-    }, window.location.origin);
+    }, 'http://localhost:3010');  // ✅ Timeline app origin
     console.log('📤 Analytics iframe sent ready message to parent');
   }
 };
@@ -292,7 +292,7 @@ if (window.parent && window.parent !== window) {
         type: 'ANALYTICS_HEIGHT_CHANGE',
         height: height,
         source: 'analytics-iframe'
-      }, window.location.origin);
+      }, 'http://localhost:3010');
     }
   });
   

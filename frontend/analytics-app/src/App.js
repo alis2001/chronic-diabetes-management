@@ -209,33 +209,39 @@ const App = () => {
   
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      return (
+        const data = payload[0].payload;
+        return (
         <div style={{
-          backgroundColor: 'white',
-          border: '2px solid #e5e7eb',
-          borderRadius: '12px',
-          padding: '15px',
-          boxShadow: '0 10px 20px rgba(0,0,0,0.1)',
-          minWidth: '200px'
+            backgroundColor: 'white',
+            border: '2px solid #e5e7eb',
+            borderRadius: '12px',
+            padding: '15px',
+            boxShadow: '0 10px 20px rgba(0,0,0,0.1)',
+            minWidth: '220px'
         }}>
-          <p style={{ fontWeight: '600', marginBottom: '8px', color: '#1f2937' }}>
+            <p style={{ fontWeight: '600', marginBottom: '8px', color: '#1f2937' }}>
             <strong>Data:</strong> {label}
-          </p>
-          <p style={{ marginBottom: '5px', color: '#374151' }}>
+            </p>
+            <p style={{ marginBottom: '5px', color: '#374151' }}>
             <strong>Valore:</strong> {data.valore_originale} {data.unit}
-          </p>
-          <p style={{ marginBottom: '5px', color: '#374151' }}>
+            </p>
+            <p style={{ marginBottom: '5px', color: '#374151' }}>
             <strong>Range:</strong> {data.range || 'N/D'}
-          </p>
-          <p style={{ 
+            </p>
+            <p style={{ marginBottom: '5px', color: '#374151' }}>
+            <strong>Struttura:</strong> {data.struttura}
+            </p>
+            <p style={{ marginBottom: '5px', color: '#6b7280', fontSize: '12px' }}>
+            <strong>Codice:</strong> {data.codoffering}
+            </p>
+            <p style={{ 
             color: data.anomaly ? '#dc2626' : '#059669',
             fontWeight: '600' 
-          }}>
+            }}>
             <strong>Anomalia:</strong> {data.anomaly ? 'SÌ' : 'NO'} ({data.flag})
-          </p>
+            </p>
         </div>
-      );
+        );
     }
     return null;
   };
@@ -287,38 +293,40 @@ const App = () => {
           </div>
           
           <div className="chart-content">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={sortedData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis 
-                  dataKey="formatted_date" 
-                  tick={{ fontSize: 12 }}
-                  stroke="#6b7280"
-                />
-                <YAxis 
-                  tick={{ fontSize: 12 }}
-                  stroke="#6b7280"
-                />
-                <Tooltip content={<CustomTooltip />} />
-                <Line 
-                  type="monotone" 
-                  dataKey="value" 
-                  stroke={chartData.chart_color}
-                  strokeWidth={3}
-                  dot={{ 
-                    r: 6, 
-                    fill: chartData.chart_color,
-                    strokeWidth: 2,
-                    stroke: 'white'
-                  }}
-                  activeDot={{ 
-                    r: 8, 
-                    fill: chartData.chart_color,
-                    strokeWidth: 3,
-                    stroke: 'white'
-                  }}
-                />
-              </LineChart>
+            <ResponsiveContainer width="100%" height={400}>
+                <LineChart data={sortedData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis 
+                    dataKey="date" 
+                    tick={{ fontSize: 12, fill: '#6b7280' }}
+                    stroke="#9ca3af"
+                    />
+                    <YAxis 
+                    tick={{ fontSize: 12, fill: '#6b7280' }}
+                    stroke="#9ca3af"
+                    />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Line 
+                    type="monotone" 
+                    dataKey="value" 
+                    stroke="#6b7280"  // GREY LINE
+                    strokeWidth={2}
+                    dot={(props) => {
+                        const { payload } = props;
+                        return (
+                        <circle
+                            cx={props.cx}
+                            cy={props.cy}
+                            r={4}
+                            fill={payload?.anomaly ? '#dc2626' : '#059669'}  // RED/GREEN POINTS
+                            stroke={payload?.anomaly ? '#dc2626' : '#059669'}
+                            strokeWidth={2}
+                        />
+                        );
+                    }}
+                    connectNulls={false}
+                    />
+                </LineChart>
             </ResponsiveContainer>
           </div>
         </div>

@@ -202,7 +202,7 @@ async def timeline_proxy(path: str, request: Request):
 @app.api_route("/api/analytics/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])  
 async def analytics_proxy(path: str, request: Request):
     """Route all /api/analytics/* requests to analytics service"""
-    return await proxy_request("analytics", f"/{path}", request)
+    return await proxy_request("analytics", f"/analytics/{path}", request)
 
 @app.api_route("/api/scheduler/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
 async def scheduler_proxy(path: str, request: Request):
