@@ -1,6 +1,6 @@
 // frontend/analytics-app/src/App.js
-// Main Analytics Application Component
-// Complete implementation with two-dropdown system and Recharts integration
+// Main Analytics Application Component - HEADER REMOVED VERSION
+// Clean implementation without header section and patient info
 
 import React, { useState, useEffect } from 'react';
 import {
@@ -62,110 +62,106 @@ const App = () => {
         return;
       }
       
-      if (!utils.validateCodiceFiscale(cf)) {
-        setError({
-          type: 'INVALID_CF',
-          message: 'Formato codice fiscale non valido',
-          details: `Il codice fiscale "${cf}" non ha un formato valido`
-        });
-        return;
-      }
-      
       setCodiceFiscale(cf);
-      setDoctorId(doctor);
+      setDoctorId(doctor || 'unknown');
       
-      // Load initial exam list
-      await loadExamList(cf);
+      // Load initial exam data
+      await loadExamData(cf);
       
-    } catch (err) {
-      console.error('Initialization error:', err);
+    } catch (error) {
+      console.error('App initialization error:', error);
       setError({
         type: 'INIT_ERROR',
-        message: 'Errore inizializzazione applicazione',
-        details: err.message
+        message: 'Errore durante l\'inizializzazione dell\'applicazione',
+        details: error.message
       });
     }
   };
   
   // ================================
-  // API FUNCTIONS
+  // DATA LOADING FUNCTIONS
   // ================================
   
-  const loadExamList = async (cf) => {
+  const loadExamData = async (cf) => {
+    setLoading(prev => ({ ...prev, exams: true }));
+    setError(null);
+    
     try {
-      setLoading(prev => ({ ...prev, exams: true }));
-      setError(null);
-      
+      console.log('🧪 Loading exam data for CF:', cf);
       const response = await analyticsAPI.getExamList(cf);
       
-      if (response.success) {
-        setExamList(response.exam_summaries || []);
-        console.log(`Loaded ${response.exam_summaries?.length || 0} exams`);
+      if (response.success && response.exam_summaries) {
+        setExamList(response.exam_summaries);
+        console.log(`✅ Loaded ${response.exam_summaries.length} exam types`);
       } else {
-        throw new Error("Failed to load exam list");
+        setExamList([]);
+        console.warn('No exam data found');
       }
       
-    } catch (err) {
-      console.error('Error loading exam list:', err);
+    } catch (error) {
+      console.error('Error loading exam data:', error);
       setError({
-        type: 'EXAM_LOAD_ERROR',
-        message: 'Errore caricamento esami',
-        details: err.message
+        type: 'DATA_LOAD_ERROR',
+        message: 'Errore durante il caricamento degli esami disponibili',
+        details: error.message
       });
+      setExamList([]);
     } finally {
       setLoading(prev => ({ ...prev, exams: false }));
     }
   };
   
   const loadSottanalisi = async (cf, examKey) => {
+    setLoading(prev => ({ ...prev, sottanalisi: true }));
+    
     try {
-      setLoading(prev => ({ ...prev, sottanalisi: true }));
-      setSottanalisiList([]);
-      setSelectedSottanalisi('');
-      setChartData(null);
-      
+      console.log('🔬 Loading sottanalisi for exam:', examKey);
       const response = await analyticsAPI.getSottanalisi(cf, examKey);
       
-      if (response.success) {
-        setSottanalisiList(response.sottanalisi || []);
-        console.log(`Loaded ${response.sottanalisi?.length || 0} sottanalisi for ${examKey}`);
+      if (response.success && response.sottanalisi) {
+        setSottanalisiList(response.sottanalisi);
+        console.log(`✅ Loaded ${response.sottanalisi.length} sottanalisi`);
       } else {
-        throw new Error("Failed to load sottanalisi");
+        setSottanalisiList([]);
+        console.warn('No sottanalisi found');
       }
       
-    } catch (err) {
-      console.error('Error loading sottanalisi:', err);
+    } catch (error) {
+      console.error('Error loading sottanalisi:', error);
       setError({
-        type: 'SOTTANALISI_LOAD_ERROR',
-        message: 'Errore caricamento parametri',
-        details: err.message
+        type: 'SOTTANALISI_ERROR',
+        message: 'Errore durante il caricamento dei parametri',
+        details: error.message
       });
+      setSottanalisiList([]);
     } finally {
       setLoading(prev => ({ ...prev, sottanalisi: false }));
     }
   };
   
-  const loadChartData = async (cf, examKey, sottanalisi) => {
+  const loadChartData = async (cf, examKey, dessottoanalisi) => {
+    setLoading(prev => ({ ...prev, chart: true }));
+    
     try {
-      setLoading(prev => ({ ...prev, chart: true }));
-      setChartData(null);
-      
-      const response = await analyticsAPI.getChartData(cf, examKey, sottanalisi);
+      console.log('📊 Loading chart data for:', { examKey, dessottoanalisi });
+      const response = await analyticsAPI.getChartData(cf, examKey, dessottoanalisi);
       
       if (response.success) {
         setChartData(response);
-        console.log(`Loaded chart data: ${response.total_points} points, ${response.anomaly_points} anomalies`);
+        console.log(`✅ Loaded chart with ${response.chart_data.length} data points`);
       } else {
-        throw new Error("Failed to load chart data");
+        setChartData(null);
+        console.warn('No chart data available');
       }
       
-    } catch (err) {
-      console.error('Error loading chart data:', err);
+    } catch (error) {
+      console.error('Error loading chart data:', error);
       setError({
-        type: 'CHART_LOAD_ERROR',
-        message: 'Errore caricamento grafico',
-        details: err.message
+        type: 'CHART_ERROR',
+        message: 'Errore durante il caricamento del grafico',
+        details: error.message
       });
+      setChartData(null);
     } finally {
       setLoading(prev => ({ ...prev, chart: false }));
     }
@@ -175,12 +171,14 @@ const App = () => {
   // EVENT HANDLERS
   // ================================
   
-  const handleExamChange = (e) => {
+  const handleExamChange = async (e) => {
     const examKey = e.target.value;
     setSelectedExam(examKey);
+    setSelectedSottanalisi('');
+    setChartData(null);
     
     if (examKey) {
-      loadSottanalisi(codiceFiscale, examKey);
+      await loadSottanalisi(codiceFiscale, examKey);
     } else {
       setSottanalisiList([]);
       setSelectedSottanalisi('');
@@ -211,127 +209,29 @@ const App = () => {
     if (active && payload && payload.length) {
         const data = payload[0].payload;
         return (
-        <div style={{
-            backgroundColor: 'white',
-            border: '2px solid #e5e7eb',
-            borderRadius: '12px',
-            padding: '15px',
-            boxShadow: '0 10px 20px rgba(0,0,0,0.1)',
-            minWidth: '220px'
-        }}>
-            <p style={{ fontWeight: '600', marginBottom: '8px', color: '#1f2937' }}>
+        <div className="chart-tooltip">
+            <p className="tooltip-date">
             <strong>Data:</strong> {label}
             </p>
-            <p style={{ marginBottom: '5px', color: '#374151' }}>
+            <p className="tooltip-value">
             <strong>Valore:</strong> {data.valore_originale} {data.unit}
             </p>
-            <p style={{ marginBottom: '5px', color: '#374151' }}>
+            <p className="tooltip-range">
             <strong>Range:</strong> {data.range || 'N/D'}
             </p>
-            <p style={{ marginBottom: '5px', color: '#374151' }}>
+            <p className="tooltip-structure">
             <strong>Struttura:</strong> {data.struttura}
             </p>
-            <p style={{ marginBottom: '5px', color: '#6b7280', fontSize: '12px' }}>
+            <p className="tooltip-code">
             <strong>Codice:</strong> {data.codoffering}
             </p>
-            <p style={{ 
-            color: data.anomaly ? '#dc2626' : '#059669',
-            fontWeight: '600' 
-            }}>
-            <strong>Anomalia:</strong> {data.anomaly ? 'SÌ' : 'NO'} ({data.flag})
+            <p className={`tooltip-anomaly ${data.anomaly ? 'anomaly' : 'normal'}`}>
+            <strong>Anomalia:</strong> {data.anomaly ? 'Sì ⚠️' : 'No ✅'}
             </p>
         </div>
         );
     }
     return null;
-  };
-  
-  const renderChart = () => {
-    if (!chartData || !chartData.chart_data || chartData.chart_data.length === 0) {
-      return (
-        <div className="empty-state">
-          <div className="empty-state-icon">📊</div>
-          <div className="empty-state-title">Nessun dato disponibile</div>
-          <div className="empty-state-message">
-            Seleziona un esame e un parametro per visualizzare il grafico
-          </div>
-        </div>
-      );
-    }
-    
-    // Sort data by date for proper line chart visualization
-    const sortedData = [...chartData.chart_data].sort((a, b) => 
-      utils.parseDate(a.date) - utils.parseDate(b.date)
-    );
-    
-    return (
-      <>
-        {/* Statistics Cards */}
-        <div className="stats-container">
-          <div className="stat-card">
-            <div className="stat-value">{chartData.total_points}</div>
-            <div className="stat-label">Valori Totali</div>
-          </div>
-          <div className="stat-card">
-            <div className={`stat-value ${chartData.anomaly_points > 0 ? 'anomaly-stat' : 'normal-stat'}`}>
-              {chartData.anomaly_points}
-            </div>
-            <div className="stat-label">Anomalie</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-value">
-              {chartData.anomaly_percentage}%
-            </div>
-            <div className="stat-label">% Anomalie</div>
-          </div>
-        </div>
-        
-        {/* Chart */}
-        <div className="chart-container">
-          <div className="chart-title">
-            🧪 {chartData.dessottoanalisi} nel tempo
-          </div>
-          
-          <div className="chart-content">
-            <ResponsiveContainer width="100%" height={400}>
-                <LineChart data={sortedData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis 
-                    dataKey="date" 
-                    tick={{ fontSize: 12, fill: '#6b7280' }}
-                    stroke="#9ca3af"
-                    />
-                    <YAxis 
-                    tick={{ fontSize: 12, fill: '#6b7280' }}
-                    stroke="#9ca3af"
-                    />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Line 
-                    type="monotone" 
-                    dataKey="value" 
-                    stroke="#6b7280"  // GREY LINE
-                    strokeWidth={2}
-                    dot={(props) => {
-                        const { payload } = props;
-                        return (
-                        <circle
-                            cx={props.cx}
-                            cy={props.cy}
-                            r={4}
-                            fill={payload?.anomaly ? '#dc2626' : '#059669'}  // RED/GREEN POINTS
-                            stroke={payload?.anomaly ? '#dc2626' : '#059669'}
-                            strokeWidth={2}
-                        />
-                        );
-                    }}
-                    connectNulls={false}
-                    />
-                </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </>
-    );
   };
   
   // ================================
@@ -346,7 +246,7 @@ const App = () => {
         <div className="error-title">⚠️ Errore</div>
         <div className="error-message">{error.message}</div>
         {error.details && (
-          <div style={{ fontSize: '14px', marginBottom: '20px', opacity: 0.8 }}>
+          <div className="error-details">
             {error.details}
           </div>
         )}
@@ -362,7 +262,7 @@ const App = () => {
       return (
         <div className="loading-container">
           <div className="loading-spinner"></div>
-          Caricamento esami disponibili...
+          <p>Caricamento esami disponibili...</p>
         </div>
       );
     }
@@ -376,7 +276,10 @@ const App = () => {
         <div className="dropdown-container">
           {/* First Dropdown - Exam Types (desesame) */}
           <div className="dropdown-group">
-            <label className="dropdown-label">Tipo Esame</label>
+            <label className="dropdown-label">
+              <span className="label-icon">🧪</span>
+              Tipo Esame
+            </label>
             <select 
               className="dropdown"
               value={selectedExam}
@@ -400,11 +303,14 @@ const App = () => {
               ))}
             </select>
           </div>
-          
-          {/* Second Dropdown - Parameters (dessottoanalisi) */}
+
+          {/* Second Dropdown - Sottanalisi */}
           <div className="dropdown-group">
-            <label className="dropdown-label">Parametro Specifico</label>
-            <select 
+            <label className="dropdown-label">
+              <span className="label-icon">🔬</span>
+              Parametro Specifico
+            </label>
+            <select
               className="dropdown"
               value={selectedSottanalisi}
               onChange={handleSottanalisiChange}
@@ -433,6 +339,88 @@ const App = () => {
     );
   };
   
+  const renderChart = () => {
+    if (!chartData || !chartData.chart_data || chartData.chart_data.length === 0) {
+      return (
+        <div className="no-chart">
+          <div className="no-chart-icon">📊</div>
+          <h3>Seleziona i parametri per visualizzare il grafico</h3>
+          <p>Scegli un tipo di esame e un parametro specifico per generare la visualizzazione dei dati.</p>
+        </div>
+      );
+    }
+    
+    const hasAnomalies = chartData.anomaly_points > 0;
+    const chartColor = chartData.chart_color || (hasAnomalies ? '#dc2626' : '#059669');
+    
+    return (
+      <>
+        {/* Statistics Cards */}
+        <div className="stats-container">
+          <div className="stat-card">
+            <div className="stat-value">{chartData.total_points}</div>
+            <div className="stat-label">Punti Totali</div>
+          </div>
+          <div className="stat-card">
+            <div className={`stat-value ${hasAnomalies ? 'anomaly-stat' : 'normal-stat'}`}>
+              {chartData.anomaly_points}
+            </div>
+            <div className="stat-label">Anomalie</div>
+          </div>
+          <div className="stat-card">
+            <div className={`stat-value ${hasAnomalies ? 'anomaly-stat' : 'normal-stat'}`}>
+              {chartData.anomaly_percentage.toFixed(1)}%
+            </div>
+            <div className="stat-label">% Anomalie</div>
+          </div>
+        </div>
+
+        {/* Chart */}
+        <div className="chart-container">
+          <div className="chart-title">
+            📈 {selectedSottanalisi} - Andamento Temporale
+          </div>
+          <div className="chart-wrapper">
+            <ResponsiveContainer width="100%" height={400}>
+                <LineChart data={chartData.chart_data}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis 
+                    dataKey="date" 
+                    stroke="#6b7280"
+                    fontSize={12}
+                    tickMargin={8}
+                />
+                <YAxis 
+                    stroke="#6b7280"
+                    fontSize={12}
+                    tickMargin={8}
+                />
+                <Tooltip content={<CustomTooltip />} />
+                <Line 
+                    type="monotone"
+                    dataKey="value"
+                    stroke={chartColor}
+                    strokeWidth={2}
+                    dot={(payload) => (
+                        <circle 
+                            cx={payload.cx} 
+                            cy={payload.cy} 
+                            r={5}
+                            fill={payload?.payload?.anomaly ? '#dc2626' : '#059669'}
+                            stroke={payload?.payload?.anomaly ? '#dc2626' : '#059669'}
+                            strokeWidth={2}
+                        />
+                        )}
+                    connectNulls={false}
+                    />
+                </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </>
+    );
+  };
+  
   // ================================
   // MAIN RENDER
   // ================================
@@ -441,10 +429,6 @@ const App = () => {
     return (
       <div className="analytics-app">
         <div className="analytics-container">
-          <div className="header">
-            <h1>Analisi Laboratorio</h1>
-            <p>Sistema ASL - Visualizzazione Dati Medici</p>
-          </div>
           {renderError()}
         </div>
       </div>
@@ -455,10 +439,6 @@ const App = () => {
     return (
       <div className="analytics-app">
         <div className="analytics-container">
-          <div className="header">
-            <h1>Analisi Laboratorio</h1>
-            <p>Paziente: {codiceFiscale}</p>
-          </div>
           {renderLoading()}
         </div>
       </div>
@@ -468,13 +448,7 @@ const App = () => {
   return (
     <div className="analytics-app">
       <div className="analytics-container">
-        {/* Header */}
-        <div className="header">
-          <h1>Analisi Laboratorio</h1>
-          <p>Paziente: {codiceFiscale} | Medico: {doctorId}</p>
-        </div>
-        
-        {/* Content */}
+        {/* Content - No Header */}
         <div className="content">
           {/* Dropdowns */}
           {renderDropdowns()}
@@ -484,7 +458,7 @@ const App = () => {
             {loading.chart ? (
               <div className="loading-container">
                 <div className="loading-spinner"></div>
-                Generazione grafico in corso...
+                <p>Generazione grafico in corso...</p>
               </div>
             ) : (
               renderChart()

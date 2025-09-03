@@ -598,15 +598,40 @@ export const InnovativeTimeline = ({ appointments, patientId, doctorId, onTimeli
 // 🔥 STEP 2: PROFESSIONAL TABBED SECTION
 // ================================
 
+// REPLACE the ProfessionalTabs component in frontend/timeline-app/src/components.js with this:
+
+// COMPLETE ProfessionalTabs component - Replace the entire component in your components.js file
+
 const ProfessionalTabs = ({ patientId, doctorId }) => {
   const [activeTab, setActiveTab] = useState('refertazione');
   const [referto, setReferto] = useState('');
   const [diario, setDiario] = useState('');
   
-  // Analytics iframe state - embedded in tab
+  // Analytics iframe state - simplified (no minimize/maximize state)
   const [analyticsLoaded, setAnalyticsLoaded] = useState(false);
-  const [isAnalyticsMinimized, setIsAnalyticsMinimized] = useState(false);
-  const [isAnalyticsMaximized, setIsAnalyticsMaximized] = useState(false);
+
+  // CSS animation for AI sparkles
+  const sparkleStyle = `
+    @keyframes sparkle-pulse {
+      0% { 
+        transform: scale(1) rotate(0deg); 
+        opacity: 1; 
+      }
+      50% { 
+        transform: scale(1.2) rotate(180deg); 
+        opacity: 0.8; 
+      }
+      100% { 
+        transform: scale(1) rotate(360deg); 
+        opacity: 1; 
+      }
+    }
+    .ai-sparkle { 
+      animation: sparkle-pulse 2s ease-in-out infinite;
+      display: inline-block;
+      filter: drop-shadow(0 0 4px rgba(251, 191, 36, 0.6));
+    }
+  `;
 
   const tabs = [
     { id: 'refertazione', label: 'Refertazione', icon: '📄', color: '#3b82f6' },
@@ -637,87 +662,138 @@ const ProfessionalTabs = ({ patientId, doctorId }) => {
     }
   };
 
-  // Voice recording handler (unchanged)
   const handleVoiceRecording = async () => {
     try {
       console.log('🎤 Starting voice recording workflow...');
+      
       if (!doctorId || !patientId) {
         alert('Errore: Dati sessione mancanti. Ricarica la pagina.');
         return;
       }
-      alert('Funzione vocale in sviluppo - Contatta il team tecnico per l\'integrazione Melody.');
+
+      console.log('📡 Creating Melody workflow...');
+
+      const requestData = {
+        doctor_id: doctorId,
+        patient_cf: patientId,
+        return_url: window.location.href, // This URL will bring doctor back to chronic platform
+        platform: 'chronic'
+      };
+
+      const API_BASE = process.env.REACT_APP_API_GATEWAY_URL || 'http://localhost:8080';
+      const response = await fetch(`${API_BASE}/api/timeline/melody/create-voice-workflow`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(requestData),
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('❌ Melody workflow creation failed:', errorData);
+        
+        if (response.status === 503) {
+          alert('⚠️ Servizio Melody temporaneamente non disponibile. Riprova tra qualche minuto.');
+        } else {
+          alert(`❌ Errore durante la creazione del workflow Melody: ${errorData.detail || 'Errore sconosciuto'}`);
+        }
+        return;
+      }
+
+      const workflowData = await response.json();
+      console.log('✅ Melody workflow created:', workflowData);
+
+      if (workflowData.success && workflowData.workflow_url) {
+        console.log('🚀 Navigating to Melody workflow in same tab:', workflowData.workflow_url);
+        
+        // FIXED: Navigate to Melody in the same tab (not new window)
+        window.location.href = workflowData.workflow_url;
+        
+      } else {
+        alert('❌ Errore nella risposta del servizio Melody.');
+      }
+
     } catch (error) {
-      console.error('Errore refertazione vocale:', error);
-      alert('Errore durante la refertazione vocale. Riprova più tardi.');
+      console.error('❌ Voice recording error:', error);
+      if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        alert('❌ Errore di connessione. Verifica la connessione di rete.');
+      } else {
+        alert('❌ Errore durante l\'avvio del workflow vocale.');
+      }
     }
   };
 
+  // Render tab content based on active tab
   const renderTabContent = () => {
     switch (activeTab) {
       case 'refertazione':
         return (
-          <div style={{
-            background: tabContentStyles.refertazione.background,
-            border: `2px solid ${tabContentStyles.refertazione.borderColor}`,
-            borderRadius: '20px',
-            padding: '30px',
-            minHeight: '400px'
-          }}>
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '20px'
-            }}>
-              <h4 style={{
-                margin: '0',
-                fontSize: '20px',
-                fontWeight: '700',
-                color: '#1e40af',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px'
-              }}>
-                📄 Referto Medico
-              </h4>
-              
+          <div style={{...tabContentStyles.refertazione, padding: '35px', borderRadius: '16px', border: '2px solid', borderColor: tabContentStyles.refertazione.borderColor}}>
+            {/* Add CSS styles */}
+            <style>{sparkleStyle}</style>
+            
+            <div style={{marginBottom: '25px'}}>
               <button
                 onClick={handleVoiceRecording}
                 style={{
-                  background: 'linear-gradient(135deg, #16a34a, #15803d)',
+                  padding: '12px 24px',
+                  background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
                   color: 'white',
                   border: 'none',
-                  padding: '8px 16px',
-                  borderRadius: '8px',
-                  fontSize: '14px',
+                  borderRadius: '12px',
+                  fontSize: '15px',
                   fontWeight: '600',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px',
-                  transition: 'all 0.2s ease'
+                  gap: '8px',
+                  boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)',
+                  transition: 'all 0.3s ease',
+                  marginBottom: '20px'
                 }}
-                onMouseOver={(e) => e.target.style.transform = 'scale(1.05)'}
-                onMouseOut={(e) => e.target.style.transform = 'scale(1.0)'}
+                onMouseEnter={(e) => {
+                  e.target.style.transform = 'translateY(-2px)';
+                  e.target.style.boxShadow = '0 6px 20px rgba(59, 130, 246, 0.4)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.transform = 'translateY(0px)';
+                  e.target.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.3)';
+                }}
               >
-                🎤 Refertazione Vocale
+                {/* CHANGED: AI Sparkle instead of microphone */}
+                <span className="ai-sparkle">✨</span>
+                Registrazione Vocale AI
               </button>
             </div>
             
             <textarea
               value={referto}
               onChange={(e) => setReferto(e.target.value)}
-              placeholder="Scrivi qui il referto medico oppure utilizza la refertazione vocale..."
+              placeholder="Inserisci le note del referto medico..."
               style={{
                 width: '100%',
-                minHeight: '300px',
-                padding: '15px',
+                height: '400px',
+                padding: '20px',
                 border: '2px solid rgba(59, 130, 246, 0.2)',
                 borderRadius: '12px',
                 fontSize: '16px',
                 fontFamily: 'inherit',
+                lineHeight: '1.6',
                 resize: 'vertical',
-                outline: 'none'
+                backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                transition: 'all 0.3s ease'
+              }}
+              onFocus={(e) => {
+                e.target.style.borderColor = '#3b82f6';
+                e.target.style.backgroundColor = 'rgba(255, 255, 255, 0.95)';
+                e.target.style.boxShadow = '0 0 0 4px rgba(59, 130, 246, 0.1)';
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = 'rgba(59, 130, 246, 0.2)';
+                e.target.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
+                e.target.style.boxShadow = 'none';
               }}
             />
           </div>
@@ -725,40 +801,33 @@ const ProfessionalTabs = ({ patientId, doctorId }) => {
 
       case 'diario':
         return (
-          <div style={{
-            background: tabContentStyles.diario.background,
-            border: `2px solid ${tabContentStyles.diario.borderColor}`,
-            borderRadius: '20px',
-            padding: '30px',
-            minHeight: '400px'
-          }}>
-            <h4 style={{
-              margin: '0 0 20px 0',
-              fontSize: '20px',
-              fontWeight: '700',
-              color: '#059669',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px'
-            }}>
-              📝 Diario Clinico
-            </h4>
+          <div style={{...tabContentStyles.diario, padding: '35px', borderRadius: '16px', border: '2px solid', borderColor: tabContentStyles.diario.borderColor}}>
             <textarea
               value={diario}
               onChange={(e) => setDiario(e.target.value)}
+              placeholder="Diario clinico del paziente..."
               style={{
                 width: '100%',
-                minHeight: '320px',
-                padding: '25px',
-                border: '2px solid rgba(16, 185, 129, 0.15)',
-                borderRadius: '16px',
+                height: '400px',
+                padding: '20px',
+                border: '2px solid rgba(16, 185, 129, 0.2)',
+                borderRadius: '12px',
                 fontSize: '16px',
-                lineHeight: '1.6',
                 fontFamily: 'inherit',
-                backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                lineHeight: '1.6',
                 resize: 'vertical',
-                outline: 'none',
+                backgroundColor: 'rgba(255, 255, 255, 0.8)',
                 transition: 'all 0.3s ease'
+              }}
+              onFocus={(e) => {
+                e.target.style.borderColor = '#10b981';
+                e.target.style.backgroundColor = 'rgba(255, 255, 255, 0.95)';
+                e.target.style.boxShadow = '0 0 0 4px rgba(16, 185, 129, 0.1)';
+              }}
+              onBlur={(e) => {
+                e.target.style.borderColor = 'rgba(16, 185, 129, 0.2)';
+                e.target.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
+                e.target.style.boxShadow = 'none';
               }}
             />
           </div>
@@ -766,27 +835,14 @@ const ProfessionalTabs = ({ patientId, doctorId }) => {
 
       case 'esami':
         return (
-          <div style={{
-            background: tabContentStyles.esami.background,
-            border: `2px solid ${tabContentStyles.esami.borderColor}`,
-            borderRadius: '20px',
-            padding: '0',
-            minHeight: '600px',
-            position: 'relative',
-            overflow: 'hidden'
-          }}>
+          <div style={{...tabContentStyles.esami, borderRadius: '16px', border: '2px solid', borderColor: tabContentStyles.esami.borderColor, padding: '0', overflow: 'hidden'}}>
             {analyticsLoaded ? (
               <EmbeddedAnalyticsWindow 
                 patientId={patientId}
                 doctorId={doctorId}
-                isMinimized={isAnalyticsMinimized}
-                isMaximized={isAnalyticsMaximized}
-                onMinimize={() => setIsAnalyticsMinimized(!isAnalyticsMinimized)}
-                onMaximize={() => setIsAnalyticsMaximized(!isAnalyticsMaximized)}
-                onClose={() => setAnalyticsLoaded(false)}
               />
             ) : (
-              // Empty space - no button, analytics loads automatically when tab is clicked
+              // Loading state
               <div style={{
                 height: '600px',
                 display: 'flex',
@@ -862,131 +918,40 @@ const ProfessionalTabs = ({ patientId, doctorId }) => {
 };
 
 
-// Add this after the ProfessionalTabs component
 const EmbeddedAnalyticsWindow = ({ 
   patientId, 
-  doctorId, 
-  isMinimized, 
-  isMaximized,
-  onMinimize,
-  onMaximize,
-  onClose 
+  doctorId 
 }) => {
   const analyticsUrl = `http://localhost:3011?cf=${patientId}&doctor_id=${doctorId}&embedded=true`;
   
-  const windowHeight = isMinimized ? '60px' : (isMaximized ? '800px' : '600px');
-  
   return (
     <div style={{
-      height: windowHeight,
-      transition: 'all 0.3s ease',
+      height: '800px', // Large size by default
       position: 'relative',
-      background: '#ffffff',
-      borderRadius: '20px',
-      overflow: 'hidden',
-      boxShadow: '0 10px 30px rgba(0, 0, 0, 0.1)'
+      background: 'transparent',
+      borderRadius: '0px', // No border radius for seamless integration
+      overflow: 'hidden'
     }}>
-      {/* Window Controls Bar */}
-      <div style={{
-        background: 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)',
-        padding: '12px 20px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        color: 'white'
-      }}>
-        <h4 style={{
-          margin: 0,
-          fontSize: '16px',
-          fontWeight: '600',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px'
-        }}>
-          🧪 Analytics Laboratorio
-        </h4>
-        
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button
-            onClick={onMinimize}
-            style={{
-              width: '24px',
-              height: '24px',
-              borderRadius: '50%',
-              border: 'none',
-              background: '#fbbf24',
-              color: 'white',
-              cursor: 'pointer',
-              fontSize: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-            title={isMinimized ? "Expand" : "Minimize"}
-          >
-            {isMinimized ? '▲' : '–'}
-          </button>
-          
-          <button
-            onClick={onMaximize}
-            style={{
-              width: '24px',
-              height: '24px',
-              borderRadius: '50%',
-              border: 'none',
-              background: '#10b981',
-              color: 'white',
-              cursor: 'pointer',
-              fontSize: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-            title={isMaximized ? "Restore" : "Maximize"}
-          >
-            {isMaximized ? '⧉' : '□'}
-          </button>
-          
-          <button
-            onClick={onClose}
-            style={{
-              width: '24px',
-              height: '24px',
-              borderRadius: '50%',
-              border: 'none',
-              background: '#ef4444',
-              color: 'white',
-              cursor: 'pointer',
-              fontSize: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-            title="Close"
-          >
-            ×
-          </button>
-        </div>
-      </div>
+      {/* NO HEADER BAR - NO WINDOW CONTROLS */}
       
-      {/* Analytics iframe */}
-      {!isMinimized && (
-        <iframe
-          src={analyticsUrl}
-          style={{
-            width: '100%',
-            height: `calc(${windowHeight} - 48px)`,
-            border: 'none',
-            background: '#f8fafc'
-          }}
-          title="Analytics Laboratorio"
-          allow="clipboard-read; clipboard-write"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-downloads"
-        />
-      )}
+      {/* Direct iframe - no wrapper */}
+      <iframe
+        src={analyticsUrl}
+        style={{
+          width: '100%',
+          height: '100%',
+          border: 'none',
+          background: 'transparent'
+        }}
+        title="Analytics Laboratorio"
+        allow="clipboard-read; clipboard-write"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-downloads"
+      />
     </div>
   );
 };
+
+
 // ================================
 // 🔥 STEP 2: UPDATED PATIENT TIMELINE - COMPRESSED INFO + TABS
 // ================================
