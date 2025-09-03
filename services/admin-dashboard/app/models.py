@@ -176,26 +176,38 @@ class UserProfileResponse(BaseModel):
 # ================================
 
 class ExamCatalogCreate(BaseModel):
-    """Request model for creating exam catalog entry"""
+    """Request model for creating exam catalog entry - CORRECTED FIELD NAMES"""
     codice_catalogo: str = Field(..., description="Official catalog code (e.g., 90271.003)")
-    codice_branca: str = Field(..., description="Branch code (e.g., 90.27.1)")
-    nome_esame: str = Field(..., description="Exam name (e.g., GLUCOSIO [Siero-Plasma])")
-    struttura_codice: str = Field(..., description="Structure code (e.g., 011)")
+    codicereg: str = Field(..., description="CODICEREG from Excel (e.g., 90.27.1)")
+    nome_esame: str = Field(..., description="Official exam name")
+    codice_branca: str = Field(default="011", description="Medical branch code - always 011 for laboratory")
+    branch_description: Optional[str] = Field(default="Branca Laboratorio d'Analisi", description="Branch description")
     descrizione: Optional[str] = Field(None, description="Additional description")
     is_enabled: bool = Field(True, description="Is exam enabled for doctors")
 
 class ExamCatalogResponse(BaseModel):
-    """Response model for exam catalog entry"""
+    """Response model for exam catalog entry - CORRECTED FIELD NAMES"""
     id: str
     codice_catalogo: str
-    codice_branca: str
+    codicereg: str  # CORRECTED: This is CODICEREG (e.g., 90.27.1)
     nome_esame: str
-    struttura_codice: str
+    codice_branca: str  # CORRECTED: This is the actual branch code (e.g., "011")
+    branch_description: Optional[str]
     descrizione: Optional[str]
     is_enabled: bool
     created_at: datetime
     updated_at: datetime
     mappings_count: int = 0  # Number of Wirgilio mappings
+
+# Add branch constants
+MEDICAL_BRANCHES = {
+    "002": "Branca Cardiologia",
+    "008": "Branca Diagnostica per Immagini", 
+    "009": "Branca Diabetologia",
+    "011": "Branca Laboratorio d'Analisi",
+    "015": "Branca Neurologia",
+    "016": "Branca Oculistica"
+}
 
 class ExamMappingCreate(BaseModel):
     """Request model for creating exam mapping"""

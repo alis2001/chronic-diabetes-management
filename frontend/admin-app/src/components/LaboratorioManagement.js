@@ -13,31 +13,33 @@ const LaboratorioManagement = () => {
   const [overview, setOverview] = useState({});
   const [catalog, setCatalog] = useState([]);
   const [mappings, setMappings] = useState([]);
-  
+  const [catalogOptions, setCatalogOptions] = useState([]);
+
   // Modal states
   const [showAddExamModal, setShowAddExamModal] = useState(false);
   const [showAddMappingModal, setShowAddMappingModal] = useState(false);
   
-  // Form states
   const [examForm, setExamForm] = useState({
-    codice_catalogo: '',
-    codice_branca: '',
-    nome_esame: '',
-    struttura_codice: '011',
-    descrizione: ''
-  });
+    codice_catalogo: '',       
+    codicereg: '',            
+    nome_esame: '',           
+    codice_branca: '011',     
+    descrizione: ''           
+    });
   
   const [mappingForm, setMappingForm] = useState({
-    codice_catalogo: '',
-    struttura_nome: '',
-    codoffering_wirgilio: '',
-    nome_esame_wirgilio: ''
-  });
+    codice_catalogo: '',           // Auto-filled from dropdown
+    selected_exam: null,           // Full exam object from dropdown
+    struttura_nome: '',           // Manual entry
+    codoffering_wirgilio: '',     // Manual entry  
+    nome_esame_wirgilio: ''       // Manual entry - will be UPPERCASE
+    });
 
   // FIXED: Load data on component mount and tab changes
   useEffect(() => {
     console.log('🔄 Tab changed to:', activeTab);
     loadOverviewData();
+    loadCatalogOptions(); // ADD THIS LINE
     if (activeTab === 'catalog') loadCatalogData();
     if (activeTab === 'mappings') loadMappingsData();
   }, [activeTab]);
@@ -57,6 +59,67 @@ const LaboratorioManagement = () => {
       setLoading(false);
     }
   };
+
+  const loadCatalogOptions = async () => {
+    try {
+        console.log('📡 Loading catalog options...');
+        const result = await adminAPI.get('/dashboard/laboratorio/catalogo-for-mapping');
+        console.log('✅ Catalog options loaded:', result);
+        setCatalogOptions(result.options || []);
+    } catch (error) {
+        console.error('❌ Error loading catalog options:', error);
+        setCatalogOptions([]);
+    }
+  };
+
+  const renderExamSelector = () => (
+    <div style={styles.formGroup}>
+        <label style={styles.label}>Seleziona Esame dal Catalogo *</label>
+        <select
+        style={{
+            ...styles.input,
+            backgroundColor: mappingForm.selected_exam ? '#f0f9ff' : '#ffffff'
+        }}
+        value={mappingForm.codice_catalogo}
+        onChange={(e) => {
+            const selectedOption = catalogOptions.find(opt => opt.value === e.target.value);
+            setMappingForm({
+            ...mappingForm,
+            codice_catalogo: e.target.value,
+            selected_exam: selectedOption
+            });
+        }}
+        required
+        >
+        <option value="">-- Seleziona un esame dal catalogo --</option>
+        {catalogOptions.map(option => (
+            <option key={option.value} value={option.value}>
+            {option.label}
+            </option>
+        ))}
+        </select>
+        
+        {mappingForm.selected_exam && (
+        <div style={{
+            marginTop: '8px', 
+            padding: '12px', 
+            backgroundColor: '#f0f9ff', 
+            borderRadius: '8px',
+            border: '1px solid #bfdbfe',
+            fontSize: '13px'
+        }}>
+            <div style={{fontWeight: '600', color: '#1e40af', marginBottom: '4px'}}>
+            ✅ Esame Selezionato:
+            </div>
+            <div><strong>Codice:</strong> {mappingForm.selected_exam.codice_catalogo}</div>
+            <div><strong>Nome:</strong> {mappingForm.selected_exam.nome_esame}</div>
+            <div><strong>Codice Reg:</strong> {mappingForm.selected_exam.codicereg}</div>
+            <div><strong>Branca:</strong> {mappingForm.selected_exam.codice_branca}</div>
+        </div>
+        )}
+    </div>
+    );
+
 
   const loadCatalogData = async () => {
     try {
@@ -158,29 +221,39 @@ const LaboratorioManagement = () => {
   const handleAddMapping = async (e) => {
     e.preventDefault();
     try {
-      setLoading(true);
-      console.log('📡 Adding mapping:', mappingForm);
-      await adminAPI.post('/dashboard/laboratorio/mappings', mappingForm);
-      
-      setMappingForm({
+        setLoading(true);
+        console.log('📡 Adding mapping:', mappingForm);
+        
+        // FORCE UPPERCASE for Wirgilio exam name
+        const mappingData = {
+        ...mappingForm,
+        nome_esame_wirgilio: mappingForm.nome_esame_wirgilio.toUpperCase() // FORCE UPPERCASE
+        };
+        
+        await adminAPI.post('/dashboard/laboratorio/mappings', mappingData);
+        
+        // Reset form
+        setMappingForm({
         codice_catalogo: '',
+        selected_exam: null,
         struttura_nome: '',
         codoffering_wirgilio: '',
         nome_esame_wirgilio: ''
-      });
-      setShowAddMappingModal(false);
-      
-      await loadMappingsData();
-      await loadOverviewData();
-      
-      alert('Mappatura creata con successo!');
+        });
+        setShowAddMappingModal(false);
+        
+        await loadMappingsData();
+        await loadOverviewData();
+        
+        alert('Mappatura creata con successo!');
     } catch (error) {
-      console.error('❌ Error adding mapping:', error);
-      alert('Errore durante la creazione della mappatura: ' + (error.message || error));
+        console.error('❌ Error adding mapping:', error);
+        alert('Errore durante la creazione mappatura: ' + (error.message || error));
     } finally {
-      setLoading(false);
+        setLoading(false);
     }
   };
+
 
   // FIXED: No conflicting styles - removed borderBottomColor
   const styles = {
@@ -565,15 +638,15 @@ const LaboratorioManagement = () => {
             </div>
             
             <div style={styles.formGroup}>
-              <label style={styles.label}>Codice Branca *</label>
-              <input
-                type="text"
-                style={styles.input}
-                value={examForm.codice_branca}
-                onChange={(e) => setExamForm({...examForm, codice_branca: e.target.value})}
-                placeholder="es. 90.27.1"
-                required
-              />
+                <label style={styles.label}>Codice Branca</label>
+                <input
+                    type="text"
+                    style={styles.input}
+                    value={examForm.codice_branca}
+                    onChange={(e) => setExamForm({...examForm, codice_branca: e.target.value})}
+                    placeholder="011"
+                    disabled // Always 011 for laboratory
+                />
             </div>
             
             <div style={styles.formGroup}>
@@ -589,14 +662,15 @@ const LaboratorioManagement = () => {
             </div>
             
             <div style={styles.formGroup}>
-              <label style={styles.label}>Codice Struttura</label>
-              <input
-                type="text"
-                style={styles.input}
-                value={examForm.struttura_codice}
-                onChange={(e) => setExamForm({...examForm, struttura_codice: e.target.value})}
-                placeholder="es. 011"
-              />
+                <label style={styles.label}>Codice Reg (CODICEREG) *</label>
+                <input
+                    type="text"
+                    style={styles.input}
+                    value={examForm.codicereg}
+                    onChange={(e) => setExamForm({...examForm, codicereg: e.target.value})}
+                    placeholder="es. 90.27.1"
+                    required
+                />
             </div>
             
             <div style={styles.formGroup}>
@@ -631,77 +705,137 @@ const LaboratorioManagement = () => {
     if (!showAddMappingModal) return null;
     
     return (
-      <div style={styles.modal} onClick={() => setShowAddMappingModal(false)}>
-        <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
-          <h3 style={{margin: '0 0 24px 0', fontSize: '20px'}}>Crea Mappatura Struttura</h3>
-          
-          <form onSubmit={handleAddMapping}>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Codice Catalogo *</label>
-              <input
-                type="text"
-                style={styles.input}
-                value={mappingForm.codice_catalogo}
-                onChange={(e) => setMappingForm({...mappingForm, codice_catalogo: e.target.value})}
-                placeholder="es. 90271.003"
-                required
-              />
-              <div style={{fontSize: '12px', color: '#6b7280', marginTop: '4px'}}>
-                Deve corrispondere a un esame esistente nel catalogo
-              </div>
-            </div>
+        <div style={styles.modal} onClick={() => setShowAddMappingModal(false)}>
+        <div style={{
+            ...styles.modalContent,
+            maxWidth: '600px',
+            width: '90%'
+        }} onClick={e => e.stopPropagation()}>
+            <h3 style={{margin: '0 0 24px 0', fontSize: '22px', color: '#1f2937'}}>
+            🔗 Crea Mappatura Struttura → Wirgilio
+            </h3>
             
+            <form onSubmit={handleAddMapping}>
+            {/* SMART EXAM SELECTOR */}
+            {renderExamSelector()}
+            
+            {/* STRUCTURE NAME */}
             <div style={styles.formGroup}>
-              <label style={styles.label}>Nome Struttura *</label>
-              <input
+                <label style={styles.label}>Nome Struttura Sanitaria *</label>
+                <input
                 type="text"
                 style={styles.input}
                 value={mappingForm.struttura_nome}
                 onChange={(e) => setMappingForm({...mappingForm, struttura_nome: e.target.value})}
-                placeholder="es. Napoli 1, Caserta, Roma Centro..."
+                placeholder="es. Ospedale Napoli 1, ASL Roma Centro, Lab Privato Milano"
                 required
-              />
+                />
+                <div style={{fontSize: '12px', color: '#6b7280', marginTop: '4px'}}>
+                Nome completo della struttura sanitaria che utilizza questo codoffering
+                </div>
             </div>
             
+            {/* WIRGILIO CODOFFERING */}
             <div style={styles.formGroup}>
-              <label style={styles.label}>Codoffering Wirgilio *</label>
-              <input
+                <label style={styles.label}>Codoffering Wirgilio *</label>
+                <input
                 type="text"
                 style={styles.input}
                 value={mappingForm.codoffering_wirgilio}
-                onChange={(e) => setMappingForm({...mappingForm, codoffering_wirgilio: e.target.value})}
-                placeholder="es. 301, 1054, 7792..."
+                onChange={(e) => setMappingForm({
+                    ...mappingForm, 
+                    codoffering_wirgilio: e.target.value.toUpperCase() // FORCE UPPERCASE
+                })}
+                placeholder="es. 301, 302, 1054, MY, TR, CM"
                 required
-              />
+                />
+                <div style={{fontSize: '12px', color: '#6b7280', marginTop: '4px'}}>
+                Codice identificativo dell'esame nel sistema Wirgilio (es: dall'API JSON)
+                </div>
             </div>
             
+            {/* WIRGILIO EXAM NAME */}
             <div style={styles.formGroup}>
-              <label style={styles.label}>Nome Esame Wirgilio *</label>
-              <input
+                <label style={styles.label}>Nome Esame Wirgilio *</label>
+                <input
                 type="text"
                 style={styles.input}
                 value={mappingForm.nome_esame_wirgilio}
-                onChange={(e) => setMappingForm({...mappingForm, nome_esame_wirgilio: e.target.value})}
-                placeholder="Nome dell'esame nel sistema Wirgilio"
+                onChange={(e) => setMappingForm({
+                    ...mappingForm, 
+                    nome_esame_wirgilio: e.target.value.toUpperCase() // FORCE UPPERCASE WHILE TYPING
+                })}
+                placeholder="es. GLUCOSIO, UREA, CREATININA, MIOGLOBINA"
                 required
-              />
+                />
+                <div style={{fontSize: '12px', color: '#6b7280', marginTop: '4px'}}>
+                Nome dell'esame come appare nel sistema Wirgilio (sempre maiuscolo)
+                </div>
             </div>
             
-            <div style={{display: 'flex', gap: '12px', justifyContent: 'flex-end'}}>
-              <button 
+            {/* PREVIEW MAPPING */}
+            {mappingForm.selected_exam && mappingForm.struttura_nome && mappingForm.codoffering_wirgilio && (
+                <div style={{
+                marginTop: '16px',
+                padding: '16px',
+                backgroundColor: '#f0fdf4',
+                borderRadius: '8px',
+                border: '1px solid #bbf7d0'
+                }}>
+                <h4 style={{margin: '0 0 12px 0', color: '#166534', fontSize: '16px'}}>
+                    📋 Anteprima Mapping:
+                </h4>
+                <div style={{
+                    padding: '12px',
+                    backgroundColor: '#ffffff',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    fontFamily: 'monospace'
+                }}>
+                    <div style={{marginBottom: '8px'}}>
+                    <strong>Catalogo:</strong> <code style={{backgroundColor: '#f3f4f6', padding: '2px 6px', borderRadius: '4px'}}>{mappingForm.selected_exam.codice_catalogo}</code> → <strong>{mappingForm.selected_exam.nome_esame}</strong>
+                    </div>
+                    <div style={{marginBottom: '8px'}}>
+                    <strong>Struttura:</strong> <span style={{color: '#0ea5e9'}}>{mappingForm.struttura_nome}</span>
+                    </div>
+                    <div style={{marginBottom: '8px'}}>
+                    <strong>Wirgilio:</strong> <code style={{backgroundColor: '#fef3c7', padding: '2px 6px', borderRadius: '4px', color: '#92400e'}}>{mappingForm.codoffering_wirgilio}</code> → <strong style={{color: '#dc2626'}}>{mappingForm.nome_esame_wirgilio}</strong>
+                    </div>
+                </div>
+                </div>
+            )}
+            
+            <div style={{display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px'}}>
+                <button 
                 type="button" 
                 style={styles.buttonSecondary}
-                onClick={() => setShowAddMappingModal(false)}
-              >
+                onClick={() => {
+                    setShowAddMappingModal(false);
+                    setMappingForm({
+                    codice_catalogo: '',
+                    selected_exam: null,
+                    struttura_nome: '',
+                    codoffering_wirgilio: '',
+                    nome_esame_wirgilio: ''
+                    });
+                }}
+                >
                 Annulla
-              </button>
-              <button type="submit" style={styles.buttonPrimary} disabled={loading}>
-                {loading ? 'Creando...' : 'Crea Mappatura'}
-              </button>
+                </button>
+                <button 
+                type="submit" 
+                style={{
+                    ...styles.buttonPrimary,
+                    opacity: (!mappingForm.selected_exam || !mappingForm.struttura_nome || !mappingForm.codoffering_wirgilio || !mappingForm.nome_esame_wirgilio) ? 0.6 : 1
+                }}
+                disabled={loading || !mappingForm.selected_exam || !mappingForm.struttura_nome || !mappingForm.codoffering_wirgilio || !mappingForm.nome_esame_wirgilio}
+                >
+                {loading ? 'Creando Mapping...' : '✅ Crea Mapping'}
+                </button>
             </div>
-          </form>
+            </form>
         </div>
-      </div>
+        </div>
     );
   };
 

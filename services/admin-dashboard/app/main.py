@@ -224,6 +224,96 @@ def create_application() -> FastAPI:
             logger.error(f"Error getting patients list: {str(e)}")
             raise HTTPException(status_code=500, detail="Error retrieving patients data")
 
+
+    # ================================
+    # BACKEND CHANGES - services/admin-dashboard/app/main.py
+    # ================================
+
+    # ADD THESE NEW ENDPOINTS TO YOUR EXISTING main.py
+
+    @app.get("/dashboard/laboratorio/catalogo-for-mapping")
+    async def get_catalog_for_mapping():
+        """Get simplified catalog list for mapping dropdown"""
+        try:
+            db = await get_database()
+            lab_repo = LaboratorioRepository(db)
+            
+            # Get only enabled catalog entries
+            catalog_data = await lab_repo.get_exam_catalog_list(enabled_only=True)
+            
+            # Format for dropdown with UPPERCASE exam names
+            dropdown_options = []
+            for exam in catalog_data:
+                dropdown_options.append({
+                    "value": exam["codice_catalogo"],
+                    "label": f"{exam['codice_catalogo']} - {exam['nome_esame'].upper()}",
+                    "codice_catalogo": exam["codice_catalogo"],
+                    "nome_esame": exam["nome_esame"].upper(),  # FORCE UPPERCASE
+                    "codicereg": exam.get("codicereg", ""),
+                    "codice_branca": exam.get("codice_branca", "011")
+                })
+            
+            return {
+                "success": True,
+                "options": dropdown_options,
+                "total": len(dropdown_options)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting catalog for mapping: {str(e)}")
+            raise HTTPException(status_code=500, detail="Error retrieving catalog options")
+
+    # MODIFY EXISTING MAPPING ENDPOINT TO ADD VALIDATION AND UPPERCASE
+    @app.post("/dashboard/laboratorio/mappings")
+    async def create_exam_mapping_enhanced(request: ExamMappingCreate):
+        """Create new exam mapping with validation and uppercase names"""
+        try:
+            db = await get_database()
+            lab_repo = LaboratorioRepository(db)
+            
+            # VALIDATE: Ensure codice_catalogo exists in catalog
+            catalog_exists = await lab_repo.catalog_collection.find_one({
+                "codice_catalogo": request.codice_catalogo,
+                "is_enabled": True
+            })
+            if not catalog_exists:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Codice catalogo {request.codice_catalogo} non trovato o disabilitato"
+                )
+            
+            # VALIDATE: Check for duplicate mapping
+            existing_mapping = await lab_repo.mapping_collection.find_one({
+                "codice_catalogo": request.codice_catalogo,
+                "struttura_nome": request.struttura_nome,
+                "codoffering_wirgilio": request.codoffering_wirgilio
+            })
+            if existing_mapping:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Mapping già esistente per questa combinazione"
+                )
+            
+            # FORCE UPPERCASE for exam names
+            mapping_data = request.dict()
+            mapping_data["nome_esame_wirgilio"] = mapping_data["nome_esame_wirgilio"].upper()
+            
+            mapping_id = await lab_repo.create_exam_mapping(mapping_data)
+            
+            logger.info(f"✅ Enhanced mapping created: {request.codice_catalogo} -> {request.struttura_nome} -> {request.codoffering_wirgilio}")
+            
+            return {
+                "success": True,
+                "message": f"Mapping creato: {catalog_exists['nome_esame'].upper()} -> {request.struttura_nome}",
+                "mapping_id": mapping_id
+            }
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error creating enhanced exam mapping: {str(e)}")
+            raise HTTPException(status_code=500, detail="Error creating exam mapping")
+
     # ================================
     # DOCTORS DATA ENDPOINTS  
     # ================================

@@ -297,7 +297,7 @@ export const authAPI = {
 };
 
 // ================================
-// ADMIN DASHBOARD API - REAL DATA ENDPOINTS
+// ADMIN DASHBOARD API - REAL DATA ENDPOINTS + GENERIC HTTP METHODS
 // ================================
 
 export const adminAPI = {
@@ -334,6 +334,100 @@ export const adminAPI = {
   // NEW: Get complete visits list with patient and doctor info
   getVisitsList: async () => {
     return await apiRequest('/api/admin/dashboard/visits/list');
+  },
+
+  getLaboratorioOptions: async () => {
+    return await apiRequest('/api/admin/dashboard/laboratorio/catalogo-for-mapping');
+  },
+
+  // ================================
+  // GENERIC HTTP METHODS - FIXES THE "adminAPI.get is not a function" ERROR
+  // ================================
+
+  // Generic GET method
+  get: async (endpoint) => {
+    return await apiRequest(`/api/admin${endpoint}`);
+  },
+
+  // Generic POST method
+  post: async (endpoint, data) => {
+    return await apiRequest(`/api/admin${endpoint}`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  },
+
+  // Generic PUT method
+  put: async (endpoint, data) => {
+    return await apiRequest(`/api/admin${endpoint}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  },
+
+  // Generic DELETE method
+  delete: async (endpoint) => {
+    return await apiRequest(`/api/admin${endpoint}`, {
+      method: 'DELETE'
+    });
+  },
+
+  // Generic PATCH method
+  patch: async (endpoint, data) => {
+    return await apiRequest(`/api/admin${endpoint}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data)
+    });
+  },
+
+  // ================================
+  // LABORATORIO SPECIFIC ENDPOINTS (Optional - but cleaner to use)
+  // ================================
+
+  // Get laboratorio overview
+  getLaboratorioOverview: async () => {
+    return await apiRequest('/api/admin/dashboard/laboratorio/overview');
+  },
+
+  // Get exam catalog
+  getExamCatalog: async () => {
+    return await apiRequest('/api/admin/dashboard/laboratorio/catalogo');
+  },
+
+  // Create exam catalog entry
+  createExamCatalog: async (examData) => {
+    return await apiRequest('/api/admin/dashboard/laboratorio/catalogo', {
+      method: 'POST',
+      body: JSON.stringify(examData)
+    });
+  },
+
+  // Get exam mappings
+  getExamMappings: async () => {
+    return await apiRequest('/api/admin/dashboard/laboratorio/mappings');
+  },
+
+  // Create exam mapping
+  createExamMapping: async (mappingData) => {
+    return await apiRequest('/api/admin/dashboard/laboratorio/mappings', {
+      method: 'POST',
+      body: JSON.stringify(mappingData)
+    });
+  },
+
+  // Delete exam catalog entry
+  deleteExamCatalog: async (codiceCatalogo) => {
+    return await apiRequest(`/api/admin/dashboard/laboratorio/catalogo/${codiceCatalogo}`, {
+      method: 'DELETE'
+    });
+  },
+
+  // Update exam catalog entry
+  updateExamCatalog: async (codiceCatalogo, updates) => {
+    return await apiRequest(`/api/admin/dashboard/laboratorio/catalogo/${codiceCatalogo}`, {
+      method: 'PUT',
+      body: JSON.stringify(updates)
+    });
   }
 };
 
