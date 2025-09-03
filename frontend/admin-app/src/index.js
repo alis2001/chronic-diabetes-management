@@ -553,6 +553,71 @@ const VisitsPage = () => {
   );
 };
 
+const LaboratorioPage = () => {
+  const [loading, setLoading] = useState(false);
+
+  const testAPI = async () => {
+    try {
+      setLoading(true);
+      const result = await fetch('/api/admin/dashboard/laboratorio/overview');
+      const data = await result.json();
+      console.log('🔬 Laboratorio API Response:', data);
+      alert('API test successful! Check console for response.');
+    } catch (error) {
+      console.error('API test failed:', error);
+      alert('API test failed. Check console for details.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div>
+      <div style={{ marginBottom: '24px' }}>
+        <h2 style={{ margin: '0 0 8px 0', fontSize: '24px', fontWeight: '600' }}>
+          🔬 Gestione Laboratorio d'Analisi
+        </h2>
+        <p style={{ margin: 0, color: '#666666' }}>
+          Sistema gestione catalogo esami e mappature Wirgilio
+        </p>
+      </div>
+      
+      <div style={{
+        background: '#f0f9ff', 
+        padding: '24px', 
+        borderRadius: '12px',
+        border: '1px solid #0ea5e9'
+      }}>
+        <h3 style={{ margin: '0 0 16px 0', color: '#0c4a6e' }}>
+          🚀 Backend APIs Implementate
+        </h3>
+        <p style={{ margin: '0 0 20px 0' }}>
+          ✅ Database models e repository<br/>
+          ✅ CRUD endpoints per catalogo esami<br/>
+          ✅ Sistema mappature Wirgilio<br/>
+          🚧 Frontend in sviluppo...
+        </p>
+        
+        <button 
+          onClick={testAPI}
+          disabled={loading}
+          style={{
+            padding: '12px 24px', 
+            background: loading ? '#94a3b8' : '#0ea5e9', 
+            color: 'white', 
+            border: 'none', 
+            borderRadius: '8px',
+            cursor: loading ? 'not-allowed' : 'pointer',
+            fontWeight: '500'
+          }}
+        >
+          {loading ? 'Testing...' : 'Test API Connection'}
+        </button>
+      </div>
+    </div>
+  );
+};
+
 // ================================
 // NAVIGATION COMPONENT
 // ================================
@@ -561,6 +626,7 @@ const Navigation = ({ activeTab, onTabChange }) => {
   const navItems = [
     { id: 'patients', label: 'Pazienti', icon: '👥' },
     { id: 'doctors', label: 'Medici', icon: '👨‍⚕️' },
+    { id: 'laboratorio', label: 'Laboratorio', icon: '🔬' }, 
     { id: 'visits', label: 'Visite', icon: '📅' }
   ];
 
@@ -618,6 +684,8 @@ const DashboardLayout = ({ user, onLogout }) => {
         return <PatientsPage />;
       case 'doctors':
         return <DoctorsPage />;
+      case 'laboratorio':
+        return <LaboratorioPage />;  // ← ADD THIS CASE
       case 'visits':
         return <VisitsPage />;
       default:

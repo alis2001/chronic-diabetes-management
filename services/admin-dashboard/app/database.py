@@ -7,6 +7,8 @@ MongoDB connection for admin authentication system - FIXED VERSION
 import os
 import logging
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
+from typing import List, Dict, Optional, Any
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +102,183 @@ async def create_admin_indexes():
     except Exception as e:
         logger.error(f"❌ Index creation failed: {str(e)}")
 
+# ================================
+# LABORATORY EXAM DATABASE OPERATIONS
+# ================================
+
+async def create_exam_catalog_indexes(db: AsyncIOMotorDatabase):
+    """Create indexes for laboratory exam collections"""
+    try:
+        # Exam catalog indexes
+        await db.exam_catalog.create_index("codice_catalogo", unique=True)
+        await db.exam_catalog.create_index("codice_branca")
+        await db.exam_catalog.create_index("is_enabled")
+        
+        # Exam mapping indexes
+        await db.exam_mappings.create_index([("codice_catalogo", 1), ("codoffering_wirgilio", 1)])
+        await db.exam_mappings.create_index("struttura_nome")
+        await db.exam_mappings.create_index("is_active")
+        
+        logger.info("✅ Laboratory exam indexes created")
+    except Exception as e:
+        logger.error(f"❌ Failed to create laboratory indexes: {e}")
+
+class LaboratorioRepository:
+    """Repository for laboratory exam operations"""
+    
+    def __init__(self, db: AsyncIOMotorDatabase):
+        self.db = db
+        self.catalog_collection = db.exam_catalog
+        self.mapping_collection = db.exam_mappings
+    
+    async def create_exam_catalog(self, exam_data: dict) -> str:
+        """Create new exam catalog entry"""
+        exam_data["created_at"] = datetime.now()
+        exam_data["updated_at"] = datetime.now()
+        
+        result = await self.catalog_collection.insert_one(exam_data)
+        return str(result.inserted_id)
+    
+    async def get_exam_catalog_list(self, enabled_only: bool = False) -> List[Dict]:
+        """Get exam catalog list with mapping counts"""
+        match_filter = {"is_enabled": True} if enabled_only else {}
+        
+        pipeline = [
+            {"$match": match_filter},
+            {
+                "$lookup": {
+                    "from": "exam_mappings",
+                    "localField": "codice_catalogo", 
+                    "foreignField": "codice_catalogo",
+                    "as": "mappings"
+                }
+            },
+            {
+                "$addFields": {
+                    "mappings_count": {"$size": "$mappings"}
+                }
+            },
+            {"$sort": {"nome_esame": 1}}
+        ]
+        
+        cursor = self.catalog_collection.aggregate(pipeline)
+        return await cursor.to_list(length=None)
+    
+    async def update_exam_catalog(self, codice_catalogo: str, updates: dict) -> bool:
+        """Update exam catalog entry"""
+        updates["updated_at"] = datetime.now()
+        
+        result = await self.catalog_collection.update_one(
+            {"codice_catalogo": codice_catalogo},
+            {"$set": updates}
+        )
+        return result.modified_count > 0
+    
+    async def delete_exam_catalog(self, codice_catalogo: str) -> bool:
+        """Delete exam catalog and related mappings"""
+        # First delete related mappings
+        await self.mapping_collection.delete_many({"codice_catalogo": codice_catalogo})
+        
+        # Then delete catalog entry
+        result = await self.catalog_collection.delete_one({"codice_catalogo": codice_catalogo})
+        return result.deleted_count > 0
+    
+    async def create_exam_mapping(self, mapping_data: dict) -> str:
+        """Create new exam mapping"""
+        mapping_data["created_at"] = datetime.now()
+        mapping_data["updated_at"] = datetime.now()
+        
+        result = await self.mapping_collection.insert_one(mapping_data)
+        return str(result.inserted_id)
+    
+    async def get_exam_mappings_list(self, active_only: bool = False) -> List[Dict]:
+        """Get exam mappings with catalog info"""
+        match_filter = {"is_active": True} if active_only else {}
+        
+        pipeline = [
+            {"$match": match_filter},
+            {
+                "$lookup": {
+                    "from": "exam_catalog",
+                    "localField": "codice_catalogo",
+                    "foreignField": "codice_catalogo", 
+                    "as": "catalog_info"
+                }
+            },
+            {
+                "$addFields": {
+                    "nome_esame_catalogo": {"$arrayElemAt": ["$catalog_info.nome_esame", 0]}
+                }
+            },
+            {"$sort": {"codice_catalogo": 1, "struttura_nome": 1}}
+        ]
+        
+        cursor = self.mapping_collection.aggregate(pipeline)
+        return await cursor.to_list(length=None)
+    
+    async def get_enabled_mappings_for_analytics(self) -> Dict[str, List[str]]:
+        """Get enabled mappings formatted for analytics service"""
+        pipeline = [
+            {
+                "$match": {
+                    "is_active": True
+                }
+            },
+            {
+                "$lookup": {
+                    "from": "exam_catalog",
+                    "localField": "codice_catalogo",
+                    "foreignField": "codice_catalogo",
+                    "as": "catalog_info"
+                }
+            },
+            {
+                "$match": {
+                    "catalog_info.is_enabled": True
+                }
+            },
+            {
+                "$group": {
+                    "_id": "$codoffering_wirgilio",
+                    "catalog_codes": {"$push": "$codice_catalogo"},
+                    "exam_name": {"$first": "$nome_esame_wirgilio"}
+                }
+            }
+        ]
+        
+        cursor = self.mapping_collection.aggregate(pipeline)
+        results = await cursor.to_list(length=None)
+        
+        # Format for analytics service: {codoffering: [catalog_codes]}
+        mappings = {}
+        for result in results:
+            mappings[result["_id"]] = {
+                "catalog_codes": result["catalog_codes"],
+                "exam_name": result["exam_name"]
+            }
+        
+        return mappings
+    
+    async def get_overview_stats(self) -> Dict:
+        """Get laboratory management overview statistics"""
+        total_catalog = await self.catalog_collection.count_documents({})
+        enabled_catalog = await self.catalog_collection.count_documents({"is_enabled": True})
+        total_mappings = await self.mapping_collection.count_documents({})
+        active_mappings = await self.mapping_collection.count_documents({"is_active": True})
+        
+        # Get unique strutture count
+        strutture_cursor = self.mapping_collection.distinct("struttura_nome")
+        strutture_count = len(await strutture_cursor)
+        
+        return {
+            "total_catalog_exams": total_catalog,
+            "enabled_catalog_exams": enabled_catalog,
+            "total_mappings": total_mappings,
+            "active_mappings": active_mappings,
+            "strutture_count": strutture_count,
+            "last_updated": datetime.now()
+        }
+
 # Database health check
 async def check_database_health() -> dict:
     """Check database connection health"""
@@ -129,3 +308,4 @@ async def check_database_health() -> dict:
             "error": str(e),
             "connection": "failed"
         }
+

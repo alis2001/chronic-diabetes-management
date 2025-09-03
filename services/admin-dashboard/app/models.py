@@ -172,6 +172,61 @@ class UserProfileResponse(BaseModel):
         }
 
 # ================================
+# LABORATORY EXAM MODELS
+# ================================
+
+class ExamCatalogCreate(BaseModel):
+    """Request model for creating exam catalog entry"""
+    codice_catalogo: str = Field(..., description="Official catalog code (e.g., 90271.003)")
+    codice_branca: str = Field(..., description="Branch code (e.g., 90.27.1)")
+    nome_esame: str = Field(..., description="Exam name (e.g., GLUCOSIO [Siero-Plasma])")
+    struttura_codice: str = Field(..., description="Structure code (e.g., 011)")
+    descrizione: Optional[str] = Field(None, description="Additional description")
+    is_enabled: bool = Field(True, description="Is exam enabled for doctors")
+
+class ExamCatalogResponse(BaseModel):
+    """Response model for exam catalog entry"""
+    id: str
+    codice_catalogo: str
+    codice_branca: str
+    nome_esame: str
+    struttura_codice: str
+    descrizione: Optional[str]
+    is_enabled: bool
+    created_at: datetime
+    updated_at: datetime
+    mappings_count: int = 0  # Number of Wirgilio mappings
+
+class ExamMappingCreate(BaseModel):
+    """Request model for creating exam mapping"""
+    codice_catalogo: str = Field(..., description="Reference to exam catalog")
+    struttura_nome: str = Field(..., description="Healthcare structure name")
+    codoffering_wirgilio: str = Field(..., description="Wirgilio API codoffering (e.g., 301)")
+    nome_esame_wirgilio: str = Field(..., description="Exam name from Wirgilio API")
+    is_active: bool = Field(True, description="Is mapping active")
+
+class ExamMappingResponse(BaseModel):
+    """Response model for exam mapping"""
+    id: str
+    codice_catalogo: str
+    nome_esame_catalogo: str  # From catalog
+    struttura_nome: str
+    codoffering_wirgilio: str
+    nome_esame_wirgilio: str
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+class LaboratorioOverviewResponse(BaseModel):
+    """Overview response for laboratory management"""
+    total_catalog_exams: int
+    enabled_catalog_exams: int
+    total_mappings: int
+    active_mappings: int
+    strutture_count: int
+    last_updated: datetime
+
+# ================================
 # CONSTANTS
 # ================================
 

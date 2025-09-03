@@ -20,7 +20,15 @@ from typing import List, Dict, Any
 # Import authentication components
 from .auth_routes import auth_router
 from .session_manager import session_manager
-from .database import connect_to_mongo, close_mongo_connection, check_database_health, get_database
+from .database import (
+    connect_to_mongo, close_mongo_connection, check_database_health, 
+    get_database, LaboratorioRepository  # ← ADD LaboratorioRepository HERE
+)
+from .models import (  # ← ADD ALL LABORATORY MODELS HERE
+    ExamCatalogCreate, ExamCatalogResponse,
+    ExamMappingCreate, ExamMappingResponse, 
+    LaboratorioOverviewResponse
+)
 from .config import settings
 
 # Configure logging
@@ -438,7 +446,203 @@ def create_application() -> FastAPI:
         except Exception as e:
             logger.error(f"❌ Shutdown error: {str(e)}")
 
+    # ================================
+    # LABORATORY EXAM MANAGEMENT ENDPOINTS
+    # ================================
+
+    @app.get("/dashboard/laboratorio/overview")
+    async def get_laboratorio_overview():
+        """Get laboratory management overview"""
+        try:
+            db = await get_database()
+            lab_repo = LaboratorioRepository(db)
+            
+            stats = await lab_repo.get_overview_stats()
+            
+            return LaboratorioOverviewResponse(**stats)
+            
+        except Exception as e:
+            logger.error(f"Laboratorio overview error: {str(e)}")
+            raise HTTPException(status_code=500, detail="Error retrieving laboratorio overview")
+
+    @app.get("/dashboard/laboratorio/catalogo")
+    async def get_exam_catalog():
+        """Get exam catalog list"""
+        try:
+            db = await get_database()
+            lab_repo = LaboratorioRepository(db)
+            
+            catalog_data = await lab_repo.get_exam_catalog_list()
+            
+            # Convert ObjectId to string for JSON serialization
+            for exam in catalog_data:
+                exam["id"] = str(exam["_id"])
+                del exam["_id"]
+            
+            return {
+                "success": True,
+                "total": len(catalog_data),
+                "catalog": catalog_data
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting exam catalog: {str(e)}")
+            raise HTTPException(status_code=500, detail="Error retrieving exam catalog")
+
+    @app.post("/dashboard/laboratorio/catalogo")
+    async def create_exam_catalog(request: ExamCatalogCreate):
+        """Create new exam catalog entry"""
+        try:
+            db = await get_database()
+            lab_repo = LaboratorioRepository(db)
+            
+            # Check if codice_catalogo already exists
+            existing = await lab_repo.catalog_collection.find_one({"codice_catalogo": request.codice_catalogo})
+            if existing:
+                raise HTTPException(status_code=400, detail="Codice catalogo già esistente")
+            
+            exam_id = await lab_repo.create_exam_catalog(request.dict())
+            
+            logger.info(f"✅ Exam catalog created: {request.codice_catalogo}")
+            
+            return {
+                "success": True,
+                "message": f"Esame {request.nome_esame} aggiunto al catalogo",
+                "exam_id": exam_id,
+                "codice_catalogo": request.codice_catalogo
+            }
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error creating exam catalog: {str(e)}")
+            raise HTTPException(status_code=500, detail="Error creating exam catalog")
+
+    @app.put("/dashboard/laboratorio/catalogo/{codice_catalogo}")
+    async def update_exam_catalog(codice_catalogo: str, updates: dict):
+        """Update exam catalog entry"""
+        try:
+            db = await get_database()
+            lab_repo = LaboratorioRepository(db)
+            
+            success = await lab_repo.update_exam_catalog(codice_catalogo, updates)
+            
+            if not success:
+                raise HTTPException(status_code=404, detail="Exam catalog entry not found")
+            
+            logger.info(f"✅ Exam catalog updated: {codice_catalogo}")
+            
+            return {
+                "success": True,
+                "message": f"Esame {codice_catalogo} aggiornato con successo"
+            }
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error updating exam catalog: {str(e)}")
+            raise HTTPException(status_code=500, detail="Error updating exam catalog")
+
+    @app.delete("/dashboard/laboratorio/catalogo/{codice_catalogo}")
+    async def delete_exam_catalog(codice_catalogo: str):
+        """Delete exam catalog entry and related mappings"""
+        try:
+            db = await get_database()
+            lab_repo = LaboratorioRepository(db)
+            
+            success = await lab_repo.delete_exam_catalog(codice_catalogo)
+            
+            if not success:
+                raise HTTPException(status_code=404, detail="Exam catalog entry not found")
+            
+            logger.info(f"✅ Exam catalog deleted: {codice_catalogo}")
+            
+            return {
+                "success": True,
+                "message": f"Esame {codice_catalogo} eliminato dal catalogo"
+            }
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error deleting exam catalog: {str(e)}")
+            raise HTTPException(status_code=500, detail="Error deleting exam catalog")
+
+    @app.get("/dashboard/laboratorio/mappings")
+    async def get_exam_mappings():
+        """Get exam mappings list"""
+        try:
+            db = await get_database()
+            lab_repo = LaboratorioRepository(db)
+            
+            mappings_data = await lab_repo.get_exam_mappings_list()
+            
+            # Convert ObjectId to string
+            for mapping in mappings_data:
+                mapping["id"] = str(mapping["_id"])
+                del mapping["_id"]
+            
+            return {
+                "success": True,
+                "total": len(mappings_data),
+                "mappings": mappings_data
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting exam mappings: {str(e)}")
+            raise HTTPException(status_code=500, detail="Error retrieving exam mappings")
+
+    @app.post("/dashboard/laboratorio/mappings")
+    async def create_exam_mapping(request: ExamMappingCreate):
+        """Create new exam mapping"""
+        try:
+            db = await get_database()
+            lab_repo = LaboratorioRepository(db)
+            
+            # Verify catalog exists
+            catalog_exists = await lab_repo.catalog_collection.find_one({"codice_catalogo": request.codice_catalogo})
+            if not catalog_exists:
+                raise HTTPException(status_code=400, detail="Codice catalogo non trovato")
+            
+            mapping_id = await lab_repo.create_exam_mapping(request.dict())
+            
+            logger.info(f"✅ Exam mapping created: {request.codice_catalogo} -> {request.codoffering_wirgilio}")
+            
+            return {
+                "success": True,
+                "message": f"Mapping creato per {request.nome_esame_wirgilio}",
+                "mapping_id": mapping_id
+            }
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error creating exam mapping: {str(e)}")
+            raise HTTPException(status_code=500, detail="Error creating exam mapping")
+
+    # Analytics Integration Endpoint
+    @app.get("/dashboard/laboratorio/enabled-mappings")
+    async def get_enabled_mappings():
+        """Get enabled mappings for analytics service"""
+        try:
+            db = await get_database()
+            lab_repo = LaboratorioRepository(db)
+            
+            mappings = await lab_repo.get_enabled_mappings_for_analytics()
+            
+            return {
+                "success": True,
+                "mappings": mappings,
+                "total_enabled_codofferings": len(mappings),
+                "generated_at": datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting enabled mappings: {str(e)}")
+            raise HTTPException(status_code=500, detail="Error retrieving enabled mappings")
+
     return app
+
 
 # Create the app instance
 app = create_application()

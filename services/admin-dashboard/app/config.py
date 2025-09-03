@@ -61,11 +61,12 @@ SERVICES: Dict[str, str] = {
     "gateway": settings.API_GATEWAY_URL
 }
 
-# Page navigation structure
+# Update the navigation structure
 ADMIN_NAVIGATION: List[Dict[str, str]] = [
     {"name": "Dashboard", "url": "/", "icon": "🏠"},
     {"name": "Pazienti", "url": "/patients", "icon": "👥"},
     {"name": "Medici", "url": "/doctors", "icon": "👨‍⚕️"},
+    {"name": "Laboratorio", "url": "/laboratorio", "icon": "🔬"},  # ← ADD THIS LINE
     {"name": "Sistema", "url": "/system", "icon": "⚙️"},
     {"name": "Report", "url": "/reports", "icon": "📊"}
 ]
