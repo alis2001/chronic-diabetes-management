@@ -602,10 +602,11 @@ const ProfessionalTabs = ({ patientId, doctorId }) => {
   const [activeTab, setActiveTab] = useState('refertazione');
   const [referto, setReferto] = useState('');
   const [diario, setDiario] = useState('');
-  const [esami, setEsami] = useState('');
   
-  // NEW: Analytics modal state
-  const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
+  // Analytics iframe state - embedded in tab
+  const [analyticsLoaded, setAnalyticsLoaded] = useState(false);
+  const [isAnalyticsMinimized, setIsAnalyticsMinimized] = useState(false);
+  const [isAnalyticsMaximized, setIsAnalyticsMaximized] = useState(false);
 
   const tabs = [
     { id: 'refertazione', label: 'Refertazione', icon: '📄', color: '#3b82f6' },
@@ -628,60 +629,27 @@ const ProfessionalTabs = ({ patientId, doctorId }) => {
     }
   };
 
-  // melody integration
+  // Handle tab switching - auto-load analytics for esami tab
+  const handleTabSwitch = (tabId) => {
+    setActiveTab(tabId);
+    if (tabId === 'esami' && !analyticsLoaded) {
+      setAnalyticsLoaded(true);
+    }
+  };
+
+  // Voice recording handler (unchanged)
   const handleVoiceRecording = async () => {
     try {
-      // Show loading state
       console.log('🎤 Starting voice recording workflow...');
-      
-      // Use real values from props (patientId contains the CF)
       if (!doctorId || !patientId) {
         alert('Errore: Dati sessione mancanti. Ricarica la pagina.');
         return;
       }
-
-      console.log(`🎤 Starting voice workflow for Doctor: ${doctorId}, Patient CF: ${patientId}`);
-      const currentUrl = window.location.href;
-      
-      // Call Timeline API to create voice workflow URL
-      const response = await fetch('http://localhost:8080/api/timeline/melody/create-voice-workflow', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          doctor_id: doctorId,
-          patient_cf: patientId,
-          return_url: currentUrl
-        })
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      const result = await response.json();
-      
-      if (result.success) {
-        // Show transition animation
-        console.log('✅ Voice workflow URL created, redirecting to Melody...');
-        
-        // Redirect to Melody service
-        window.location.href = result.workflow_url;
-      } else {
-        throw new Error('Failed to create voice workflow URL');
-      }
-      
+      alert('Funzione vocale in sviluppo - Contatta il team tecnico per l\'integrazione Melody.');
     } catch (error) {
-      console.error('❌ Voice recording error:', error);
-      alert('Servizio vocale non disponibile. Riprova più tardi.');
+      console.error('Errore refertazione vocale:', error);
+      alert('Errore durante la refertazione vocale. Riprova più tardi.');
     }
-  };
-
-  // NEW: Handle opening analytics modal
-  const handleOpenAnalytics = () => {
-    console.log('🧪 Opening Analytics for patient:', patientId, 'doctor:', doctorId);
-    setIsAnalyticsOpen(true);
   };
 
   const renderTabContent = () => {
@@ -689,8 +657,8 @@ const ProfessionalTabs = ({ patientId, doctorId }) => {
       case 'refertazione':
         return (
           <div style={{
-            background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, rgba(147, 197, 253, 0.1) 100%)',
-            border: '2px solid rgba(59, 130, 246, 0.2)',
+            background: tabContentStyles.refertazione.background,
+            border: `2px solid ${tabContentStyles.refertazione.borderColor}`,
             borderRadius: '20px',
             padding: '30px',
             minHeight: '400px'
@@ -793,29 +761,6 @@ const ProfessionalTabs = ({ patientId, doctorId }) => {
                 transition: 'all 0.3s ease'
               }}
             />
-            <div style={{
-              marginTop: '15px',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}>
-              <span style={{fontSize: '14px', color: '#6b7280'}}>
-                {diario.length}/2000 caratteri
-              </span>
-              <button style={{
-                padding: '12px 24px',
-                backgroundColor: '#10b981',
-                color: 'white',
-                border: 'none',
-                borderRadius: '10px',
-                fontSize: '14px',
-                fontWeight: '600',
-                cursor: 'pointer',
-                transition: 'all 0.2s ease'
-              }}>
-                Salva Diario
-              </button>
-            </div>
           </div>
         );
 
@@ -825,98 +770,35 @@ const ProfessionalTabs = ({ patientId, doctorId }) => {
             background: tabContentStyles.esami.background,
             border: `2px solid ${tabContentStyles.esami.borderColor}`,
             borderRadius: '20px',
-            padding: '30px',
-            minHeight: '400px',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            textAlign: 'center'
+            padding: '0',
+            minHeight: '600px',
+            position: 'relative',
+            overflow: 'hidden'
           }}>
-            <h4 style={{
-              margin: '0 0 30px 0',
-              fontSize: '24px',
-              fontWeight: '700',
-              color: '#d97706',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px'
-            }}>
-              🧪 Esami Laboratorio
-            </h4>
-            
-            <p style={{
-              fontSize: '16px',
-              color: '#6b7280',
-              marginBottom: '30px',
-              lineHeight: '1.6',
-              maxWidth: '500px'
-            }}>
-              Visualizza e analizza i dati di laboratorio del paziente con grafici interattivi 
-              e strumenti di analisi avanzati.
-            </p>
-
-            <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', justifyContent: 'center' }}>
-              <button
-                onClick={handleOpenAnalytics}
-                style={{
-                  padding: '18px 36px',
-                  backgroundColor: '#f59e0b',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '16px',
-                  fontSize: '16px',
-                  fontWeight: '700',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '12px',
-                  transition: 'all 0.3s ease',
-                  boxShadow: '0 8px 25px rgba(245, 158, 11, 0.4)',
-                  transform: 'scale(1)'
-                }}
-                onMouseOver={(e) => {
-                  e.target.style.backgroundColor = '#d97706';
-                  e.target.style.transform = 'scale(1.05)';
-                  e.target.style.boxShadow = '0 12px 35px rgba(245, 158, 11, 0.6)';
-                }}
-                onMouseOut={(e) => {
-                  e.target.style.backgroundColor = '#f59e0b';
-                  e.target.style.transform = 'scale(1)';
-                  e.target.style.boxShadow = '0 8px 25px rgba(245, 158, 11, 0.4)';
-                }}
-              >
-                📊 Apri Analytics Laboratorio
-              </button>
-            </div>
-
-            <div style={{
-              marginTop: '25px',
-              padding: '20px',
-              backgroundColor: 'rgba(245, 158, 11, 0.1)',
-              borderRadius: '12px',
-              border: '1px solid rgba(245, 158, 11, 0.2)',
-              maxWidth: '600px'
-            }}>
+            {analyticsLoaded ? (
+              <EmbeddedAnalyticsWindow 
+                patientId={patientId}
+                doctorId={doctorId}
+                isMinimized={isAnalyticsMinimized}
+                isMaximized={isAnalyticsMaximized}
+                onMinimize={() => setIsAnalyticsMinimized(!isAnalyticsMinimized)}
+                onMaximize={() => setIsAnalyticsMaximized(!isAnalyticsMaximized)}
+                onClose={() => setAnalyticsLoaded(false)}
+              />
+            ) : (
+              // Empty space - no button, analytics loads automatically when tab is clicked
               <div style={{
-                fontSize: '14px',
-                color: '#92400e',
-                fontWeight: '600',
-                marginBottom: '8px'
+                height: '600px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#d97706',
+                fontSize: '18px',
+                fontWeight: '500'
               }}>
-                ✨ Funzionalità Analytics:
+                🧪 Caricamento Analytics...
               </div>
-              <div style={{
-                fontSize: '13px',
-                color: '#a16207',
-                lineHeight: '1.5'
-              }}>
-                • Grafici interattivi dei valori di laboratorio<br/>
-                • Rilevamento automatico delle anomalie<br/>
-                • Confronto con i range di riferimento<br/>
-                • Export dei dati per reportistica
-              </div>
-            </div>
+            )}
           </div>
         );
 
@@ -926,75 +808,185 @@ const ProfessionalTabs = ({ patientId, doctorId }) => {
   };
 
   return (
-    <>
-      {/* Professional Tabs Container */}
+    <div style={{
+      background: 'rgba(255, 255, 255, 0.95)',
+      borderRadius: '24px',
+      padding: '0',
+      margin: '30px 0',
+      boxShadow: '0 20px 60px rgba(0, 0, 0, 0.1)',
+      backdropFilter: 'blur(20px)',
+      border: '1px solid rgba(255, 255, 255, 0.3)',
+      overflow: 'hidden'
+    }}>
+      {/* Tab Headers */}
       <div style={{
-        background: 'rgba(255, 255, 255, 0.95)',
-        borderRadius: '24px',
-        padding: '0',
-        margin: '30px 0',
-        boxShadow: '0 20px 60px rgba(0, 0, 0, 0.1)',
-        backdropFilter: 'blur(20px)',
-        border: '1px solid rgba(255, 255, 255, 0.3)',
-        overflow: 'hidden'
+        display: 'flex',
+        borderBottom: '2px solid rgba(0, 0, 0, 0.05)',
+        background: 'rgba(248, 250, 252, 0.8)'
       }}>
-        {/* Tab Headers */}
-        <div style={{
-          display: 'flex',
-          borderBottom: '2px solid rgba(0, 0, 0, 0.05)',
-          background: 'rgba(248, 250, 252, 0.8)'
-        }}>
-          {tabs.map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              style={{
-                flex: 1,
-                padding: '20px 25px',
-                border: 'none',
-                background: activeTab === tab.id 
-                  ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.9) 100%)'
-                  : 'transparent',
-                color: activeTab === tab.id ? '#1d1d1f' : '#6b7280',
-                fontSize: '16px',
-                fontWeight: activeTab === tab.id ? '700' : '500',
-                cursor: 'pointer',
-                transition: 'all 0.3s ease',
-                borderBottom: activeTab === tab.id ? `3px solid ${tab.color}` : '3px solid transparent',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '10px',
-                ':hover': {
-                  backgroundColor: 'rgba(255, 255, 255, 0.6)',
-                  color: '#1d1d1f'
-                }
-              }}
-            >
-              <span style={{fontSize: '18px'}}>{tab.icon}</span>
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Tab Content */}
-        <div style={{padding: '35px'}}>
-          {renderTabContent()}
-        </div>
+        {tabs.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => handleTabSwitch(tab.id)}
+            style={{
+              flex: 1,
+              padding: '20px 25px',
+              border: 'none',
+              background: activeTab === tab.id 
+                ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.9) 100%)'
+                : 'transparent',
+              color: activeTab === tab.id ? '#1d1d1f' : '#6b7280',
+              fontSize: '16px',
+              fontWeight: activeTab === tab.id ? '700' : '500',
+              cursor: 'pointer',
+              transition: 'all 0.3s ease',
+              borderBottom: activeTab === tab.id ? `3px solid ${tab.color}` : '3px solid transparent',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '10px'
+            }}
+          >
+            <span style={{fontSize: '18px'}}>{tab.icon}</span>
+            {tab.label}
+          </button>
+        ))}
       </div>
 
-      {/* Analytics Modal - Draggable and Resizable */}
-      <DraggableIframeModal
-        isOpen={isAnalyticsOpen}
-        onClose={() => setIsAnalyticsOpen(false)}
-        patientId={patientId}
-        doctorId={doctorId}
-        title="🧪 Analytics Laboratorio - Sistema ASL"
-      />
-    </>
+      {/* Tab Content */}
+      <div style={{padding: activeTab === 'esami' ? '0' : '35px'}}>
+        {renderTabContent()}
+      </div>
+    </div>
   );
 };
 
+
+// Add this after the ProfessionalTabs component
+const EmbeddedAnalyticsWindow = ({ 
+  patientId, 
+  doctorId, 
+  isMinimized, 
+  isMaximized,
+  onMinimize,
+  onMaximize,
+  onClose 
+}) => {
+  const analyticsUrl = `http://localhost:3011?cf=${patientId}&doctor_id=${doctorId}&embedded=true`;
+  
+  const windowHeight = isMinimized ? '60px' : (isMaximized ? '800px' : '600px');
+  
+  return (
+    <div style={{
+      height: windowHeight,
+      transition: 'all 0.3s ease',
+      position: 'relative',
+      background: '#ffffff',
+      borderRadius: '20px',
+      overflow: 'hidden',
+      boxShadow: '0 10px 30px rgba(0, 0, 0, 0.1)'
+    }}>
+      {/* Window Controls Bar */}
+      <div style={{
+        background: 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)',
+        padding: '12px 20px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        color: 'white'
+      }}>
+        <h4 style={{
+          margin: 0,
+          fontSize: '16px',
+          fontWeight: '600',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          🧪 Analytics Laboratorio
+        </h4>
+        
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button
+            onClick={onMinimize}
+            style={{
+              width: '24px',
+              height: '24px',
+              borderRadius: '50%',
+              border: 'none',
+              background: '#fbbf24',
+              color: 'white',
+              cursor: 'pointer',
+              fontSize: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+            title={isMinimized ? "Expand" : "Minimize"}
+          >
+            {isMinimized ? '▲' : '–'}
+          </button>
+          
+          <button
+            onClick={onMaximize}
+            style={{
+              width: '24px',
+              height: '24px',
+              borderRadius: '50%',
+              border: 'none',
+              background: '#10b981',
+              color: 'white',
+              cursor: 'pointer',
+              fontSize: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+            title={isMaximized ? "Restore" : "Maximize"}
+          >
+            {isMaximized ? '⧉' : '□'}
+          </button>
+          
+          <button
+            onClick={onClose}
+            style={{
+              width: '24px',
+              height: '24px',
+              borderRadius: '50%',
+              border: 'none',
+              background: '#ef4444',
+              color: 'white',
+              cursor: 'pointer',
+              fontSize: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+            title="Close"
+          >
+            ×
+          </button>
+        </div>
+      </div>
+      
+      {/* Analytics iframe */}
+      {!isMinimized && (
+        <iframe
+          src={analyticsUrl}
+          style={{
+            width: '100%',
+            height: `calc(${windowHeight} - 48px)`,
+            border: 'none',
+            background: '#f8fafc'
+          }}
+          title="Analytics Laboratorio"
+          allow="clipboard-read; clipboard-write"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-downloads"
+        />
+      )}
+    </div>
+  );
+};
 // ================================
 // 🔥 STEP 2: UPDATED PATIENT TIMELINE - COMPRESSED INFO + TABS
 // ================================
