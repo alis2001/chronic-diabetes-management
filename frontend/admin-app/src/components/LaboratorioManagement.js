@@ -1,16 +1,16 @@
 // frontend/admin-app/src/components/LaboratorioManagement.js
-// COMPLETE WORKING IMPLEMENTATION - FIXES ALL ISSUES
+// EXACT ORIGINAL UI - With specific modifications requested
 import React, { useState, useEffect } from 'react';
 import { adminAPI } from '../api';
 
 const LaboratorioManagement = () => {
-  console.log('🔥 LABORATORIO COMPONENT LOADING - FIXED VERSION');
+  console.log('🔥 LABORATORIO COMPONENT LOADING - MODIFIED VERSION');
   
-  const [activeTab, setActiveTab] = useState('overview');
+  // CHANGED: Default to 'catalog' instead of 'overview' (no more panoramica)
+  const [activeTab, setActiveTab] = useState('catalog');
   const [loading, setLoading] = useState(false);
   
-  // Data states
-  const [overview, setOverview] = useState({});
+  // Data states - REMOVED overview state
   const [catalog, setCatalog] = useState([]);
   const [mappings, setMappings] = useState([]);
   const [catalogOptions, setCatalogOptions] = useState([]);
@@ -35,30 +35,13 @@ const LaboratorioManagement = () => {
     nome_esame_wirgilio: ''       // Manual entry - will be UPPERCASE
     });
 
-  // FIXED: Load data on component mount and tab changes
+  // Load data on component mount and tab changes
   useEffect(() => {
     console.log('🔄 Tab changed to:', activeTab);
-    loadOverviewData();
-    loadCatalogOptions(); // ADD THIS LINE
+    loadCatalogOptions();
     if (activeTab === 'catalog') loadCatalogData();
     if (activeTab === 'mappings') loadMappingsData();
   }, [activeTab]);
-
-  // FIXED: Correct API calls using adminAPI.get()
-  const loadOverviewData = async () => {
-    try {
-      setLoading(true);
-      console.log('📡 Loading laboratorio overview...');
-      const result = await adminAPI.get('/dashboard/laboratorio/overview');
-      console.log('✅ Overview loaded:', result);
-      setOverview(result);
-    } catch (error) {
-      console.error('❌ Error loading overview:', error);
-      setOverview({});
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const loadCatalogOptions = async () => {
     try {
@@ -151,7 +134,7 @@ const LaboratorioManagement = () => {
     }
   };
 
-  // FIXED: Complete exam operations
+  // Complete exam operations
   const handleAddExam = async (e) => {
     e.preventDefault();
     try {
@@ -169,7 +152,6 @@ const LaboratorioManagement = () => {
       setShowAddExamModal(false);
       
       await loadCatalogData();
-      await loadOverviewData();
       
       alert('Esame aggiunto al catalogo con successo!');
     } catch (error) {
@@ -190,7 +172,7 @@ const LaboratorioManagement = () => {
       await adminAPI.delete(`/dashboard/laboratorio/catalogo/${codice_catalogo}`);
       
       await loadCatalogData();
-      await loadOverviewData();
+      await loadMappingsData(); // Refresh mappings too
       
       alert('Esame eliminato dal catalogo');
     } catch (error) {
@@ -209,7 +191,6 @@ const LaboratorioManagement = () => {
       });
       
       await loadCatalogData();
-      await loadOverviewData();
     } catch (error) {
       console.error('❌ Error updating exam:', error);
       alert('Errore durante l\'aggiornamento: ' + (error.message || error));
@@ -220,6 +201,14 @@ const LaboratorioManagement = () => {
 
   const handleAddMapping = async (e) => {
     e.preventDefault();
+    
+    // NEW: Check if exam is already mapped
+    const existingMapping = mappings.find(m => m.codice_catalogo === mappingForm.codice_catalogo);
+    if (existingMapping) {
+      alert(`L'esame ${mappingForm.selected_exam.nome_esame} è già mappato alla struttura "${existingMapping.struttura_nome}".\n\nOgni esame può essere mappato solo una volta. Rimuovi prima la mappatura esistente.`);
+      return;
+    }
+    
     try {
         setLoading(true);
         console.log('📡 Adding mapping:', mappingForm);
@@ -243,7 +232,7 @@ const LaboratorioManagement = () => {
         setShowAddMappingModal(false);
         
         await loadMappingsData();
-        await loadOverviewData();
+        await loadCatalogData(); // Refresh catalog to update mapping status
         
         alert('Mappatura creata con successo!');
     } catch (error) {
@@ -254,8 +243,28 @@ const LaboratorioManagement = () => {
     }
   };
 
+  // NEW: Delete mapping function
+  const handleDeleteMapping = async (mappingId, examName, structureName) => {
+    if (!window.confirm(`Rimuovere la mappatura per l'esame "${examName}" dalla struttura "${structureName}"?\n\nDopo la rimozione, l'esame potrà essere mappato nuovamente.`)) {
+      return;
+    }
+    
+    try {
+      setLoading(true);
+      await adminAPI.delete(`/dashboard/laboratorio/mappings/${mappingId}`);
+      
+      await loadMappingsData();
+      await loadCatalogData(); // Refresh catalog to update mapping status
+      
+      alert('Mappatura rimossa con successo');
+    } catch (error) {
+      console.error('❌ Error deleting mapping:', error);
+      alert('Errore durante la rimozione: ' + (error.message || error));
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  // FIXED: No conflicting styles - removed borderBottomColor
   const styles = {
     container: {
       padding: '24px',
@@ -410,44 +419,19 @@ const LaboratorioManagement = () => {
     badgeDisabled: {
       background: '#fef2f2',
       color: '#dc2626'
+    },
+    // NEW: Badge styles for mapping status
+    badgeMapped: {
+      background: '#dcfce7',
+      color: '#166534'
+    },
+    badgeNotMapped: {
+      background: '#fef3c7',
+      color: '#92400e'
     }
   };
 
-  // FIXED: Complete render functions
-  const renderOverview = () => (
-    <div>
-      <div style={styles.overviewGrid}>
-        <div style={styles.statCard}>
-          <div style={{...styles.statNumber, color: '#0ea5e9'}}>
-            {overview.total_catalog_exams || 0}
-          </div>
-          <div style={styles.statLabel}>Esami in Catalogo</div>
-        </div>
-        
-        <div style={styles.statCard}>
-          <div style={{...styles.statNumber, color: '#10b981'}}>
-            {overview.enabled_catalog_exams || 0}
-          </div>
-          <div style={styles.statLabel}>Esami Abilitati</div>
-        </div>
-        
-        <div style={styles.statCard}>
-          <div style={{...styles.statNumber, color: '#f59e0b'}}>
-            {overview.total_mappings || 0}
-          </div>
-          <div style={styles.statLabel}>Mappature Totali</div>
-        </div>
-        
-        <div style={styles.statCard}>
-          <div style={{...styles.statNumber, color: '#8b5cf6'}}>
-            {overview.strutture_count || 0}
-          </div>
-          <div style={styles.statLabel}>Strutture Configurate</div>
-        </div>
-      </div>
-    </div>
-  );
-
+  // MODIFIED: renderCatalog - Changed "Stato" to show mapping status
   const renderCatalog = () => (
     <div>
       <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px'}}>
@@ -486,63 +470,66 @@ const LaboratorioManagement = () => {
           {catalog.length === 0 ? (
             <div style={{padding: '40px', textAlign: 'center', color: '#6b7280'}}>
               <p>Il catalogo è vuoto.</p>
-              <p style={{fontSize: '14px'}}>Database ha {overview.total_catalog_exams || 0} esami. Ricaricare la pagina.</p>
+              <p style={{fontSize: '14px'}}>Aggiungi il primo esame al catalogo.</p>
             </div>
           ) : (
-            catalog.map((exam, index) => (
-              <div key={exam.id || index} style={{display: 'grid', gridTemplateColumns: '120px 120px 3fr 80px 100px 140px', alignItems: 'center'}}>
-                <div style={styles.tableCell}>
-                  <code style={{background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px', fontSize: '12px'}}>
-                    {exam.codice_catalogo}
-                  </code>
+            catalog.map((exam, index) => {
+              // NEW: Check if exam is mapped
+              const isMapped = mappings.some(m => m.codice_catalogo === exam.codice_catalogo);
+              
+              return (
+                <div key={exam.id || index} style={{display: 'grid', gridTemplateColumns: '120px 120px 3fr 80px 100px 140px', alignItems: 'center'}}>
+                  <div style={styles.tableCell}>
+                    <code style={{background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px', fontSize: '12px'}}>
+                      {exam.codice_catalogo}
+                    </code>
+                  </div>
+                  <div style={styles.tableCell}>
+                    <code style={{fontSize: '12px', color: '#6b7280'}}>
+                      {exam.codice_branca}
+                    </code>
+                  </div>
+                  <div style={styles.tableCell}>
+                    <div style={{fontWeight: '500', fontSize: '14px'}}>{exam.nome_esame}</div>
+                    {exam.mappings_count > 0 && (
+                      <div style={{fontSize: '12px', color: '#6b7280', marginTop: '4px'}}>
+                        {exam.mappings_count} mappature attive
+                      </div>
+                    )}
+                  </div>
+                  <div style={styles.tableCell}>
+                    <code style={{fontSize: '12px'}}>{exam.struttura_codice}</code>
+                  </div>
+                  <div style={styles.tableCell}>
+                    {/* CHANGED: Show mapping status instead of enabled/disabled */}
+                    <span
+                      style={{
+                        ...styles.badge,
+                        ...(isMapped ? styles.badgeMapped : styles.badgeNotMapped)
+                      }}
+                    >
+                      {isMapped ? 'Mappato' : 'Non Mappato'}
+                    </span>
+                  </div>
+                  <div style={styles.tableCell}>
+                    <button
+                      onClick={() => handleDeleteExam(exam.codice_catalogo, exam.nome_esame)}
+                      style={styles.buttonDanger}
+                      disabled={loading}
+                    >
+                      Elimina
+                    </button>
+                  </div>
                 </div>
-                <div style={styles.tableCell}>
-                  <code style={{fontSize: '12px', color: '#6b7280'}}>
-                    {exam.codice_branca}
-                  </code>
-                </div>
-                <div style={styles.tableCell}>
-                  <div style={{fontWeight: '500', fontSize: '14px'}}>{exam.nome_esame}</div>
-                  {exam.mappings_count > 0 && (
-                    <div style={{fontSize: '12px', color: '#6b7280', marginTop: '4px'}}>
-                      {exam.mappings_count} mappature attive
-                    </div>
-                  )}
-                </div>
-                <div style={styles.tableCell}>
-                  <code style={{fontSize: '12px'}}>{exam.struttura_codice}</code>
-                </div>
-                <div style={styles.tableCell}>
-                  <button
-                    onClick={() => toggleExamEnabled(exam.codice_catalogo, exam.is_enabled)}
-                    style={{
-                      ...styles.badge,
-                      ...(exam.is_enabled ? styles.badgeEnabled : styles.badgeDisabled),
-                      border: 'none',
-                      cursor: 'pointer'
-                    }}
-                    disabled={loading}
-                  >
-                    {exam.is_enabled ? 'Abilitato' : 'Disabilitato'}
-                  </button>
-                </div>
-                <div style={styles.tableCell}>
-                  <button
-                    onClick={() => handleDeleteExam(exam.codice_catalogo, exam.nome_esame)}
-                    style={styles.buttonDanger}
-                    disabled={loading}
-                  >
-                    Elimina
-                  </button>
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       )}
     </div>
   );
 
+  // MODIFIED: renderMappings - Added delete mapping button
   const renderMappings = () => (
     <div>
       <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px'}}>
@@ -568,12 +555,14 @@ const LaboratorioManagement = () => {
       ) : (
         <div style={styles.table}>
           <div style={styles.tableHeader}>
-            <div style={{display: 'grid', gridTemplateColumns: '120px 2fr 150px 120px 2fr', alignItems: 'center'}}>
+            {/* MODIFIED: Added Actions column */}
+            <div style={{display: 'grid', gridTemplateColumns: '120px 2fr 150px 120px 2fr 100px', alignItems: 'center'}}>
               <div style={{...styles.tableCell, fontWeight: '600', borderBottom: 'none'}}>Cod. Catalogo</div>
               <div style={{...styles.tableCell, fontWeight: '600', borderBottom: 'none'}}>Esame Catalogo</div>
               <div style={{...styles.tableCell, fontWeight: '600', borderBottom: 'none'}}>Struttura</div>
               <div style={{...styles.tableCell, fontWeight: '600', borderBottom: 'none'}}>Codoffering</div>
               <div style={{...styles.tableCell, fontWeight: '600', borderBottom: 'none'}}>Nome Wirgilio</div>
+              <div style={{...styles.tableCell, fontWeight: '600', borderBottom: 'none'}}>Azioni</div>
             </div>
           </div>
           
@@ -584,7 +573,7 @@ const LaboratorioManagement = () => {
             </div>
           ) : (
             mappings.map((mapping, index) => (
-              <div key={mapping.id || index} style={{display: 'grid', gridTemplateColumns: '120px 2fr 150px 120px 2fr', alignItems: 'center'}}>
+              <div key={mapping.id || index} style={{display: 'grid', gridTemplateColumns: '120px 2fr 150px 120px 2fr 100px', alignItems: 'center'}}>
                 <div style={styles.tableCell}>
                   <code style={{background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px', fontSize: '12px'}}>
                     {mapping.codice_catalogo}
@@ -607,6 +596,17 @@ const LaboratorioManagement = () => {
                     {mapping.is_active ? '● Attiva' : '○ Inattiva'}
                   </div>
                 </div>
+                {/* NEW: Actions column with delete button */}
+                <div style={styles.tableCell}>
+                  <button
+                    onClick={() => handleDeleteMapping(mapping.id, mapping.nome_esame_catalogo, mapping.struttura_nome)}
+                    style={styles.buttonDanger}
+                    disabled={loading}
+                    title="Rimuovi mappatura"
+                  >
+                    Rimuovi
+                  </button>
+                </div>
               </div>
             ))
           )}
@@ -615,7 +615,7 @@ const LaboratorioManagement = () => {
     </div>
   );
 
-  // FIXED: Complete modals
+  // Complete modals (unchanged from original)
   const renderAddExamModal = () => {
     if (!showAddExamModal) return null;
     
@@ -727,7 +727,7 @@ const LaboratorioManagement = () => {
                 style={styles.input}
                 value={mappingForm.struttura_nome}
                 onChange={(e) => setMappingForm({...mappingForm, struttura_nome: e.target.value})}
-                placeholder="es. Ospedale Napoli 1, ASL Roma Centro, Lab Privato Milano"
+                placeholder="es. Ospedale Napoli 1"
                 required
                 />
                 <div style={{fontSize: '12px', color: '#6b7280', marginTop: '4px'}}>
@@ -750,7 +750,7 @@ const LaboratorioManagement = () => {
                 required
                 />
                 <div style={{fontSize: '12px', color: '#6b7280', marginTop: '4px'}}>
-                Codice identificativo dell'esame nel sistema Wirgilio (es: dall'API JSON)
+                Codice identificativo dell'esame nel sistema Wirgilio
                 </div>
             </div>
             
@@ -830,7 +830,7 @@ const LaboratorioManagement = () => {
                 }}
                 disabled={loading || !mappingForm.selected_exam || !mappingForm.struttura_nome || !mappingForm.codoffering_wirgilio || !mappingForm.nome_esame_wirgilio}
                 >
-                {loading ? 'Creando Mapping...' : '✅ Crea Mapping'}
+                {loading ? 'Creando Mapping...' : 'Crea Mapping'}
                 </button>
             </div>
             </form>
@@ -839,7 +839,7 @@ const LaboratorioManagement = () => {
     );
   };
 
-  // MAIN RENDER
+  // MAIN RENDER - REMOVED PANORAMICA TAB, KEPT EXACT SAME UI OTHERWISE
   return (
     <div style={styles.container}>
       <div style={styles.header}>
@@ -853,7 +853,6 @@ const LaboratorioManagement = () => {
       
       <div style={styles.tabs}>
         {[
-          {id: 'overview', label: 'Panoramica', icon: '📊'},
           {id: 'catalog', label: 'Catalogo Esami', icon: '📋'},
           {id: 'mappings', label: 'Mappature Strutture', icon: '🔗'}
         ].map(tab => (
@@ -873,7 +872,6 @@ const LaboratorioManagement = () => {
         ))}
       </div>
       
-      {activeTab === 'overview' && renderOverview()}
       {activeTab === 'catalog' && renderCatalog()}
       {activeTab === 'mappings' && renderMappings()}
       

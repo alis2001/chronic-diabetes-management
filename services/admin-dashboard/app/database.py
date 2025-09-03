@@ -123,8 +123,10 @@ async def create_exam_catalog_indexes(db: AsyncIOMotorDatabase):
     except Exception as e:
         logger.error(f"❌ Failed to create laboratory indexes: {e}")
 
+# services/admin-dashboard/app/database.py - FIXED LaboratorioRepository
+
 class LaboratorioRepository:
-    """Repository for laboratory exam operations"""
+    """Repository for laboratory exam operations - FIXED VERSION"""
     
     def __init__(self, db: AsyncIOMotorDatabase):
         self.db = db
@@ -162,7 +164,8 @@ class LaboratorioRepository:
         ]
         
         cursor = self.catalog_collection.aggregate(pipeline)
-        return await cursor.to_list(length=None)
+        result = await cursor.to_list(length=None)
+        return result if result else []
     
     async def update_exam_catalog(self, codice_catalogo: str, updates: dict) -> bool:
         """Update exam catalog entry"""
@@ -214,9 +217,10 @@ class LaboratorioRepository:
         ]
         
         cursor = self.mapping_collection.aggregate(pipeline)
-        return await cursor.to_list(length=None)
+        result = await cursor.to_list(length=None)
+        return result if result else []
     
-    async def get_enabled_mappings_for_analytics(self) -> Dict[str, List[str]]:
+    async def get_enabled_mappings_for_analytics(self) -> Dict[str, Any]:
         """Get enabled mappings formatted for analytics service"""
         pipeline = [
             {
@@ -249,35 +253,73 @@ class LaboratorioRepository:
         cursor = self.mapping_collection.aggregate(pipeline)
         results = await cursor.to_list(length=None)
         
-        # Format for analytics service: {codoffering: [catalog_codes]}
-        mappings = {}
+        # Format results as dict
+        formatted_mappings = {}
         for result in results:
-            mappings[result["_id"]] = {
+            formatted_mappings[result["_id"]] = {
                 "catalog_codes": result["catalog_codes"],
                 "exam_name": result["exam_name"]
             }
         
-        return mappings
+        return formatted_mappings
     
-    async def get_overview_stats(self) -> Dict:
-        """Get laboratory management overview statistics"""
-        total_catalog = await self.catalog_collection.count_documents({})
-        enabled_catalog = await self.catalog_collection.count_documents({"is_enabled": True})
-        total_mappings = await self.mapping_collection.count_documents({})
-        active_mappings = await self.mapping_collection.count_documents({"is_active": True})
-        
-        # Get unique strutture count
-        strutture_cursor = self.mapping_collection.distinct("struttura_nome")
-        strutture_count = len(await strutture_cursor)
-        
-        return {
-            "total_catalog_exams": total_catalog,
-            "enabled_catalog_exams": enabled_catalog,
-            "total_mappings": total_mappings,
-            "active_mappings": active_mappings,
-            "strutture_count": strutture_count,
-            "last_updated": datetime.now()
-        }
+    async def get_overview_stats(self) -> Dict[str, Any]:
+        """Get overview statistics for laboratory management"""
+        try:
+            # Count totals
+            total_catalog_entries = await self.catalog_collection.count_documents({})
+            enabled_catalog_entries = await self.catalog_collection.count_documents({"is_enabled": True})
+            total_mappings = await self.mapping_collection.count_documents({})
+            active_mappings = await self.mapping_collection.count_documents({"is_active": True})
+            
+            # Get branch breakdown
+            branch_pipeline = [
+                {"$group": {"_id": "$codice_branca", "count": {"$sum": 1}}}
+            ]
+            branch_cursor = self.catalog_collection.aggregate(branch_pipeline)
+            branch_results = await branch_cursor.to_list(length=None)
+            
+            branch_breakdown = {}
+            for result in branch_results:
+                branch_breakdown[result["_id"]] = result["count"]
+            
+            # Get structure breakdown from mappings
+            structure_pipeline = [
+                {"$group": {"_id": "$struttura_nome", "count": {"$sum": 1}}}
+            ]
+            structure_cursor = self.mapping_collection.aggregate(structure_pipeline)
+            structure_results = await structure_cursor.to_list(length=None)
+            
+            structure_breakdown = {}
+            for result in structure_results:
+                structure_breakdown[result["_id"]] = result["count"]
+            
+            return {
+                "total_catalog_entries": total_catalog_entries,
+                "enabled_catalog_entries": enabled_catalog_entries,
+                "total_mappings": total_mappings,
+                "active_mappings": active_mappings,
+                "branch_breakdown": branch_breakdown,
+                "structure_breakdown": structure_breakdown,
+                "mapping_completion_rate": round((active_mappings / total_catalog_entries * 100), 1) if total_catalog_entries > 0 else 0,
+                "system_status": "operational",
+                "last_updated": datetime.now()
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error getting overview stats: {e}")
+            return {
+                "total_catalog_entries": 0,
+                "enabled_catalog_entries": 0,
+                "total_mappings": 0,
+                "active_mappings": 0,
+                "branch_breakdown": {},
+                "structure_breakdown": {},
+                "mapping_completion_rate": 0,
+                "system_status": "error",
+                "last_updated": datetime.now(),
+                "error": str(e)
+            }
 
 # Database health check
 async def check_database_health() -> dict:
