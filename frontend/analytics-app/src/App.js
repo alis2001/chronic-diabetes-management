@@ -355,26 +355,6 @@ const App = () => {
     
     return (
       <>
-        {/* Statistics Cards */}
-        <div className="stats-container">
-          <div className="stat-card">
-            <div className="stat-value">{chartData.total_points}</div>
-            <div className="stat-label">Punti Totali</div>
-          </div>
-          <div className="stat-card">
-            <div className={`stat-value ${hasAnomalies ? 'anomaly-stat' : 'normal-stat'}`}>
-              {chartData.anomaly_points}
-            </div>
-            <div className="stat-label">Anomalie</div>
-          </div>
-          <div className="stat-card">
-            <div className={`stat-value ${hasAnomalies ? 'anomaly-stat' : 'normal-stat'}`}>
-              {chartData.anomaly_percentage.toFixed(1)}%
-            </div>
-            <div className="stat-label">% Anomalie</div>
-          </div>
-        </div>
-
         {/* Chart */}
         <div className="chart-container">
           <div className="chart-title">

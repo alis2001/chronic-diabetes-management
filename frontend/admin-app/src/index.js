@@ -637,7 +637,7 @@ const DashboardLayout = ({ user, onLogout }) => {
                 Admin Dashboard
               </h1>
               <p style={tableStyles.brandSubtitle}>
-                Sistema Sanitario ASL
+                Sistema Gestione Sanitario
               </p>
             </div>
           </div>

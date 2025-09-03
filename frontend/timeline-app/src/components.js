@@ -835,7 +835,7 @@ const ProfessionalTabs = ({ patientId, doctorId }) => {
 
       case 'esami':
         return (
-          <div style={{...tabContentStyles.esami, borderRadius: '16px', border: '2px solid', borderColor: tabContentStyles.esami.borderColor, padding: '0', overflow: 'hidden'}}>
+          <div style={{...tabContentStyles.esami, padding: '0', overflow: 'hidden'}}>
             {analyticsLoaded ? (
               <EmbeddedAnalyticsWindow 
                 patientId={patientId}
