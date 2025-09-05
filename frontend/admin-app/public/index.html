@@ -17,34 +17,34 @@
       }
       
       body {
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background: #fafafa;  /* ← CHANGED: Simple light background */
         min-height: 100vh;
         line-height: 1.6;
-        color: #1f2937;
+        color: #333333;       /* ← CHANGED: Simple dark text */
       }
       
       #root {
         min-height: 100vh;
       }
       
-      /* Loading State */
+      /* Simple Loading State */
       .initial-loading {
         display: flex;
         flex-direction: column;
         justify-content: center;
         align-items: center;
         min-height: 100vh;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
+        background: #fafafa;  /* ← CHANGED: Simple light background */
+        color: #333333;       /* ← CHANGED: Simple dark text */
       }
       
       .loading-spinner {
-        width: 50px;
-        height: 50px;
-        border: 4px solid rgba(255,255,255,0.3);
+        width: 40px;
+        height: 40px;
+        border: 3px solid #e5e5e5;      /* ← CHANGED: Light gray border */
         border-radius: 50%;
-        border-top-color: #fff;
+        border-top-color: #000000;      /* ← CHANGED: Simple black top */
         animation: spin 1s ease-in-out infinite;
         margin-bottom: 20px;
       }

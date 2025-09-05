@@ -729,19 +729,20 @@ const AdminApp = () => {
         ...tableStyles.container,
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'center'
+        justifyContent: 'center',
+        background: '#fafafa'  // ← CHANGED: Simple light background
       }}>
         <div style={{ textAlign: 'center' }}>
           <div style={{
             width: '40px',
             height: '40px',
-            border: '4px solid #e9ecef',
-            borderTop: '4px solid #000000',
+            border: '3px solid #e5e5e5',      // ← CHANGED: Light gray border
+            borderTop: '3px solid #000000',   // ← CHANGED: Simple black top
             borderRadius: '50%',
             animation: 'spin 1s linear infinite',
             margin: '0 auto 20px'
           }}></div>
-          <p>Verifica sessione...</p>
+          <p style={{ color: '#333333' }}>Verifica sessione...</p>  {/* ← CHANGED: Simple dark text */}
         </div>
       </div>
     );

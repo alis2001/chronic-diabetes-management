@@ -28,12 +28,11 @@
       
       html, body {
         height: 100%;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 
-                     'Helvetica Neue', Arial, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       }
       
       body {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: #fafafa;  /* ← CHANGED: Simple light background */
         margin: 0;
         font-family: inherit;
         -webkit-font-smoothing: antialiased;
@@ -44,13 +43,13 @@
         height: 100%;
       }
       
-      /* Initial loading styles */
+      /* Simple loading styles */
       .initial-loading {
         display: flex;
         justify-content: center;
         align-items: center;
         height: 100vh;
-        color: white;
+        color: #333333;       /* ← CHANGED: Simple dark text */
         font-size: 18px;
         font-weight: 500;
         flex-direction: column;
@@ -58,11 +57,11 @@
       }
       
       .loading-spinner {
-        width: 50px;
-        height: 50px;
-        border: 4px solid rgba(255, 255, 255, 0.3);
+        width: 40px;
+        height: 40px;
+        border: 3px solid #e5e5e5;      /* ← CHANGED: Light gray border */
         border-radius: 50%;
-        border-top-color: white;
+        border-top-color: #000000;      /* ← CHANGED: Simple black top */
         animation: spin 1s ease-in-out infinite;
       }
       
@@ -72,7 +71,7 @@
       
       .loading-subtext {
         font-size: 14px;
-        opacity: 0.8;
+        opacity: 0.7;
         margin-top: 10px;
       }
       
@@ -80,7 +79,7 @@
         to { transform: rotate(360deg); }
       }
       
-      /* Error state styling for initial load failures */
+      /* Simple error state styling */
       .initial-error {
         display: flex;
         justify-content: center;
@@ -91,12 +90,12 @@
       
       .error-container {
         background: white;
-        border-radius: 20px;
+        border-radius: 8px;
         padding: 40px;
         text-align: center;
         max-width: 500px;
         width: 100%;
-        box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);  /* ← CHANGED: Simple shadow */
       }
       
       .error-title {
@@ -107,7 +106,7 @@
       }
       
       .error-message {
-        color: #6b7280;
+        color: #666666;
         font-size: 16px;
         line-height: 1.5;
         margin-bottom: 25px;
@@ -118,7 +117,7 @@
         color: white;
         border: none;
         padding: 12px 24px;
-        border-radius: 12px;
+        border-radius: 6px;
         font-size: 14px;
         font-weight: 600;
         cursor: pointer;
@@ -127,7 +126,6 @@
       
       .error-button:hover {
         background: #b91c1c;
-        transform: translateY(-1px);
       }
       
       /* Hide initial loading when React takes over */

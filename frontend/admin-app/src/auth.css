@@ -518,3 +518,42 @@
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
 }
+
+/* ================================
+   PASSWORD CONFIRMATION STYLES
+   ================================ */
+
+/* Error state for password mismatch */
+.form-input.error {
+  border-color: #dc2626 !important;
+  background-color: rgba(220, 38, 38, 0.05);
+}
+
+/* Success state for password match */
+.form-input.success {
+  border-color: #16a34a !important;
+  background-color: rgba(22, 163, 74, 0.05);
+}
+
+/* Password match indicator text */
+.password-match-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.password-match-indicator.success {
+  color: #16a34a;
+}
+
+.password-match-indicator.error {
+  color: #dc2626;
+}
+
+/* Disabled submit button when passwords don't match */
+.auth-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

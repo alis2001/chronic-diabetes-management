@@ -1,5 +1,5 @@
 // frontend/admin-app/src/components/auth/SignUp.js
-// Professional SignUp Component - Gesan Healthcare - WITH EMAIL PREFILL SUPPORT
+// Professional SignUp Component - WITH PASSWORD CONFIRMATION FIELD
 // Supports prefilled email from login redirection for better UX
 
 import React, { useState, useEffect } from 'react';
@@ -13,10 +13,12 @@ const SignUp = ({ initialEmail = '', onSwitchToLogin, onSignUpSuccess, onError }
     username: '',
     email: initialEmail,
     password: '',
+    confirmPassword: '',  // ← NEW: Password confirmation field
     role: 'analyst'
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [passwordMatch, setPasswordMatch] = useState(true); // ← NEW: Track password match state
 
   // Update email if initialEmail changes (from redirection)
   useEffect(() => {
@@ -32,6 +34,16 @@ const SignUp = ({ initialEmail = '', onSwitchToLogin, onSignUpSuccess, onError }
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+    
+    // ✅ NEW: Real-time password match validation
+    if (field === 'password' || field === 'confirmPassword') {
+      if (field === 'password') {
+        setPasswordMatch(value === formData.confirmPassword || formData.confirmPassword === '');
+      } else if (field === 'confirmPassword') {
+        setPasswordMatch(value === formData.password);
+      }
+    }
+    
     if (error) setError('');
   };
 
@@ -68,14 +80,24 @@ const SignUp = ({ initialEmail = '', onSwitchToLogin, onSignUpSuccess, onError }
       return;
     }
 
+    // ✅ NEW: Password confirmation validation
+    if (formData.password !== formData.confirmPassword) {
+      const errorMsg = 'Le password non corrispondono';
+      setError(errorMsg);
+      if (onError) onError(errorMsg);
+      setPasswordMatch(false);
+      return;
+    }
+
     setLoading(true);
     setError('');
     
     try {
       console.log('📝 Signup attempt:', formData.email);
       
-      // REAL API CALL - SignUp user
-      const response = await authAPI.signUp(formData);
+      // REAL API CALL - SignUp user (exclude confirmPassword from API call)
+      const { confirmPassword, ...apiData } = formData; // Remove confirmPassword from API payload
+      const response = await authAPI.signUp(apiData);
 
       console.log('✅ Signup response:', response);
       
@@ -128,7 +150,7 @@ const SignUp = ({ initialEmail = '', onSwitchToLogin, onSignUpSuccess, onError }
         </div>
       )}
 
-      {/* ✅ NEW: Show helpful message if email is prefilled */}
+      {/* ✅ Show helpful message if email is prefilled */}
       {initialEmail && (
         <div className="alert alert-info" style={{ 
           backgroundColor: '#e0f2fe',
@@ -225,6 +247,47 @@ const SignUp = ({ initialEmail = '', onSwitchToLogin, onSignUpSuccess, onError }
           </small>
         </div>
 
+        {/* ✅ NEW: Password confirmation field */}
+        <div className="form-group">
+          <label className="form-label required">Conferma Password</label>
+          <input
+            type="password"
+            value={formData.confirmPassword}
+            onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
+            className={`form-input password-input ${!passwordMatch ? 'error' : ''}`}
+            placeholder="Ripeti la password"
+            required
+            disabled={loading}
+            autoComplete="new-password"
+            style={{
+              borderColor: !passwordMatch ? '#dc2626' : (formData.confirmPassword && passwordMatch ? '#16a34a' : '')
+            }}
+          />
+          {/* ✅ NEW: Password match indicator */}
+          {formData.confirmPassword && (
+            <small style={{ 
+              color: passwordMatch ? '#16a34a' : '#dc2626', 
+              fontSize: '12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              marginTop: '4px'
+            }}>
+              {passwordMatch ? (
+                <>
+                  <span>✅</span>
+                  Le password corrispondono
+                </>
+              ) : (
+                <>
+                  <span>❌</span>
+                  Le password non corrispondono
+                </>
+              )}
+            </small>
+          )}
+        </div>
+
         <div className="form-group">
           <label className="form-label">Ruolo</label>
           <select
@@ -245,7 +308,10 @@ const SignUp = ({ initialEmail = '', onSwitchToLogin, onSignUpSuccess, onError }
         <button 
           type="submit" 
           className={`auth-button ${loading ? 'loading' : ''}`}
-          disabled={loading}
+          disabled={loading || !passwordMatch}
+          style={{
+            opacity: (!passwordMatch && formData.confirmPassword) ? 0.6 : 1
+          }}
         >
           {loading ? (
             <span>
