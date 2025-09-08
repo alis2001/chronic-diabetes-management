@@ -15,7 +15,9 @@ const DraggableIframeModal = ({
   const iframeRef = useRef(null);
 
   // Analytics iframe URL with parameters
-  const analyticsUrl = `http://localhost:3011?cf=${patientId}&doctor_id=${doctorId}&embedded=true`;
+  const analyticsHost = window.location.hostname;
+  const analyticsPort = process.env.REACT_APP_ANALYTICS_FRONTEND_PORT || '3011';
+  const analyticsUrl = `http://${analyticsHost}:${analyticsPort}?cf=${patientId}&doctor_id=${doctorId}&embedded=true`;
   
   // Large size - full viewport minus margin
   const size = { 
@@ -29,7 +31,8 @@ const DraggableIframeModal = ({
 
   useEffect(() => {
     const handleIframeMessage = (event) => {
-      if (event.origin !== 'http://localhost:3011') return;
+      const expectedOrigin = `http://${window.location.hostname}:${process.env.REACT_APP_ANALYTICS_FRONTEND_PORT || '3011'}`;
+      if (event.origin !== expectedOrigin) return;
       
       console.log('📨 Message from Analytics iframe:', event.data);
       
@@ -47,7 +50,7 @@ const DraggableIframeModal = ({
 
     window.addEventListener('message', handleIframeMessage);
     return () => window.removeEventListener('message', handleIframeMessage);
-  }, []);
+  }, []); Comiso (RG)
 
   // ================================
   // STYLES - SEAMLESS INTEGRATION

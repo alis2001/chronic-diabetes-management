@@ -11,6 +11,13 @@ import './styles.css';
 // ERROR BOUNDARY COMPONENT
 // ================================
 
+// Get dynamic parent origin based on current hostname
+const getParentOrigin = () => {
+  const parentHost = window.location.hostname;
+  const parentPort = process.env.REACT_APP_TIMELINE_FRONTEND_PORT || '3010';
+  return `http://${parentHost}:${parentPort}`;
+};
+
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -125,9 +132,7 @@ class ErrorBoundary extends React.Component {
 // Listen for messages from parent window (timeline service)
 window.addEventListener('message', (event) => {
   // Only accept messages from parent timeline app
-  if (event.origin !== 'http://localhost:3010') {
-    return;
-  }
+  if (event.origin !== getParentOrigin()) return;
   
   console.log('📨 Analytics iframe received message:', event.data);
   
@@ -166,7 +171,7 @@ const sendReadyMessage = () => {
       type: 'ANALYTICS_READY',
       source: 'analytics-iframe', 
       timestamp: new Date().toISOString()
-    }, 'http://localhost:3010');  // ✅ Timeline app origin
+    }, getParentOrigin());  // ✅ Timeline app origin
     console.log('📤 Analytics iframe sent ready message to parent');
   }
 };
@@ -292,7 +297,7 @@ if (window.parent && window.parent !== window) {
         type: 'ANALYTICS_HEIGHT_CHANGE',
         height: height,
         source: 'analytics-iframe'
-      }, 'http://localhost:3010');
+      }, getParentOrigin());
     }
   });
   

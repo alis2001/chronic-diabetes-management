@@ -77,12 +77,44 @@ def create_application() -> FastAPI:
         version="1.0.0"
     )
 
+    def get_cors_origins():
+        """Get CORS origins based on environment"""
+        # Get VM host from environment (localhost for dev, 10.10.13.122 for VM)
+        vm_host = os.getenv("VM_HOST", "localhost")
+        env = os.getenv("ENV", "development")
+        
+        # Base origins using environment variable
+        base_origins = [
+            f"http://{vm_host}:3010",  # Timeline Frontend
+            f"http://{vm_host}:3011",  # Analytics Frontend  
+            f"http://{vm_host}:3012",  # Admin Frontend
+            f"http://{vm_host}:8080",  # API Gateway
+        ]
+        
+        # Add additional origins from environment if specified
+        cors_env = os.getenv("CORS_ORIGINS", "")
+        if cors_env:
+            additional_origins = [origin.strip() for origin in cors_env.split(",")]
+            base_origins.extend(additional_origins)
+        
+        # In development, also allow localhost variants
+        if env == "development":
+            base_origins.extend([
+                "http://localhost:3010",
+                "http://localhost:3011", 
+                "http://localhost:3012",
+                "http://localhost:8080"
+            ])
+        
+        logger.info(f"🏥 Admin Dashboard CORS Origins: {base_origins}")
+        return base_origins
+
     # CORS middleware
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # In production: specify allowed origins
+        allow_origins=get_cors_origins(),  # Dynamic origins based on environment
         allow_credentials=True,
-        allow_methods=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
         allow_headers=["*"]
     )
 

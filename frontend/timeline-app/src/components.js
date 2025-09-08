@@ -49,7 +49,8 @@ export const PatientLookup = ({ onPatientFound, onPatientNotFound, onError }) =>
   // Session management - NOW USES API GATEWAY
   const createBackendSession = async (loginData) => {
     // Use API Gateway instead of direct Timeline Service
-    const API_BASE = process.env.REACT_APP_API_GATEWAY_URL || 'http://localhost:8080';
+    const API_BASE = process.env.REACT_APP_API_GATEWAY_URL || `http://${window.location.hostname}:8080`;
+
     
     console.log('🚀 Creating backend session via Gateway with:', loginData);
     
@@ -922,7 +923,9 @@ const EmbeddedAnalyticsWindow = ({
   patientId, 
   doctorId 
 }) => {
-  const analyticsUrl = `http://localhost:3011?cf=${patientId}&doctor_id=${doctorId}&embedded=true`;
+  const analyticsHost = window.location.hostname;
+  const analyticsPort = process.env.REACT_APP_ANALYTICS_FRONTEND_PORT || '3011';
+  const analyticsUrl = `http://${analyticsHost}:${analyticsPort}?cf=${patientId}&doctor_id=${doctorId}&embedded=true`;
   
   return (
     <div style={{

@@ -10,11 +10,11 @@ services:
     container_name: diabetes-mongodb
     restart: unless-stopped
     ports:
-      - "27018:27017"
+      - "${MONGODB_PORT:-27018}:27017"
     environment:
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: admin123
-      MONGO_INITDB_DATABASE: diabetes_db
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:-admin123}
+      MONGO_INITDB_DATABASE: ${MONGO_INITDB_DATABASE:-diabetes_db}
     volumes:
       - mongodb_data:/data/db
     networks:
@@ -25,8 +25,8 @@ services:
     container_name: diabetes-redis
     restart: unless-stopped
     ports:
-      - "6381:6379"  # Using 6381 to avoid conflict with existing Redis
-    command: redis-server --requirepass redis123
+      - "${REDIS_PORT:-6381}:6379"  # Using 6381 to avoid conflict with existing Redis
+    command: redis-server --requirepass ${REDIS_PASSWORD:-redis123}
     volumes:
       - redis_data:/data
     networks:
@@ -43,12 +43,14 @@ services:
     container_name: diabetes-timeline-service
     restart: unless-stopped
     ports:
-      - "8001:8001"
+      - "${TIMELINE_SERVICE_PORT:-8001}:8001"
     environment:
-      - ENV=development
+      - ENV=${ENVIRONMENT:-development}
       - SERVICE_PORT=8001
-      - MONGODB_URL=mongodb://admin:admin123@mongodb:27017/diabetes_db?authSource=admin
-      - REDIS_URL=redis://:redis123@redis:6379/0
+      - VM_HOST=${VM_HOST:-localhost}
+      - MONGODB_URL=mongodb://${MONGO_INITDB_ROOT_USERNAME:-admin}:${MONGO_INITDB_ROOT_PASSWORD:-admin123}@mongodb:27017/${MONGO_INITDB_DATABASE:-diabetes_db}?authSource=admin
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-redis123}@redis:6379/0
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
     depends_on:
       - mongodb
       - redis
@@ -64,12 +66,14 @@ services:
     container_name: diabetes-analytics-service
     restart: unless-stopped
     ports:
-      - "8002:8002"
+      - "${ANALYTICS_SERVICE_PORT:-8002}:8002"
     environment:
-      - ENV=development
+      - ENV=${ENVIRONMENT:-development}
       - SERVICE_PORT=8002
-      - MONGODB_URL=mongodb://admin:admin123@mongodb:27017/diabetes_db?authSource=admin
-      - REDIS_URL=redis://:redis123@redis:6379/0
+      - VM_HOST=${VM_HOST:-localhost}
+      - MONGODB_URL=mongodb://${MONGO_INITDB_ROOT_USERNAME:-admin}:${MONGO_INITDB_ROOT_PASSWORD:-admin123}@mongodb:27017/${MONGO_INITDB_DATABASE:-diabetes_db}?authSource=admin
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-redis123}@redis:6379/0
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
     depends_on:
       - mongodb
       - redis
@@ -86,18 +90,20 @@ services:
     container_name: diabetes-admin-dashboard
     restart: unless-stopped
     ports:
-      - "8084:8084"
+      - "${ADMIN_SERVICE_PORT:-8084}:8084"
     environment:
-      - ENV=development
+      - ENV=${ENVIRONMENT:-development}
       - SERVICE_PORT=8084
-      - MONGODB_URL=mongodb://admin:admin123@mongodb:27017/diabetes_db?authSource=admin
-      - REDIS_URL=redis://:redis123@redis:6379/0
+      - VM_HOST=${VM_HOST:-localhost}
+      - MONGODB_URL=mongodb://${MONGO_INITDB_ROOT_USERNAME:-admin}:${MONGO_INITDB_ROOT_PASSWORD:-admin123}@mongodb:27017/${MONGO_INITDB_DATABASE:-diabetes_db}?authSource=admin
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-redis123}@redis:6379/0
       - TIMELINE_SERVICE_URL=http://timeline-service:8001
       - ANALYTICS_SERVICE_URL=http://analytics-service:8002
       - SCHEDULER_SERVICE_URL=http://scheduler-service:8003
       - API_GATEWAY_URL=http://api-gateway:8080
-      - SMTP_USERNAME=alisadeghian7077@gmail.com
-      - SMTP_PASSWORD=jfvc swyy szwy pekb
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
+      - SMTP_USERNAME=${SMTP_USERNAME:-alisadeghian7077@gmail.com}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-jfvc swyy szwy pekb}
     depends_on:
       - mongodb
       - redis
@@ -107,27 +113,6 @@ services:
     volumes:
       - ./services/admin-dashboard:/app
 
-  admin-frontend:
-    build:
-      context: ./frontend/admin-app
-      dockerfile: Dockerfile.dev
-    container_name: diabetes-admin-frontend
-    restart: unless-stopped
-    ports:
-      - "3012:3000"  # Admin frontend port
-    environment:
-      - REACT_APP_API_GATEWAY_URL=http://localhost:8080
-      - REACT_APP_ADMIN_API_URL=http://localhost:8084
-      - CHOKIDAR_USEPOLLING=true
-    depends_on:
-      - api-gateway
-      - admin-dashboard
-    networks:
-      - diabetes-network
-    volumes:
-      - ./frontend/admin-app:/app
-      - /app/node_modules
-
   scheduler-service:
     build:
       context: ./services/scheduler-service
@@ -135,12 +120,14 @@ services:
     container_name: diabetes-scheduler-service
     restart: unless-stopped
     ports:
-      - "8003:8003"
+      - "${SCHEDULER_SERVICE_PORT:-8003}:8003"
     environment:
-      - ENV=development
+      - ENV=${ENVIRONMENT:-development}
       - SERVICE_PORT=8003
-      - MONGODB_URL=mongodb://admin:admin123@mongodb:27017/diabetes_db?authSource=admin
-      - REDIS_URL=redis://:redis123@redis:6379/0
+      - VM_HOST=${VM_HOST:-localhost}
+      - MONGODB_URL=mongodb://${MONGO_INITDB_ROOT_USERNAME:-admin}:${MONGO_INITDB_ROOT_PASSWORD:-admin123}@mongodb:27017/${MONGO_INITDB_DATABASE:-diabetes_db}?authSource=admin
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-redis123}@redis:6379/0
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
     depends_on:
       - mongodb
       - redis
@@ -161,13 +148,16 @@ services:
     container_name: diabetes-api-gateway
     restart: unless-stopped
     ports:
-      - "8080:8080"  # ✅ Main entry point for all API requests
+      - "${API_GATEWAY_PORT:-8080}:8080"  # ✅ Main entry point for all API requests
     environment:
-      - ENV=development
+      - ENV=${ENVIRONMENT:-development}
       - SERVICE_PORT=8080
+      - VM_HOST=${VM_HOST:-localhost}
       - TIMELINE_SERVICE_URL=http://timeline-service:8001
       - ANALYTICS_SERVICE_URL=http://analytics-service:8002
       - SCHEDULER_SERVICE_URL=http://scheduler-service:8003
+      - ADMIN_SERVICE_URL=http://admin-dashboard:8084
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
     depends_on:
       - timeline-service
       - analytics-service
@@ -188,12 +178,14 @@ services:
     container_name: diabetes-timeline-frontend
     restart: unless-stopped
     ports:
-      - "3010:3000"  # Timeline frontend port
+      - "${TIMELINE_FRONTEND_PORT:-3010}:3000"  # Timeline frontend port
     environment:
-      # ✅ PRIMARY: All API calls go through Gateway
-      - REACT_APP_API_GATEWAY_URL=http://localhost:8080
+      # ✅ PRIMARY: Dynamic API Gateway URL based on VM_HOST
+      - REACT_APP_API_GATEWAY_URL=http://${VM_HOST:-localhost}:${API_GATEWAY_PORT:-8080}
       # ✅ LEGACY FALLBACK: Direct service access (for development/debugging)
-      - REACT_APP_TIMELINE_API_URL=http://localhost:8001
+      - REACT_APP_TIMELINE_API_URL=http://${VM_HOST:-localhost}:${TIMELINE_SERVICE_PORT:-8001}
+      - REACT_APP_ANALYTICS_FRONTEND_PORT=${ANALYTICS_FRONTEND_PORT:-3011}
+      - REACT_APP_TIMELINE_FRONTEND_PORT=${TIMELINE_FRONTEND_PORT:-3010}
       - CHOKIDAR_USEPOLLING=true
     depends_on:
       - api-gateway  # ✅ Frontend depends on Gateway, not individual services
@@ -210,12 +202,15 @@ services:
     container_name: diabetes-analytics-frontend
     restart: unless-stopped
     ports:
-      - "3011:3000"  # Analytics frontend port
+      - "${ANALYTICS_FRONTEND_PORT:-3011}:3000"  # Analytics frontend port
     environment:
-      # ✅ PRIMARY: All API calls go through Gateway
-      - REACT_APP_API_GATEWAY_URL=http://localhost:8080
+      # ✅ PRIMARY: Dynamic API Gateway URL based on VM_HOST
+      - REACT_APP_API_GATEWAY_URL=http://${VM_HOST:-localhost}:${API_GATEWAY_PORT:-8080}
       # ✅ LEGACY FALLBACK: Direct service access (for development/debugging)
-      - REACT_APP_ANALYTICS_API_URL=http://localhost:8002
+      - REACT_APP_ANALYTICS_API_URL=http://${VM_HOST:-localhost}:${ANALYTICS_SERVICE_PORT:-8002}
+      - REACT_APP_TIMELINE_API_URL=http://${VM_HOST:-localhost}:${TIMELINE_SERVICE_PORT:-8001}
+      - REACT_APP_ANALYTICS_FRONTEND_PORT=${ANALYTICS_FRONTEND_PORT:-3011}
+      - REACT_APP_TIMELINE_FRONTEND_PORT=${TIMELINE_FRONTEND_PORT:-3010}
       - CHOKIDAR_USEPOLLING=true
     depends_on:
       - api-gateway  # ✅ Frontend depends on Gateway
@@ -223,6 +218,28 @@ services:
       - diabetes-network
     volumes:
       - ./frontend/analytics-app:/app
+      - /app/node_modules
+
+  admin-frontend:
+    build:
+      context: ./frontend/admin-app
+      dockerfile: Dockerfile.dev
+    container_name: diabetes-admin-frontend
+    restart: unless-stopped
+    ports:
+      - "${ADMIN_FRONTEND_PORT:-3012}:3000"  # Admin frontend port
+    environment:
+      # ✅ PRIMARY: Dynamic API Gateway and Admin URLs
+      - REACT_APP_API_GATEWAY_URL=http://${VM_HOST:-localhost}:${API_GATEWAY_PORT:-8080}
+      - REACT_APP_ADMIN_API_URL=http://${VM_HOST:-localhost}:${ADMIN_SERVICE_PORT:-8084}
+      - CHOKIDAR_USEPOLLING=true
+    depends_on:
+      - api-gateway
+      - admin-dashboard
+    networks:
+      - diabetes-network
+    volumes:
+      - ./frontend/admin-app:/app
       - /app/node_modules
 
   # ========================================
@@ -234,11 +251,11 @@ services:
     container_name: diabetes-mongo-express
     restart: unless-stopped
     ports:
-      - "8081:8081"
+      - "${MONGO_EXPRESS_PORT:-8081}:8081"
     environment:
-      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
-      ME_CONFIG_MONGODB_ADMINPASSWORD: admin123
-      ME_CONFIG_MONGODB_URL: mongodb://admin:admin123@mongodb:27017/
+      ME_CONFIG_MONGODB_ADMINUSERNAME: ${MONGO_INITDB_ROOT_USERNAME:-admin}
+      ME_CONFIG_MONGODB_ADMINPASSWORD: ${MONGO_INITDB_ROOT_PASSWORD:-admin123}
+      ME_CONFIG_MONGODB_URL: mongodb://${MONGO_INITDB_ROOT_USERNAME:-admin}:${MONGO_INITDB_ROOT_PASSWORD:-admin123}@mongodb:27017/
       ME_CONFIG_BASICAUTH_USERNAME: admin
       ME_CONFIG_BASICAUTH_PASSWORD: admin123
     depends_on:
@@ -251,9 +268,9 @@ services:
     container_name: diabetes-redis-commander
     restart: unless-stopped
     ports:
-      - "8082:8081"
+      - "${REDIS_COMMANDER_PORT:-8082}:8081"
     environment:
-      REDIS_HOSTS: "local:redis:6379:0:redis123"
+      REDIS_HOSTS: "local:redis:6379:0:${REDIS_PASSWORD:-redis123}"
     depends_on:
       - redis
     networks:

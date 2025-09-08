@@ -83,7 +83,8 @@ export const sessionStorage = {
 // ================================
 
 // API Gateway URL configuration
-const API_BASE_URL = process.env.REACT_APP_API_GATEWAY_URL || 'http://localhost:8080';
+const API_BASE_URL = process.env.REACT_APP_API_GATEWAY_URL || `http://${window.location.hostname}:8080`;
+
 
 // Custom error class
 export class APIError extends Error {

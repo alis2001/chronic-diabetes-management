@@ -3,7 +3,7 @@
 // Tutte le richieste ora passano attraverso il Gateway (porta 8080)
 
 // ✅ UPDATED: All requests now go through API Gateway
-const API_BASE_URL = process.env.REACT_APP_API_GATEWAY_URL || 'http://localhost:8080';
+const API_BASE_URL = process.env.REACT_APP_API_GATEWAY_URL || `http://${window.location.hostname}:8080`;
 
 // Gestione errori API
 class APIError extends Error {
@@ -100,6 +100,13 @@ export const timelineAPI = {
    * Registrazione paziente standard
    * ✅ UPDATED: /api/timeline/patients/register
    */
+
+  createVoiceWorkflow: (data) => 
+    apiRequest('/api/timeline/melody/create-voice-workflow', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
   registerPatient: (cf_paziente, id_medico, patologia) => 
     apiRequest('/api/timeline/patients/register', {
       method: 'POST',
