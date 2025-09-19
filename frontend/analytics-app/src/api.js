@@ -68,31 +68,46 @@ const apiRequest = async (url, options = {}) => {
 // Analytics API service
 export const analyticsAPI = {
   /**
-   * Get laboratory exam list for first dropdown (desesame)
-   * Through API Gateway: /api/analytics/laboratory-exams/{cf}
+   * Get laboratory exam list for first dropdown (desesame) - WITH FILTERING
+   * Through API Gateway: /api/analytics/laboratory-exams/{cf}?cronoscita_id=...
    */
-  getExamList: (codiceFiscale) => 
-    apiRequest(`/api/analytics/laboratory-exams/${codiceFiscale}`),
+  getExamList: (codiceFiscale, cronoscitaId = null) => {
+    const url = `/api/analytics/laboratory-exams/${codiceFiscale}${cronoscitaId ? `?cronoscita_id=${cronoscitaId}` : ''}`;
+    return apiRequest(url);
+  },
   
   /**
-   * Get sottanalisi list for second dropdown 
-   * Through API Gateway: /api/analytics/sottanalisi/{cf}?exam_key=...
+   * Get sottanalisi list for second dropdown - WITH FILTERING
+   * Through API Gateway: /api/analytics/sottanalisi/{cf}?exam_key=...&cronoscita_id=...
    */
-  getSottanalisi: (codiceFiscale, examKey) => 
-    apiRequest(`/api/analytics/sottanalisi/${codiceFiscale}?exam_key=${encodeURIComponent(examKey)}`),
+  getSottanalisi: (codiceFiscale, examKey, cronoscitaId = null) => {
+    let url = `/api/analytics/sottanalisi/${codiceFiscale}?exam_key=${encodeURIComponent(examKey)}`;
+    if (cronoscitaId) {
+      url += `&cronoscita_id=${cronoscitaId}`;
+    }
+    return apiRequest(url);
+  },
   
   /**
-   * Get chart data for visualization
-   * Through API Gateway: /api/analytics/chart-data/{cf}?exam_key=...&dessottoanalisi=...
+   * Get chart data for visualization - WITH FILTERING
+   * Through API Gateway: /api/analytics/chart-data/{cf}?exam_key=...&dessottoanalisi=...&cronoscita_id=...
    */
-  getChartData: (codiceFiscale, examKey, dessottoanalisi) => 
-    apiRequest(`/api/analytics/chart-data/${codiceFiscale}?exam_key=${encodeURIComponent(examKey)}&dessottoanalisi=${encodeURIComponent(dessottoanalisi)}`),
-  
+  getChartData: (codiceFiscale, examKey, dessottoanalisi, cronoscitaId = null) => {
+    let url = `/api/analytics/chart-data/${codiceFiscale}?exam_key=${encodeURIComponent(examKey)}&dessottoanalisi=${encodeURIComponent(dessottoanalisi)}`;
+    if (cronoscitaId) {
+      url += `&cronoscita_id=${cronoscitaId}`;
+    }
+    return apiRequest(url);
+  },
+
   /**
-   * Health check through Gateway
+   * Get filtering information for debugging
+   * Through API Gateway: /api/analytics/filtering-info?cronoscita_id=...
    */
-  healthCheck: () => 
-    apiRequest('/api/analytics/health')
+  getFilteringInfo: (cronoscitaId = null) => {
+    const url = `/api/analytics/filtering-info${cronoscitaId ? `?cronoscita_id=${cronoscitaId}` : ''}`;
+    return apiRequest(url);
+  }
 };
 
 // Utility functions

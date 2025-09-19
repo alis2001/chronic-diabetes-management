@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 import logging
 import sys
 import os
-
+from .database import connect_to_mongo, close_mongo_connection
 # Import our modules
 from .config import settings
 from .routers import get_all_routers
@@ -60,32 +60,31 @@ def get_cors_origins():
 
 def create_application() -> FastAPI:
     """
-    Create and configure the FastAPI analytics application
+    Create and configure the FastAPI analytics application with database support
     """
     # Initialize FastAPI app
     app = FastAPI(
         title=settings.API_TITLE,
-        description=settings.API_DESCRIPTION,
+        description=f"{settings.API_DESCRIPTION} - With Exam Mapping Filtering",
         version=settings.SERVICE_VERSION,
         docs_url=settings.DOCS_URL,
         redoc_url=settings.REDOC_URL,
         openapi_tags=[
             {
                 "name": "Medical Analytics",
-                "description": "Laboratory data analytics and visualization endpoints"
+                "description": "Laboratory data analytics with admin-configured filtering"
             },
             {
                 "name": "Wirgilio Integration", 
-                "description": "External medical system integration"
+                "description": "External medical system integration with mapping filters"
             }
         ]
     )
 
     # CORS middleware
-    # CORS middleware
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=get_cors_origins(),  # Dynamic origins based on environment
+        allow_origins=get_cors_origins(),
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         allow_headers=["*"]
@@ -98,54 +97,48 @@ def create_application() -> FastAPI:
         logger.error(f"Analytics service error: {exc.message}")
         return map_to_http_exception(exc)
 
-    @app.exception_handler(Exception)
-    async def general_exception_handler(request: Request, exc: Exception):
-        """Handle unexpected exceptions"""
-        logger.error(f"Unexpected error: {str(exc)}")
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": "Internal server error",
-                "message": "An unexpected error occurred",
-                "detail": str(exc) if settings.ENV == "development" else None
-            }
-        )
-
-    # Register all API routers
-    for router in get_all_routers():
-        app.include_router(router)
-
-    # Application lifecycle events
+    # Database lifecycle events
     @app.on_event("startup")
     async def startup_event():
-        """Application startup"""
-        logger.info(f"Starting {settings.SERVICE_NAME} v{settings.SERVICE_VERSION}")
-        logger.info(f"Environment: {settings.ENV}")
-        logger.info(f"Service Port: {settings.SERVICE_PORT}")
-        logger.info(f"Wirgilio API: {settings.WIRGILIO_API_BASE}")
-        
-        # Test Wirgilio connection at startup
-        from .services import WirgilioService
-        wirgilio_service = WirgilioService()
-        
+        """Initialize database connection on startup"""
         try:
-            connected = await wirgilio_service.test_connection()
-            if connected:
-                logger.info("✅ Wirgilio API connection successful")
-            else:
-                logger.warning("⚠️ Wirgilio API connection failed - service will continue")
+            await connect_to_mongo()
+            logger.info("✅ Analytics service startup complete with database connection")
         except Exception as e:
-            logger.warning(f"⚠️ Wirgilio API test failed: {str(e)} - service will continue")
-        
-        logger.info("🧪 Analytics Service started successfully!")
-        logger.info("📊 Medical data analytics endpoints available")
-        logger.info("📚 API Documentation available at /docs")
+            logger.error(f"❌ Failed to connect to database during startup: {e}")
+            raise
 
     @app.on_event("shutdown")
     async def shutdown_event():
-        """Application shutdown"""
-        logger.info("Shutting down Analytics Service...")
-        logger.info("Analytics Service shutdown complete")
+        """Close database connection on shutdown"""
+        try:
+            await close_mongo_connection()
+            logger.info("✅ Analytics service shutdown complete")
+        except Exception as e:
+            logger.error(f"❌ Error during shutdown: {e}")
+
+    # Include routers
+    for router in get_all_routers():
+        app.include_router(router)
+
+    # Update root endpoint
+    @app.get("/")
+    async def read_root():
+        """Root endpoint with filtering information"""
+        return {
+            "service": "Servizio Analytics ASL",
+            "version": settings.SERVICE_VERSION,
+            "status": "operativo",
+            "integration": "wirgilio-api",
+            "filtering": "admin-configured",
+            "endpoints": {
+                "exam_list": "GET /analytics/laboratory-exams/{codice_fiscale}?cronoscita_id=...",
+                "sottanalisi_list": "GET /analytics/sottanalisi/{codice_fiscale}?exam_key=...&cronoscita_id=...",
+                "chart_data": "GET /analytics/chart-data/{codice_fiscale}?exam_key=...&dessottoanalisi=...&cronoscita_id=...",
+                "filtering_info": "GET /analytics/filtering-info?cronoscita_id=...",
+                "frontend_app": "GET /analytics-app"
+            }
+        }
 
     return app
 

@@ -231,10 +231,53 @@ async def timeline_proxy(path: str, request: Request):
     """Route all /api/timeline/* requests to timeline service"""
     return await proxy_request("timeline", f"/{path}", request)
 
-@app.api_route("/api/analytics/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])  
+@app.api_route("/api/analytics/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
 async def analytics_proxy(path: str, request: Request):
-    """Route all /api/analytics/* requests to analytics service"""
-    return await proxy_request("analytics", f"/analytics/{path}", request)
+    """Route all /api/analytics/* requests to analytics service with query parameter support"""
+    if "analytics" not in SERVICES:
+        raise HTTPException(status_code=404, detail="Analytics service not configured")
+    
+    service_url = SERVICES["analytics"]
+    
+    # Build full target URL including the /analytics prefix and query parameters
+    target_url = f"{service_url}/analytics/{path}"
+    
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            # Forward the request with all query parameters preserved
+            response = await client.request(
+                method=request.method,
+                url=target_url,
+                headers={k: v for k, v in request.headers.items() if k.lower() != 'host'},
+                params=request.query_params,  # This preserves all query parameters
+                content=await request.body()
+            )
+            
+            # Return response
+            return JSONResponse(
+                content=response.json() if response.text else {},
+                status_code=response.status_code,
+                headers={k: v for k, v in response.headers.items() if k.lower() not in ['content-length', 'transfer-encoding']}
+            )
+            
+    except httpx.TimeoutException:
+        logger.error(f"⏰ Timeout calling analytics service at {target_url}")
+        raise HTTPException(
+            status_code=504, 
+            detail="Timeout calling analytics service"
+        )
+    except httpx.ConnectError:
+        logger.error(f"🔌 Cannot connect to analytics service at {target_url}")
+        raise HTTPException(
+            status_code=503, 
+            detail="Analytics service is unavailable"
+        )
+    except Exception as e:
+        logger.error(f"❌ Error proxying to analytics service: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail="Internal error calling analytics service"
+        )
 
 @app.api_route("/api/scheduler/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
 async def scheduler_proxy(path: str, request: Request):

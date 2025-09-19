@@ -10,7 +10,9 @@ from collections import defaultdict
 import httpx
 import logging
 import asyncio
-
+from .database import get_database
+from .repositories import ExamMappingRepository
+from .filtering import ExamFilteringService
 from .models import (
     WirgilioReport, WirgilioEsame, WirgilioRisultato,
     ProcessedResult, ExamSummary, SottanalisiSummary, ChartDataPoint,
@@ -22,15 +24,36 @@ from .exceptions import WirgilioAPIException, DataProcessingException
 logger = logging.getLogger(__name__)
 
 class WirgilioService:
-    """Service for Wirgilio API integration"""
+    """Service for Wirgilio API integration with filtering support"""
     
     def __init__(self):
         self.base_url = settings.WIRGILIO_API_BASE
         self.token = settings.WIRGILIO_TOKEN
         self.timeout = settings.ANALYTICS_TIMEOUT_SECONDS
     
-    async def fetch_patient_data(self, codice_fiscale: str) -> List[Dict[str, Any]]:
-        """Fetch laboratory data from Wirgilio API"""
+    async def test_connection(self) -> bool:
+        """Test connection to Wirgilio API"""
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                headers = {
+                    "Authorization": f"Bearer {self.token}",
+                    "Content-Type": "application/json"
+                }
+                
+                # Test with a simple endpoint
+                response = await client.get(f"{self.base_url}/health", headers=headers)
+                return response.status_code == 200
+        except Exception as e:
+            logger.error(f"Wirgilio connection test failed: {e}")
+            return False
+
+    async def fetch_patient_data(
+        self, 
+        codice_fiscale: str, 
+        filtering_service: Optional[ExamFilteringService] = None,
+        cronoscita_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Fetch laboratory data from Wirgilio API with optional filtering"""
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 headers = {
@@ -48,9 +71,19 @@ class WirgilioService:
                         response = await client.get(url, headers=headers, params=params)
                         
                         if response.status_code == 200:
-                            data = response.json()
-                            logger.info(f"Retrieved {len(data)} laboratory reports for {codice_fiscale}")
-                            return data
+                            raw_data = response.json()
+                            logger.info(f"Retrieved {len(raw_data)} laboratory reports for {codice_fiscale}")
+                            
+                            # APPLY FILTERING HERE
+                            if filtering_service:
+                                allowed_codes = await filtering_service.get_allowed_codoffering_codes(cronoscita_id)
+                                filtered_data = filtering_service.filter_wirgilio_data(raw_data, allowed_codes)
+                                logger.info(f"🔍 Filtered to {len(filtered_data)} reports with mapped exams")
+                                return filtered_data
+                            else:
+                                logger.warning("⚠️ No filtering applied - showing all exams")
+                                return raw_data
+                                
                         elif response.status_code == 404:
                             logger.warning(f"No data found for CF: {codice_fiscale}")
                             return []
@@ -63,23 +96,21 @@ class WirgilioService:
                         logger.warning(f"Timeout on attempt {attempt + 1}")
                         if attempt == settings.MAX_RETRIES - 1:
                             raise WirgilioAPIException("API timeout after retries")
+                    
+                    except Exception as e:
+                        logger.error(f"Request error on attempt {attempt + 1}: {e}")
+                        if attempt == settings.MAX_RETRIES - 1:
+                            raise WirgilioAPIException(f"Request failed: {str(e)}")
+                    
+                    # Wait before retry
+                    if attempt < settings.MAX_RETRIES - 1:
                         await asyncio.sleep(settings.RETRY_DELAY_SECONDS)
-                
-                return []
-                
+                        
+        except WirgilioAPIException:
+            raise
         except Exception as e:
-            logger.error(f"Wirgilio API error: {str(e)}")
-            raise WirgilioAPIException(f"Failed to fetch data: {str(e)}")
-    
-    async def test_connection(self) -> bool:
-        """Test Wirgilio API connection"""
-        try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                headers = {"Authorization": f"Bearer {self.token}"}
-                response = await client.get(f"{self.base_url}/health", headers=headers)
-                return response.status_code == 200
-        except:
-            return False
+            logger.error(f"Unexpected error fetching Wirgilio data: {e}")
+            raise WirgilioAPIException(f"Fetch failed: {str(e)}")
 
 class DataProcessingService:
     """Service for data cleaning, validation and anomaly detection"""
@@ -203,16 +234,32 @@ class DataProcessingService:
         }
 
 class AnalyticsService:
-    """Main analytics service orchestrating business logic"""
+    """Main analytics service with filtering support"""
     
-    def __init__(self, wirgilio_service: WirgilioService, data_service: DataProcessingService):
+    def __init__(
+        self, 
+        wirgilio_service: WirgilioService, 
+        data_service: DataProcessingService,
+        filtering_service: Optional[ExamFilteringService] = None
+    ):
         self.wirgilio_service = wirgilio_service
         self.data_service = data_service
+        self.filtering_service = filtering_service
     
-    async def get_exam_summaries(self, codice_fiscale: str) -> ExamListResponse:
-        """Get exam list for first dropdown - MERGED VERSION"""
+    async def get_exam_summaries(
+        self, 
+        codice_fiscale: str, 
+        cronoscita_id: Optional[str] = None
+    ) -> ExamListResponse:
+        """Get exam list for first dropdown with filtering applied"""
         try:
-            raw_data = await self.wirgilio_service.fetch_patient_data(codice_fiscale)
+            # Fetch data with filtering
+            raw_data = await self.wirgilio_service.fetch_patient_data(
+                codice_fiscale, 
+                self.filtering_service, 
+                cronoscita_id
+            )
+            
             processed = self.data_service.process_raw_data(raw_data)
             
             exam_data = processed["exam_data"]
@@ -243,23 +290,39 @@ class AnalyticsService:
             # Sort by exam name
             exam_summaries.sort(key=lambda x: x.desesame)
             
+            # Add filtering info to processing summary
+            processing_stats = processed["processing_stats"]
+            if self.filtering_service:
+                filter_stats = await self.filtering_service.get_filtering_statistics(cronoscita_id)
+                processing_stats["filtering"] = filter_stats
+            
             return ExamListResponse(
                 success=True,
                 codice_fiscale=codice_fiscale,
                 exam_summaries=exam_summaries,
                 total_exams=len(exam_summaries),
-                processing_summary=processed["processing_stats"]
+                processing_summary=processing_stats
             )
             
         except Exception as e:
-            logger.error(f"Error getting merged exam summaries: {str(e)}")
+            logger.error(f"Error getting exam summaries: {str(e)}")
             raise DataProcessingException(f"Failed to process exam data: {str(e)}")
     
-    async def get_sottanalisi_for_exam(self, codice_fiscale: str, exam_key: str) -> SottanalisiListResponse:
-        """Get sottanalisi list for second dropdown - MERGED VERSION"""
+    async def get_sottanalisi_for_exam(
+        self, 
+        codice_fiscale: str, 
+        exam_key: str, 
+        cronoscita_id: Optional[str] = None
+    ) -> SottanalisiListResponse:
+        """Get sottanalisi list for second dropdown with filtering applied"""
         try:
-            # Fetch and process data
-            raw_data = await self.wirgilio_service.fetch_patient_data(codice_fiscale)
+            # Fetch data with filtering
+            raw_data = await self.wirgilio_service.fetch_patient_data(
+                codice_fiscale, 
+                self.filtering_service, 
+                cronoscita_id
+            )
+            
             processed = self.data_service.process_raw_data(raw_data)
             
             # exam_key is now just the desesame
@@ -322,11 +385,22 @@ class AnalyticsService:
             logger.error(f"Error getting sottanalisi: {str(e)}")
             raise DataProcessingException(f"Failed to process sottanalisi data: {str(e)}")
     
-    async def get_chart_data(self, codice_fiscale: str, exam_key: str, dessottoanalisi: str) -> ChartDataResponse:
-        """Get time-series chart data for specific parameter - MERGED VERSION"""
+    async def get_chart_data(
+        self, 
+        codice_fiscale: str, 
+        exam_key: str, 
+        dessottoanalisi: str, 
+        cronoscita_id: Optional[str] = None
+    ) -> ChartDataResponse:
+        """Get time-series chart data for specific parameter with filtering applied"""
         try:
-            # Fetch and process data
-            raw_data = await self.wirgilio_service.fetch_patient_data(codice_fiscale)
+            # Fetch data with filtering
+            raw_data = await self.wirgilio_service.fetch_patient_data(
+                codice_fiscale, 
+                self.filtering_service, 
+                cronoscita_id
+            )
+            
             processed = self.data_service.process_raw_data(raw_data)
             
             # exam_key is now just the desesame, get all results for this exam
@@ -350,19 +424,13 @@ class AnalyticsService:
                     chart_color=CHART_COLORS["neutral"]
                 )
             
-            # Build chart data points with struttura info
-            chart_points = []
+            # Build chart data points
+            chart_data = []
+            anomaly_count = 0
+            
             for result in filtered_data:
-                # Determine struttura from codoffering pattern
-                codoffering = result.codoffering_original
-                struttura = "Laboratorio Urgenze" if codoffering.endswith('U') else "Laboratorio Routine"
-                
-                # Format date for display
-                try:
-                    date_obj = datetime.strptime(result.datareferto, "%d/%m/%Y")
-                    formatted_date = result.datareferto
-                except:
-                    formatted_date = result.datareferto
+                if result.is_anomaly:
+                    anomaly_count += 1
                 
                 point = ChartDataPoint(
                     date=result.datareferto,
@@ -372,31 +440,30 @@ class AnalyticsService:
                     flag=result.flaganomalia,
                     unit=result.unitadimisura,
                     range=result.rangevalori,
-                    formatted_date=formatted_date,
-                    struttura=struttura,
-                    codoffering=codoffering
+                    formatted_date=result.datareferto,  # Could format this differently
+                    struttura="", # Could be populated from mapping info
+                    codoffering=result.codoffering_original
                 )
-                chart_points.append(point)
+                chart_data.append(point)
             
             # Sort by date
-            chart_points.sort(key=lambda x: datetime.strptime(x.date, "%d/%m/%Y"))
+            chart_data.sort(key=lambda x: x.date)
             
-            # Calculate statistics
-            total_points = len(chart_points)
-            anomaly_points = sum(1 for point in chart_points if point.anomaly)
-            anomaly_percentage = (anomaly_points / total_points * 100) if total_points > 0 else 0.0
+            # Determine chart color
+            anomaly_percentage = (anomaly_count / len(chart_data)) * 100
+            chart_color = CHART_COLORS["anomaly"] if anomaly_count > 0 else CHART_COLORS["normal"]
             
             return ChartDataResponse(
                 success=True,
                 exam_key=exam_key,
                 dessottoanalisi=dessottoanalisi,
-                chart_data=chart_points,
-                total_points=total_points,
-                anomaly_points=anomaly_points,
+                chart_data=chart_data,
+                total_points=len(chart_data),
+                anomaly_points=anomaly_count,
                 anomaly_percentage=round(anomaly_percentage, 1),
-                chart_color=CHART_COLORS["neutral"]  # Always grey line
+                chart_color=chart_color
             )
             
         except Exception as e:
-            logger.error(f"Error generating merged chart data: {str(e)}")
+            logger.error(f"Error getting chart data: {str(e)}")
             raise DataProcessingException(f"Failed to generate chart data: {str(e)}")

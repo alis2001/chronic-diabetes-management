@@ -8,9 +8,11 @@ API endpoints for Wirgilio integration and medical data analytics
 from fastapi import APIRouter, Depends, Query, HTTPException
 from fastapi.responses import HTMLResponse
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, Any
 import logging
-
+from .database import get_database
+from .repositories import ExamMappingRepository
+from .filtering import ExamFilteringService
 from .services import WirgilioService, DataProcessingService, AnalyticsService
 from .models import (
     HealthResponse, ExamListResponse, SottanalisiListResponse, ChartDataResponse
@@ -32,12 +34,23 @@ async def get_data_processing_service() -> DataProcessingService:
     """Get data processing service instance"""
     return DataProcessingService()
 
+async def get_exam_mapping_repository(db = Depends(get_database)) -> ExamMappingRepository:
+    """Get exam mapping repository instance"""
+    return ExamMappingRepository(db)
+
+async def get_filtering_service(
+    mapping_repo: ExamMappingRepository = Depends(get_exam_mapping_repository)
+) -> ExamFilteringService:
+    """Get filtering service instance"""
+    return ExamFilteringService(mapping_repo)
+
 async def get_analytics_service(
     wirgilio_service: WirgilioService = Depends(get_wirgilio_service),
-    data_service: DataProcessingService = Depends(get_data_processing_service)
+    data_service: DataProcessingService = Depends(get_data_processing_service),
+    filtering_service: ExamFilteringService = Depends(get_filtering_service)
 ) -> AnalyticsService:
-    """Get main analytics service instance"""
-    return AnalyticsService(wirgilio_service, data_service)
+    """Get main analytics service instance with filtering support"""
+    return AnalyticsService(wirgilio_service, data_service, filtering_service)
 
 # ================================
 # MAIN API ROUTER
@@ -88,42 +101,41 @@ async def health_check(wirgilio_service: WirgilioService = Depends(get_wirgilio_
 analytics_router = APIRouter(prefix="/analytics", tags=["Medical Analytics"])
 
 @analytics_router.get("/laboratory-exams/{codice_fiscale}", response_model=ExamListResponse)
-async def get_laboratory_exams(
+async def get_exam_list(
     codice_fiscale: str,
+    cronoscita_id: Optional[str] = Query(None, description="Optional Cronoscita filter"),
     analytics_service: AnalyticsService = Depends(get_analytics_service)
 ):
     """
-    Get laboratory exam list for first dropdown (desesame)
+    Get laboratory exam list for first dropdown - WITH FILTERING
     
-    Returns exam types with anomaly coloring:
-    - Red color if exam contains ANY P or AP flags in history
-    - Normal color if exam has only N flags
+    Now filters results based on exam mappings configured in admin dashboard.
+    Only shows exams that have been mapped and marked as 'visualizza_nel_referto'='S'
     """
     try:
-        logger.info(f"Fetching laboratory exams for CF: {codice_fiscale}")
-        return await analytics_service.get_exam_summaries(codice_fiscale)
+        logger.info(f"Getting filtered exam list for CF: {codice_fiscale}, Cronoscita: {cronoscita_id}")
+        return await analytics_service.get_exam_summaries(codice_fiscale, cronoscita_id)
     except AnalyticsServiceException as e:
         raise map_to_http_exception(e)
     except Exception as e:
-        logger.error(f"Unexpected error getting exams: {str(e)}")
+        logger.error(f"Unexpected error getting exam list: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 @analytics_router.get("/sottanalisi/{codice_fiscale}", response_model=SottanalisiListResponse)
-async def get_sottanalisi_for_exam(
+async def get_sottanalisi_list(
     codice_fiscale: str,
-    exam_key: str = Query(..., description="Exam key (desesame_codoffering)"),
+    exam_key: str = Query(..., description="Exam key (desesame)"),
+    cronoscita_id: Optional[str] = Query(None, description="Optional Cronoscita filter"),
     analytics_service: AnalyticsService = Depends(get_analytics_service)
 ):
     """
-    Get sottanalisi list for second dropdown for selected exam
+    Get sottanalisi list for second dropdown - WITH FILTERING
     
-    Returns specific parameters with anomaly coloring:
-    - Red color if parameter has ANY P or AP flags in history
-    - Normal color if parameter has only N flags
+    Only shows sottanalisi for exams that passed the mapping filter
     """
     try:
-        logger.info(f"Fetching sottanalisi for CF: {codice_fiscale}, exam: {exam_key}")
-        return await analytics_service.get_sottanalisi_for_exam(codice_fiscale, exam_key)
+        logger.info(f"Getting filtered sottanalisi for CF: {codice_fiscale}, exam: {exam_key}, Cronoscita: {cronoscita_id}")
+        return await analytics_service.get_sottanalisi_for_exam(codice_fiscale, exam_key, cronoscita_id)
     except AnalyticsServiceException as e:
         raise map_to_http_exception(e)
     except Exception as e:
@@ -133,28 +145,41 @@ async def get_sottanalisi_for_exam(
 @analytics_router.get("/chart-data/{codice_fiscale}", response_model=ChartDataResponse)
 async def get_chart_data(
     codice_fiscale: str,
-    exam_key: str = Query(..., description="Exam key (desesame_codoffering)"),
+    exam_key: str = Query(..., description="Exam key (desesame)"),
     dessottoanalisi: str = Query(..., description="Parameter to chart"),
+    cronoscita_id: Optional[str] = Query(None, description="Optional Cronoscita filter"),
     analytics_service: AnalyticsService = Depends(get_analytics_service)
 ):
     """
-    Get time-series chart data for specific parameter
+    Get time-series chart data for specific parameter - WITH FILTERING
     
-    Returns chart data points with:
-    - Date from datareferto
-    - Numeric values only (invalid values filtered out)
-    - Anomaly flags for point coloring
-    - Chart color determination (red if ANY anomalies, green if all normal)
+    Only shows chart data for exams that passed the mapping filter
     """
     try:
-        logger.info(f"Generating chart data for CF: {codice_fiscale}, {exam_key}, {dessottoanalisi}")
-        return await analytics_service.get_chart_data(codice_fiscale, exam_key, dessottoanalisi)
+        logger.info(f"Generating filtered chart data for CF: {codice_fiscale}, {exam_key}, {dessottoanalisi}, Cronoscita: {cronoscita_id}")
+        return await analytics_service.get_chart_data(codice_fiscale, exam_key, dessottoanalisi, cronoscita_id)
     except AnalyticsServiceException as e:
         raise map_to_http_exception(e)
     except Exception as e:
         logger.error(f"Unexpected error generating chart: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+@analytics_router.get("/filtering-info", response_model=Dict[str, Any])
+async def get_filtering_info(
+    cronoscita_id: Optional[str] = Query(None, description="Optional Cronoscita filter"),
+    filtering_service: ExamFilteringService = Depends(get_filtering_service)
+):
+    """
+    Get information about current filtering configuration
+    
+    Useful for debugging and admin monitoring
+    """
+    try:
+        logger.info(f"Getting filtering info for Cronoscita: {cronoscita_id}")
+        return await filtering_service.get_filtering_statistics(cronoscita_id)
+    except Exception as e:
+        logger.error(f"Error getting filtering info: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error getting filtering information")
 # ================================
 # ROUTER COLLECTION FUNCTION
 # ================================

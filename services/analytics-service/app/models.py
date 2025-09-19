@@ -134,7 +134,7 @@ class ExamListResponse(BaseModel):
     codice_fiscale: str
     exam_summaries: List[ExamSummary]
     total_exams: int
-    processing_summary: Dict[str, int] = Field(default_factory=dict)
+    processing_summary: Dict[str, Any] = Field(default_factory=dict)
 
 class SottanalisiListResponse(BaseModel):
     """Response for sottanalisi dropdown population"""
