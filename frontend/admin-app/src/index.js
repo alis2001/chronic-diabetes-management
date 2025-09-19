@@ -683,7 +683,15 @@ const PatientsPage = ({ cronoscitaFilter }) => {
 
   const loadPatientsData = async () => {
     try {
-      console.log('📊 Loading patients data...', cronoscitaFilter ? `Filter: ${cronoscitaFilter}` : 'No filter');
+      // Don't load data if no Cronoscita selected
+      if (!cronoscitaFilter) {
+        console.log('📊 No Cronoscita selected - not loading patients data');
+        setData([]);
+        setLoading(false);
+        return;
+      }
+
+      console.log('📊 Loading patients data for Cronoscita:', cronoscitaFilter);
       
       // Pass cronoscita filter to API call
       const result = await adminAPI.getPatientsList(cronoscitaFilter);
@@ -769,25 +777,35 @@ const PatientsPage = ({ cronoscitaFilter }) => {
         emptyMessage={
           cronoscitaFilter 
             ? `Nessun paziente registrato nella Cronoscita: ${cronoscitaFilter}`
-            : "Nessun paziente registrato nel sistema"
+            : "Seleziona una Cronoscita per visualizzare i pazienti"
         }
       />
     </div>
   );
 };
 
-const DoctorsPage = () => {
+const DoctorsPage = ({ cronoscitaFilter }) => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadDoctorsData();
-  }, []);
+  }, [cronoscitaFilter]);
 
   const loadDoctorsData = async () => {
     try {
-      console.log('👨‍⚕️ Loading doctors data...');
-      const result = await adminAPI.getDoctorsList();
+      // Don't load data if no Cronoscita selected
+      if (!cronoscitaFilter) {
+        console.log('👨‍⚕️ No Cronoscita selected - not loading doctors data');
+        setData([]);
+        setLoading(false);
+        return;
+      }
+
+      console.log('👨‍⚕️ Loading doctors data for Cronoscita:', cronoscitaFilter);
+      
+      // Pass cronoscita filter to API call
+      const result = await adminAPI.getDoctorsList(cronoscitaFilter);
       
       if (result.success && result.doctors) {
         const tableData = result.doctors.map(doctor => [
@@ -799,7 +817,7 @@ const DoctorsPage = () => {
           doctor.appuntamenti_totali?.toString() || '0',
           doctor.appuntamenti_completati?.toString() || '0',
           `${doctor.tasso_completamento || 0}%`,
-          <StatusBadge key="status" status={doctor.stato || 'Attivo'} type="patient" />
+          <StatusBadge key="status" status={doctor.status || 'Attivo'} type="patient" />
         ]);
         setData(tableData);
       } else {
@@ -840,36 +858,50 @@ const DoctorsPage = () => {
         headers={headers} 
         data={data} 
         loading={loading}
-        emptyMessage="Nessun medico registrato nel sistema"
+        emptyMessage={
+          cronoscitaFilter 
+            ? `Nessun medico con pazienti nella Cronoscita: ${cronoscitaFilter}`
+            : "Seleziona una Cronoscita per visualizzare i medici"
+        }
       />
     </div>
   );
 };
 
-const VisitsPage = () => {
+const VisitsPage = ({ cronoscitaFilter }) => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadVisitsData();
-  }, []);
+  }, [cronoscitaFilter]); // Re-load when filter changes
 
   const loadVisitsData = async () => {
     try {
-      console.log('📅 Loading visits data...');
-      const result = await adminAPI.getVisitsList();
+      // Don't load data if no Cronoscita selected
+      if (!cronoscitaFilter) {
+        console.log('📅 No Cronoscita selected - not loading visits data');
+        setData([]);
+        setLoading(false);
+        return;
+      }
+
+      console.log('📅 Loading visits data for Cronoscita:', cronoscitaFilter);
+      
+      // Pass cronoscita filter to API call
+      const result = await adminAPI.getVisitsList(cronoscitaFilter);
       
       if (result.success && result.visits) {
         const tableData = result.visits.map(visit => [
           visit.appointment_id,
-          visit.paziente_nome,
-          visit.paziente_cf,
-          visit.medico_nome,
-          visit.tipo_appuntamento,
-          visit.data_programmata,
-          visit.orario,
-          visit.priorita || 'Normale',
-          <StatusBadge key="status" status={visit.stato} type="appointment" />
+          visit.patient_name,
+          visit.patient_cf,
+          visit.doctor_name,
+          visit.appointment_type,
+          `${visit.scheduled_date} ${visit.scheduled_time}`,
+          visit.patologia,
+          visit.location,
+          <StatusBadge key="status" status={visit.status} type="appointment" />
         ]);
         setData(tableData);
       } else {
@@ -890,27 +922,58 @@ const VisitsPage = () => {
     'Codice Fiscale',
     'Medico',
     'Tipo Visita',
-    'Data',
-    'Orario',
-    'Priorità',
+    'Data e Ora',
+    'Patologia',
+    'Sede',
     'Stato'
   ];
+
+  // Dynamic header based on filter
+  const getHeaderTitle = () => {
+    if (cronoscitaFilter) {
+      return `Gestione Visite - ${cronoscitaFilter}`;
+    }
+    return 'Gestione Visite';
+  };
+
+  const getHeaderSubtitle = () => {
+    if (cronoscitaFilter) {
+      return `Visite programmate per la Cronoscita: ${cronoscitaFilter}`;
+    }
+    return 'Registro completo degli appuntamenti e visite';
+  };
 
   return (
     <div>
       <div style={{ marginBottom: '24px' }}>
         <h2 style={{ margin: '0 0 8px 0', fontSize: '24px', fontWeight: '600' }}>
-          Gestione Visite
+          {getHeaderTitle()}
         </h2>
         <p style={{ margin: 0, color: '#666666' }}>
-          Registro completo degli appuntamenti e visite
+          {getHeaderSubtitle()}
         </p>
+        {cronoscitaFilter && (
+          <div style={{ 
+            marginTop: '8px', 
+            padding: '8px 12px', 
+            backgroundColor: '#e3f2fd', 
+            borderRadius: '4px',
+            fontSize: '14px',
+            color: '#1565c0'
+          }}>
+            🔍 Filtro attivo: {cronoscitaFilter}
+          </div>
+        )}
       </div>
       <DataTable 
         headers={headers} 
         data={data} 
         loading={loading}
-        emptyMessage="Nessuna visita registrata nel sistema"
+        emptyMessage={
+          cronoscitaFilter 
+            ? `Nessuna visita programmata per la Cronoscita: ${cronoscitaFilter}`
+            : "Seleziona una Cronoscita per visualizzare le visite"
+        }
       />
     </div>
   );
@@ -982,6 +1045,9 @@ const DashboardLayout = ({ user, onLogout }) => {
   };
 
   const renderContent = () => {
+    // Extract just the name from selected Cronoscita for filtering
+    const cronoscitaFilter = cronoscitaState.selectedCronoscita?.nome || null;
+    
     // For Laboratory tab, check Cronoscita selection
     if (activeTab === 'laboratorio') {
       if (!cronoscitaState.selectedCronoscita) {
@@ -1001,7 +1067,7 @@ const DashboardLayout = ({ user, onLogout }) => {
         );
       }
       
-      // Pass the selected Cronoscita to LaboratorioManagement
+      // Pass the selected Cronoscita object to LaboratorioManagement
       return (
         <LaboratorioManagement 
           cronoscita={cronoscitaState.selectedCronoscita} 
@@ -1009,16 +1075,16 @@ const DashboardLayout = ({ user, onLogout }) => {
       );
     }
 
-    // Other tabs - NOW PASS CRONOSCITA FILTER TO ALL TABS
+    // Other tabs - PASS CRONOSCITA NAME STRING (not object) TO ALL TABS
     switch (activeTab) {
       case 'patients':
-        return <PatientsPage cronoscitaFilter={cronoscitaState.selectedCronoscita} />;
+        return <PatientsPage cronoscitaFilter={cronoscitaFilter} />;
       case 'doctors':
-        return <DoctorsPage cronoscitaFilter={cronoscitaState.selectedCronoscita} />;
+        return <DoctorsPage cronoscitaFilter={cronoscitaFilter} />;
       case 'visits':
-        return <VisitsPage cronoscitaFilter={cronoscitaState.selectedCronoscita} />;
+        return <VisitsPage cronoscitaFilter={cronoscitaFilter} />;
       default:
-        return <PatientsPage cronoscitaFilter={cronoscitaState.selectedCronoscita} />;
+        return <PatientsPage cronoscitaFilter={cronoscitaFilter} />;
     }
   };
 

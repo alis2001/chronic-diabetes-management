@@ -340,19 +340,31 @@ export const adminAPI = {
     return await apiRequest('/api/admin/dashboard/system/health');
   },
 
-  // NEW: Get complete patients list with enrollment info
-  getPatientsList: async () => {
-    return await apiRequest('/api/admin/dashboard/patients/list');
+  // NEW: Get complete patients list with enrollment info with Cronoscita filtering
+  getPatientsList: async (cronoscitaFilter = null) => {
+    let url = '/api/admin/dashboard/patients/list';
+    if (cronoscitaFilter) {
+      url += `?cronoscita_filter=${encodeURIComponent(cronoscitaFilter)}`;
+    }
+    return await apiRequest(url);
   },
 
-  // NEW: Get complete doctors list with activity data
-  getDoctorsList: async () => {
-    return await apiRequest('/api/admin/dashboard/doctors/list');
+  // NEW: Get complete doctors list with activity data with Cronoscita filtering  
+  getDoctorsList: async (cronoscitaFilter = null) => {
+    let url = '/api/admin/dashboard/doctors/list';
+    if (cronoscitaFilter) {
+      url += `?cronoscita_filter=${encodeURIComponent(cronoscitaFilter)}`;
+    }
+    return await apiRequest(url);
   },
 
-  // NEW: Get complete visits list with patient and doctor info
-  getVisitsList: async () => {
-    return await apiRequest('/api/admin/dashboard/visits/list');
+  // NEW: Get complete visits list with patient and doctor info with Cronoscita filtering
+  getVisitsList: async (cronoscitaFilter = null) => {
+    let url = '/api/admin/dashboard/visits/list';
+    if (cronoscitaFilter) {
+      url += `?cronoscita_filter=${encodeURIComponent(cronoscitaFilter)}`;
+    }
+    return await apiRequest(url);
   },
 
   getLaboratorioOptions: async () => {

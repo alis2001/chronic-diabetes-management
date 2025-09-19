@@ -45,30 +45,144 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Hardcoded doctor information (matching timeline service)
-HARDCODED_DOCTORS = {
-    "DOC001": {
-        "id": "DOC001",
-        "nome_completo": "Dr. Mario Rossi",
-        "specializzazione": "Diabetologia",
-        "struttura": "ASL Roma 1",
-        "codice_medico": "DOC001"
-    },
-    "DOC002": {
-        "id": "DOC002", 
-        "nome_completo": "Dr.ssa Laura Bianchi",
-        "specializzazione": "Diabetologia", 
-        "struttura": "ASL Roma 1",
-        "codice_medico": "DOC002"
-    },
-    "DOC003": {
-        "id": "DOC003",
-        "nome_completo": "Dr. Giuseppe Verdi", 
-        "specializzazione": "Endocrinologia",
-        "struttura": "ASL Roma 1", 
-        "codice_medico": "DOC003"
-    }
-}
+async def get_doctors_from_database(db):
+    """Dynamically discover doctors from patients collection"""
+    try:
+        # Get all unique doctors who have registered patients
+        pipeline = [
+            {"$match": {"status": {"$ne": "inactive"}}},  # Only active patients
+            {"$group": {
+                "_id": "$id_medico",
+                "doctor_id": {"$first": "$id_medico"},
+                "total_patients": {"$sum": 1},
+                "pathologies": {"$addToSet": "$patologia"},
+                "first_registration": {"$min": "$enrollment_date"},
+                "last_activity": {"$max": "$updated_at"}
+            }},
+            {"$sort": {"total_patients": -1}}
+        ]
+        
+        doctors_cursor = db.patients.aggregate(pipeline)
+        doctors_data = await doctors_cursor.to_list(length=None)
+        
+        # Get doctor names from Timeline service hardcoded list (temporary)
+        from .config import HARDCODED_DOCTOR_CREDENTIALS
+        
+        doctors_info = {}
+        for doctor in doctors_data:
+            doctor_id = doctor["doctor_id"]
+            
+            # Try to get doctor info from Timeline service constants
+            if doctor_id in HARDCODED_DOCTOR_CREDENTIALS:
+                timeline_info = HARDCODED_DOCTOR_CREDENTIALS[doctor_id]
+                doctors_info[doctor_id] = {
+                    "id": doctor_id,
+                    "nome_completo": timeline_info.nome_completo,
+                    "specializzazione": timeline_info.specializzazione,
+                    "struttura": timeline_info.struttura,
+                    "codice_medico": timeline_info.codice_medico,
+                    "pazienti_registrati": doctor["total_patients"],
+                    "pathologies": doctor["pathologies"],
+                    "first_registration": doctor["first_registration"],
+                    "last_activity": doctor["last_activity"]
+                }
+            else:
+                # Fallback for unknown doctors
+                doctors_info[doctor_id] = {
+                    "id": doctor_id,
+                    "nome_completo": f"Medico {doctor_id}",
+                    "specializzazione": "Specializzazione N/A",
+                    "struttura": "ASL Roma 1",
+                    "codice_medico": doctor_id,
+                    "pazienti_registrati": doctor["total_patients"],
+                    "pathologies": doctor["pathologies"],
+                    "first_registration": doctor["first_registration"],
+                    "last_activity": doctor["last_activity"]
+                }
+        
+        return doctors_info
+        
+    except Exception as e:
+        logger.error(f"Error getting doctors from database: {str(e)}")
+        return {}
+
+async def get_doctors_info_from_db(db):
+    """Get all doctors info dynamically from database - completely self-contained"""
+    try:
+        # Timeline service doctor mapping (temporary until cartella clinica integration)
+        TIMELINE_DOCTOR_NAMES = {
+            "DOC001": {
+                "nome_completo": "Dr. Mario Rossi",
+                "specializzazione": "Diabetologia",
+                "struttura": "ASL Roma 1",
+                "codice_medico": "DOC001"
+            },
+            "DOC002": {
+                "nome_completo": "Dr.ssa Laura Bianchi",
+                "specializzazione": "Diabetologia",
+                "struttura": "ASL Roma 1",
+                "codice_medico": "DOC002"
+            },
+            "DOC003": {
+                "nome_completo": "Dr. Giuseppe Verdi",
+                "specializzazione": "Endocrinologia",
+                "struttura": "ASL Roma 1",
+                "codice_medico": "DOC003"
+            },
+            "DOC004": {
+                "nome_completo": "Dr.ssa Anna Ferrari",
+                "specializzazione": "Diabetologia Pediatrica",
+                "struttura": "ASL Roma 1",
+                "codice_medico": "DOC004"
+            }
+        }
+        
+        # Get unique doctors from patients collection
+        pipeline = [
+            {"$match": {"status": {"$ne": "inactive"}}},
+            {"$group": {
+                "_id": "$id_medico",
+                "doctor_id": {"$first": "$id_medico"},
+                "total_patients": {"$sum": 1},
+                "pathologies": {"$addToSet": "$patologia"},
+                "first_registration": {"$min": "$enrollment_date"},
+                "last_activity": {"$max": "$updated_at"}
+            }}
+        ]
+        
+        doctors_cursor = db.patients.aggregate(pipeline)
+        doctors_data = await doctors_cursor.to_list(length=None)
+        
+        doctors_info = {}
+        for doctor in doctors_data:
+            doctor_id = doctor["doctor_id"]
+            
+            # Get doctor details (temporary lookup until cartella clinica)
+            if doctor_id in TIMELINE_DOCTOR_NAMES:
+                doctor_details = TIMELINE_DOCTOR_NAMES[doctor_id]
+                doctors_info[doctor_id] = {
+                    "id": doctor_id,
+                    "nome_completo": doctor_details["nome_completo"],
+                    "specializzazione": doctor_details["specializzazione"],
+                    "struttura": doctor_details["struttura"],
+                    "codice_medico": doctor_details["codice_medico"]
+                }
+            else:
+                # Dynamic fallback for unknown doctors
+                doctors_info[doctor_id] = {
+                    "id": doctor_id,
+                    "nome_completo": f"Dr. {doctor_id}",
+                    "specializzazione": "Specializzazione N/A",
+                    "struttura": "ASL Roma 1",
+                    "codice_medico": doctor_id
+                }
+        
+        logger.info(f"📊 Discovered {len(doctors_info)} active doctors from database")
+        return doctors_info
+        
+    except Exception as e:
+        logger.error(f"Error getting doctors from database: {str(e)}")
+        return {}
 
 def create_application() -> FastAPI:
     """Create and configure the FastAPI application"""
@@ -683,53 +797,147 @@ def create_application() -> FastAPI:
     # ================================
 
     @app.get("/dashboard/patients/list")
-    async def get_patients_list():
-        """Get patients list - simplified"""
+    async def get_patients_list(cronoscita_filter: Optional[str] = Query(None, description="Filter by Cronoscita pathology")):
+        """Get patients list with optional Cronoscita filtering"""
         try:
-            # Mock data for now
-            mock_patients = [
-                {
-                    "cf_paziente": "RSSMRA80A01H501U",
-                    "nome": "Mario",
-                    "cognome": "Rossi", 
-                    "data_nascita": "1980-01-01",
-                    "telefono": "+39 333 1234567",
-                    "email": "mario.rossi@email.com",
-                    "patologia": "Diabete Mellito Tipo 2",
-                    "last_visit": "2024-01-15",
-                    "status": "Attivo"
-                }
-            ]
+            db = await get_database()
             
-            return {
+            # Build query filter
+            query_filter = {"status": {"$ne": "inactive"}}  # Exclude inactive patients
+            
+            # Add Cronoscita filter if provided
+            if cronoscita_filter:
+                query_filter["patologia"] = cronoscita_filter
+                logger.info(f"🔍 Filtering patients by Cronoscita: {cronoscita_filter}")
+            
+            # Query patients collection directly (microservices pattern)
+            patients_cursor = db.patients.find(query_filter).sort("created_at", -1)
+            patients_data = await patients_cursor.to_list(length=None)
+            
+            # Get doctors info dynamically
+            doctors_info = await get_doctors_info_from_db(db)
+            
+            # Format patient data for admin panel
+            formatted_patients = []
+            for patient in patients_data:
+                # Get doctor name from dynamic lookup
+                doctor_id = patient.get("id_medico", "")
+                doctor_info = doctors_info.get(doctor_id, {})
+                doctor_name = doctor_info.get("nome_completo", f"Medico {doctor_id}")
+                
+                formatted_patients.append({
+                    "codice_fiscale": patient.get("cf_paziente", ""),
+                    "nome": patient.get("demographics", {}).get("nome", "N/A"),
+                    "cognome": patient.get("demographics", {}).get("cognome", "N/A"),
+                    "data_nascita": patient.get("demographics", {}).get("data_nascita", "N/A"),
+                    "telefono": patient.get("demographics", {}).get("telefono", "N/A"),
+                    "email": patient.get("demographics", {}).get("email", "N/A"),
+                    "patologia": patient.get("patologia", "N/A"),
+                    "medico_nome": doctor_name,
+                    "data_registrazione": patient.get("enrollment_date", patient.get("created_at", datetime.now())).strftime("%d/%m/%Y") if patient.get("enrollment_date") or patient.get("created_at") else "N/A",
+                    "status": "Attivo" if patient.get("status") == "active" else "Inattivo"
+                })
+            
+            result = {
                 "success": True,
-                "total": len(mock_patients),
-                "patients": mock_patients
+                "total": len(formatted_patients),
+                "patients": formatted_patients
             }
+            
+            if cronoscita_filter:
+                result["cronoscita_filter"] = cronoscita_filter
+                
+            return result
             
         except Exception as e:
             logger.error(f"Error getting patients list: {str(e)}")
             raise HTTPException(status_code=500, detail="Error retrieving patients data")
 
     @app.get("/dashboard/doctors/list")
-    async def get_doctors_list():
-        """Get doctors list - simplified"""
+    async def get_doctors_list(cronoscita_filter: Optional[str] = Query(None, description="Filter by Cronoscita pathology")):
+        """Get doctors list dynamically from database with optional Cronoscita filtering"""
         try:
+            db = await get_database()
+            
+            # Get doctors info dynamically
+            doctors_info = await get_doctors_info_from_db(db)
+            
+            if not doctors_info:
+                return {
+                    "success": True,
+                    "total": 0,
+                    "doctors": []
+                }
+            
+            # Build statistics for each doctor
             doctors_data = []
-            for doctor_id, doctor_info in HARDCODED_DOCTORS.items():
+            for doctor_id, doctor_info in doctors_info.items():
+                
+                # Build query for this doctor's patients
+                patients_query = {
+                    "id_medico": doctor_id,
+                    "status": {"$ne": "inactive"}
+                }
+                
+                # Add Cronoscita filter if provided
+                if cronoscita_filter:
+                    patients_query["patologia"] = cronoscita_filter
+                
+                # Count patients for this doctor (in this Cronoscita if filtered)
+                patients_count = await db.patients.count_documents(patients_query)
+                
+                # Only include doctor if they have patients in the filtered Cronoscita (when filter is applied)
+                if cronoscita_filter and patients_count == 0:
+                    continue  # Skip doctors with no patients in this Cronoscita
+                
+                # Count appointments for this doctor's patients
+                appointments_query = {"id_medico": doctor_id}
+                if cronoscita_filter:
+                    # Get patient CFs for this Cronoscita
+                    patients_cursor = db.patients.find(patients_query, {"cf_paziente": 1})
+                    patient_cfs = [p["cf_paziente"] async for p in patients_cursor]
+                    if patient_cfs:
+                        appointments_query["cf_paziente"] = {"$in": patient_cfs}
+                    else:
+                        appointments_query["cf_paziente"] = {"$in": []}  # No patients = no appointments
+                
+                total_appointments = await db.appointments.count_documents(appointments_query)
+                completed_appointments = await db.appointments.count_documents({
+                    **appointments_query,
+                    "status": "completed"
+                })
+                
+                # Calculate completion rate
+                completion_rate = round((completed_appointments / total_appointments * 100) if total_appointments > 0 else 0, 1)
+                
                 doctors_data.append({
-                    **doctor_info,
-                    "pazienti_totali": 15,  # Mock data
-                    "visite_programmate": 3,
+                    "codice_medico": doctor_info["codice_medico"],
+                    "nome_completo": doctor_info["nome_completo"],
+                    "specializzazione": doctor_info["specializzazione"],
+                    "struttura": doctor_info["struttura"],
+                    "pazienti_registrati": patients_count,
+                    "appuntamenti_totali": total_appointments,
+                    "appuntamenti_completati": completed_appointments,
+                    "tasso_completamento": completion_rate,
+                    "visite_programmate": await db.appointments.count_documents({
+                        **appointments_query,
+                        "status": "scheduled"
+                    }),
                     "ultima_attivita": format_date(datetime.now()),
                     "status": "Attivo"
                 })
             
-            return {
+            result = {
                 "success": True,
                 "total": len(doctors_data),
                 "doctors": doctors_data
             }
+            
+            if cronoscita_filter:
+                result["cronoscita_filter"] = cronoscita_filter
+                logger.info(f"🔍 Filtering doctors by Cronoscita: {cronoscita_filter} - Found {len(doctors_data)} doctors")
+                
+            return result
             
         except Exception as e:
             logger.error(f"Error getting doctors list: {str(e)}")
@@ -765,6 +973,86 @@ def create_application() -> FastAPI:
             logger.error(f"Error getting cronoscita for timeline: {str(e)}")
             raise HTTPException(status_code=500, detail="Error retrieving cronoscita options")
     
+    @app.get("/dashboard/visits/list")
+    async def get_visits_list(cronoscita_filter: Optional[str] = Query(None, description="Filter by Cronoscita pathology")):
+        """Get visits/appointments list with optional Cronoscita filtering"""
+        try:
+            db = await get_database()
+            
+            # Build aggregation pipeline for visits with patient and doctor info
+            pipeline = [
+                {
+                    "$lookup": {
+                        "from": "patients",
+                        "localField": "cf_paziente", 
+                        "foreignField": "cf_paziente",
+                        "as": "patient_info"
+                    }
+                },
+                {
+                    "$unwind": {
+                        "path": "$patient_info",
+                        "preserveNullAndEmptyArrays": True
+                    }
+                }
+            ]
+            
+            # Add Cronoscita filter if provided
+            match_stage = {}
+            if cronoscita_filter:
+                match_stage["patient_info.patologia"] = cronoscita_filter
+                logger.info(f"🔍 Filtering visits by Cronoscita: {cronoscita_filter}")
+            
+            if match_stage:
+                pipeline.append({"$match": match_stage})
+            
+            # Sort by scheduled date (most recent first)
+            pipeline.append({
+                "$sort": {"scheduled_date": -1}
+            })
+            
+            # Execute aggregation
+            visits_cursor = db.appointments.aggregate(pipeline)
+            visits_data = await visits_cursor.to_list(length=None)
+            
+            # Format visit data for admin panel
+            formatted_visits = []
+            for visit in visits_data:
+                patient_info = visit.get("patient_info", {})
+                demographics = patient_info.get("demographics", {})
+                doctor_info = HARDCODED_DOCTORS.get(visit.get("id_medico", ""), {})
+                
+                # Format appointment type for display
+                appointment_type = get_appointment_type_display(visit.get("appointment_type", ""))
+                
+                formatted_visits.append({
+                    "appointment_id": str(visit.get("appointment_id", visit.get("_id", ""))),
+                    "patient_name": f"{demographics.get('nome', 'N/A')} {demographics.get('cognome', '')}".strip(),
+                    "patient_cf": visit.get("cf_paziente", "N/A"),
+                    "doctor_name": doctor_info.get("nome_completo", "N/A"),
+                    "appointment_type": appointment_type,
+                    "scheduled_date": visit.get("scheduled_date", datetime.now()).strftime("%d/%m/%Y"),
+                    "scheduled_time": visit.get("scheduled_date", datetime.now()).strftime("%H:%M"),
+                    "status": visit.get("status", "scheduled"),
+                    "patologia": patient_info.get("patologia", "N/A"),
+                    "priority": visit.get("priority", "normal"),
+                    "location": visit.get("location", "ASL Roma 1")
+                })
+            
+            result = {
+                "success": True,
+                "total": len(formatted_visits),
+                "visits": formatted_visits
+            }
+            
+            if cronoscita_filter:
+                result["cronoscita_filter"] = cronoscita_filter
+                
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error getting visits list: {str(e)}")
+            raise HTTPException(status_code=500, detail="Error retrieving visits data")
     # ================================
     # APPLICATION STARTUP/SHUTDOWN EVENTS  
     # ================================
