@@ -275,10 +275,24 @@ const LaboratorioManagement = ({ cronoscita }) => {
       }
     } catch (error) {
       console.error('❌ Error adding mapping:', error);
-      alert('Errore durante la creazione mappatura: ' + (error.message || error));
+      
+      // Handle validation conflicts (409 status)
+      if (error.statusCode === 409) {
+        const errorDetails = error.details || [];
+        let errorMessage = 'Conflitto nella mappatura:\n\n';
+        
+        errorDetails.forEach((detail, index) => {
+          errorMessage += `${index + 1}. ${detail}\n`;
+        });
+        
+        alert(errorMessage);
+      } else {
+        alert('Errore durante la creazione mappatura: ' + (error.message || error));
+      }
     } finally {
       setLoading(false);
     }
+
   };
 
   const handleEditMapping = (mapping) => {
@@ -355,7 +369,21 @@ const LaboratorioManagement = ({ cronoscita }) => {
       }
     } catch (error) {
       console.error('❌ Error updating mapping:', error);
-      alert('Errore durante l\'aggiornamento: ' + (error.message || error));
+      
+      // Handle validation conflicts (409 status)  
+      if (error.statusCode === 409) {
+        const errorDetails = error.details || [];
+        let errorMessage = 'Conflitto durante aggiornamento:\n\n';
+        
+        errorDetails.forEach((detail, index) => {
+          errorMessage += `${index + 1}. ${detail}\n`;
+        });
+        
+        errorMessage += '\nCorreggi i conflitti e riprova.';
+        alert(errorMessage);
+      } else {
+        alert('Errore durante l\'aggiornamento: ' + (error.message || error));
+      }
     } finally {
       setLoading(false);
     }

@@ -189,12 +189,54 @@ export const MEDICI = {
   'DOC004': 'Dr.ssa Anna Ferrari'
 };
 
-export const PATOLOGIE = {
-  'diabetes_mellitus_type2': 'Diabete Mellito Tipo 2',
-  'diabetes_mellitus_type1': 'Diabete Mellito Tipo 1',
-  'diabetes_gestational': 'Diabete Gestazionale',
-  'hypertension_primary': 'Ipertensione Primaria',
-  'cardiovascular': 'Malattie Cardiovascolari'
+export let PATOLOGIE = {};
+
+// Function to load pathologie from Timeline service (which gets them from admin service)
+export const loadAvailablePathologie = async () => {
+  try {
+    console.log('📡 Loading available pathologie from Timeline service...');
+    
+    const API_BASE = process.env.REACT_APP_API_GATEWAY_URL || `http://${window.location.hostname}:8080`;
+    
+    const response = await fetch(`${API_BASE}/api/timeline/available-pathologie`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    const data = await response.json();
+    
+    if (data.success && data.pathologie_options) {
+      PATOLOGIE = data.pathologie_options;
+      console.log('✅ Pathologie loaded:', Object.keys(PATOLOGIE).length, 'options');
+      console.log('📋 Available pathologie:', PATOLOGIE);
+      return true;
+    } else {
+      console.warn('⚠️ No pathologie available:', data.message);
+      PATOLOGIE = {};
+      return false;
+    }
+    
+  } catch (error) {
+    console.error('❌ Error loading pathologie:', error);
+    // Fallback to empty - no pathologie available
+    PATOLOGIE = {};
+    return false;
+  }
+};
+
+// Helper function to check if pathologie are available
+export const hasAvailablePathologie = () => {
+  return Object.keys(PATOLOGIE).length > 0;
+};
+
+// Helper function to get pathologie list as array for dropdown
+export const getPatologieOptions = () => {
+  return Object.entries(PATOLOGIE).map(([code, display]) => ({
+    value: code,
+    label: display
+  }));
 };
 
 export const TIPI_APPUNTAMENTO = {

@@ -156,6 +156,43 @@ def create_application() -> FastAPI:
         logger.info("📱 React Frontend Session API available at /api/session/*")
         logger.info("📚 API Documentation available at /docs")
     
+    @app.get("/available-pathologie")
+    async def get_available_pathologie():
+        """Get available pathologie options from admin service (Cronoscita)"""
+        try:
+            from .config import get_available_cronoscita_pathologie
+            
+            cronoscita_options = await get_available_cronoscita_pathologie()
+            
+            if not cronoscita_options:
+                return {
+                    "success": False,
+                    "message": "Nessuna Cronoscita configurata nel sistema amministrativo",
+                    "pathologie_options": [],
+                    "total": 0
+                }
+            
+            # Format for frontend compatibility
+            pathologie_dict = {}
+            for cronoscita in cronoscita_options:
+                pathologie_dict[cronoscita["code"]] = cronoscita["display"]
+            
+            return {
+                "success": True,
+                "message": f"Trovate {len(cronoscita_options)} pathologie disponibili",
+                "pathologie_options": pathologie_dict,
+                "total": len(cronoscita_options)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting available pathologie: {str(e)}")
+            return {
+                "success": False,
+                "message": "Errore nel recupero delle pathologie",
+                "pathologie_options": {},
+                "total": 0
+            }
+
     @app.on_event("shutdown")
     async def shutdown_event():
         """Application shutdown"""

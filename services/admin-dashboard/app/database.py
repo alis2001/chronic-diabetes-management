@@ -527,6 +527,111 @@ class LaboratorioRepository:
             logger.error(f"❌ Error getting mapping by ID: {e}")
             return None
 
+    async def check_wirgilio_code_conflict(
+        self, 
+        cronoscita_id: str,
+        struttura_nome: str,
+        codoffering_wirgilio: str,
+        exclude_mapping_id: str = None
+    ) -> Optional[Dict[str, Any]]:
+        """Check if Wirgilio code is already used in this structure"""
+        try:
+            query = {
+                "cronoscita_id": cronoscita_id,
+                "struttura_nome": struttura_nome,
+                "codoffering_wirgilio": codoffering_wirgilio
+            }
+            
+            # Exclude current mapping if editing
+            if exclude_mapping_id:
+                query["_id"] = {"$ne": ObjectId(exclude_mapping_id)}
+            
+            existing = await self.mapping_collection.find_one(query)
+            return serialize_mongo_doc(existing) if existing else None
+            
+        except Exception as e:
+            logger.error(f"❌ Error checking Wirgilio code conflict: {e}")
+            return None
+
+    async def check_exam_already_mapped(
+        self, 
+        cronoscita_id: str,
+        struttura_nome: str,
+        codice_catalogo: str,
+        exclude_mapping_id: str = None
+    ) -> Optional[Dict[str, Any]]:
+        """Check if exam is already mapped in this structure"""
+        try:
+            query = {
+                "cronoscita_id": cronoscita_id,
+                "struttura_nome": struttura_nome,
+                "codice_catalogo": codice_catalogo
+            }
+            
+            # Exclude current mapping if editing
+            if exclude_mapping_id:
+                query["_id"] = {"$ne": ObjectId(exclude_mapping_id)}
+            
+            existing = await self.mapping_collection.find_one(query)
+            return serialize_mongo_doc(existing) if existing else None
+            
+        except Exception as e:
+            logger.error(f"❌ Error checking exam mapping conflict: {e}")
+            return None
+
+    async def validate_mapping_business_rules(
+        self, 
+        cronoscita_id: str,
+        struttura_nome: str,
+        codice_catalogo: str,
+        codoffering_wirgilio: str,
+        exclude_mapping_id: str = None
+    ) -> Dict[str, Any]:
+        """Comprehensive validation of mapping business rules"""
+        try:
+            validation_result = {
+                "valid": True,
+                "errors": []
+            }
+            
+            # Check 1: Wirgilio code conflict
+            wirgilio_conflict = await self.check_wirgilio_code_conflict(
+                cronoscita_id, struttura_nome, codoffering_wirgilio, exclude_mapping_id
+            )
+            
+            if wirgilio_conflict:
+                validation_result["valid"] = False
+                validation_result["errors"].append({
+                    "type": "wirgilio_code_conflict",
+                    "message": f"Codice Wirgilio '{codoffering_wirgilio}' già utilizzato nella struttura '{struttura_nome}' per l'esame '{wirgilio_conflict.get('nome_esame_wirgilio', 'N/A')}'",
+                    "conflicting_mapping": wirgilio_conflict
+                })
+            
+            # Check 2: Exam already mapped
+            exam_conflict = await self.check_exam_already_mapped(
+                cronoscita_id, struttura_nome, codice_catalogo, exclude_mapping_id
+            )
+            
+            if exam_conflict:
+                validation_result["valid"] = False
+                validation_result["errors"].append({
+                    "type": "exam_already_mapped",
+                    "message": f"Esame '{codice_catalogo}' già mappato nella struttura '{struttura_nome}' con codice Wirgilio '{exam_conflict.get('codoffering_wirgilio', 'N/A')}'",
+                    "conflicting_mapping": exam_conflict
+                })
+            
+            return validation_result
+            
+        except Exception as e:
+            logger.error(f"❌ Error in mapping validation: {e}")
+            return {
+                "valid": False,
+                "errors": [{
+                    "type": "validation_error",
+                    "message": f"Errore durante validazione: {str(e)}"
+                }]
+            }
+
     async def check_duplicate_mapping_exclude_id(
         self, 
         codice_catalogo: str, 

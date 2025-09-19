@@ -14,6 +14,7 @@ import {
 } from './api';
 import { styles } from './styles';
 import DraggableIframeModal from './components/DraggableIframeModal';
+import { loadAvailablePathologie, hasAvailablePathologie, getPatologieOptions } from './api';
 
 // ================================
 // CLEAN HEADER
@@ -34,18 +35,36 @@ export const Header = ({ serviceHealth }) => (
 // PATIENT LOOKUP
 // ================================
 
-// Replace your existing PatientLookup component in components.js with this:
-
-// Updated PatientLookup component - replace the createBackendSession function:
 
 export const PatientLookup = ({ onPatientFound, onPatientNotFound, onError }) => {
   const [formData, setFormData] = useState({
     cf_paziente: '',
     id_medico: 'DOC001',
-    patologia: 'diabetes_mellitus_type2'
+    patologia: ''
   });
   const [loading, setLoading] = useState(false);
-
+  const [patologieLoading, setPatologieLoading] = useState(true);
+  const [patologieError, setPatologieError] = useState(null);
+  useEffect(() => {
+    const loadPathologie = async () => {
+      console.log('🔄 Loading available Cronoscita from admin service...');
+      setPatologieLoading(true);
+      setPatologieError(null);
+      
+      const success = await loadAvailablePathologie();
+      
+      if (!success || !hasAvailablePathologie()) {
+        setPatologieError('Nessuna Cronoscita configurata. Contattare l\'amministratore.');
+        console.error('❌ No Cronoscita available from admin service');
+      } else {
+        console.log('✅ Cronoscita loaded successfully');
+      }
+      
+      setPatologieLoading(false);
+    };
+    
+    loadPathologie();
+  }, []);  
   // Session management - NOW USES API GATEWAY
   const createBackendSession = async (loginData) => {
     // Use API Gateway instead of direct Timeline Service
@@ -163,17 +182,44 @@ export const PatientLookup = ({ onPatientFound, onPatientNotFound, onError }) =>
         </div>
         
         <div style={styles.formGroup}>
-          <label style={styles.label}>Patologia</label>
-          <select
-            value={formData.patologia}
-            onChange={(e) => setFormData({...formData, patologia: e.target.value})}
-            style={styles.select}
-            disabled={loading}
-          >
-            {Object.entries(PATOLOGIE).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
+          <label style={styles.label}>
+            Cronoscita/Pathologie *
+            {patologieLoading && <span style={{color: '#666', fontSize: '12px'}}> (Caricamento...)</span>}
+          </label>
+          
+          {patologieError ? (
+            <div style={{
+              padding: '12px',
+              backgroundColor: '#fef2f2',
+              border: '1px solid #fecaca',
+              borderRadius: '6px',
+              color: '#991b1b',
+              fontSize: '14px'
+            }}>
+              ⚠️ {patologieError}
+              <br />
+              <small>Configurare almeno una Cronoscita nel pannello amministrativo.</small>
+            </div>
+          ) : (
+            <select
+              style={{
+                ...styles.input,
+                backgroundColor: patologieLoading ? '#f3f4f6' : 'white',
+                cursor: patologieLoading ? 'not-allowed' : 'pointer'
+              }}
+              value={formData.patologia}
+              onChange={(e) => setFormData({...formData, patologia: e.target.value})}
+              required
+              disabled={patologieLoading || patologieError}
+            >
+              <option value="">-- Seleziona Cronoscita --</option>
+              {getPatologieOptions().map(option => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
         
         <button type="submit" disabled={loading} style={styles.primaryButton}>

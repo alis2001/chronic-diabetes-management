@@ -8,6 +8,10 @@ FIXED: Uses correct enum values and main database
 import os
 from typing import Dict
 from .models import DoctorCredentials, PatologiaEnum, AppointmentType
+import httpx
+import logging
+
+logger = logging.getLogger(__name__)
 
 class Settings:
     """Application settings"""
@@ -16,6 +20,7 @@ class Settings:
     SERVICE_NAME: str = "timeline-service"
     SERVICE_VERSION: str = "2.0.0"
     SERVICE_PORT: int = int(os.getenv("SERVICE_PORT", 8001))
+    ADMIN_SERVICE_URL: str = os.getenv("ADMIN_SERVICE_URL", "http://admin-dashboard:8084")
     ENV: str = os.getenv("ENV", "development")
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "info")
     
@@ -141,3 +146,37 @@ APPOINTMENT_LOCATIONS: Dict[AppointmentType, str] = {
 MAX_APPOINTMENTS_PER_DAY = 8
 DEFAULT_APPOINTMENT_DURATION_MINUTES = 30
 NOTIFICATION_ADVANCE_DAYS = 2
+
+
+async def get_available_cronoscita_pathologie():
+    """Get available pathologie from admin service (Cronoscita list)"""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(f"{settings.ADMIN_SERVICE_URL}/api/cronoscita/for-timeline")
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("success") and data.get("cronoscita_options"):
+                    logger.info(f"✅ Retrieved {len(data['cronoscita_options'])} cronoscita pathologie from admin service")
+                    return data["cronoscita_options"]
+            
+            logger.warning(f"⚠️ Admin service returned status {response.status_code}")
+            return []
+            
+    except httpx.TimeoutException:
+        logger.error("❌ Timeout calling admin service for cronoscita pathologie")
+        return []
+    except Exception as e:
+        logger.error(f"❌ Error calling admin service for cronoscita pathologie: {str(e)}")
+        return []
+
+async def get_pathologie_display_name(cronoscita_code: str) -> str:
+    """Get display name for cronoscita pathologie code"""
+    try:
+        pathologie_list = await get_available_cronoscita_pathologie()
+        for pathologie in pathologie_list:
+            if pathologie["code"] == cronoscita_code:
+                return pathologie["display"]
+        return cronoscita_code  # Fallback to code if not found
+    except:
+        return cronoscita_code

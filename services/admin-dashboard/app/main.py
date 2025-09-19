@@ -529,7 +529,7 @@ def create_application() -> FastAPI:
 
     @app.post("/dashboard/laboratorio/mappings")
     async def create_exam_mapping(request: ExamMappingCreate):
-        """Create exam mapping for specific Cronoscita"""
+        """Create exam mapping for specific Cronoscita with business rule validation"""
         try:
             db = await get_database()
             cronoscita_repo = CronoscitaRepository(db)
@@ -544,6 +544,25 @@ def create_application() -> FastAPI:
             catalog_exists = await lab_repo.get_catalog_by_code(request.codice_catalogo, request.cronoscita_id)
             if not catalog_exists:
                 raise HTTPException(status_code=400, detail=f"Exam {request.codice_catalogo} not found in Cronoscita catalog")
+            
+            # NEW: Validate business rules
+            validation_result = await lab_repo.validate_mapping_business_rules(
+                request.cronoscita_id,
+                request.struttura_nome,
+                request.codice_catalogo,
+                request.codoffering_wirgilio
+            )
+            
+            if not validation_result["valid"]:
+                error_messages = [error["message"] for error in validation_result["errors"]]
+                raise HTTPException(
+                    status_code=409,  # Conflict status code
+                    detail={
+                        "error": "Conflitto mappatura",
+                        "details": error_messages,
+                        "validation_errors": validation_result["errors"]
+                    }
+                )
             
             # Create mapping with uppercase exam name
             mapping_data = request.dict()
@@ -565,9 +584,10 @@ def create_application() -> FastAPI:
             logger.error(f"Error creating exam mapping: {str(e)}")
             raise HTTPException(status_code=500, detail="Error creating exam mapping")
 
+
     @app.put("/dashboard/laboratorio/mappings/{mapping_id}")
     async def update_exam_mapping(mapping_id: str, request: ExamMappingCreate):
-        """Update existing exam mapping"""
+        """Update existing exam mapping with business rule validation"""
         try:
             db = await get_database()
             cronoscita_repo = CronoscitaRepository(db)
@@ -588,17 +608,25 @@ def create_application() -> FastAPI:
             if not catalog_exists:
                 raise HTTPException(status_code=400, detail=f"Exam {request.codice_catalogo} not found in Cronoscita catalog")
             
-            # Check for duplicate (excluding current mapping)
-            duplicate_check = await lab_repo.check_duplicate_mapping_exclude_id(
-                request.codice_catalogo,
-                request.cronoscita_id, 
-                request.codoffering_wirgilio,
+            # NEW: Validate business rules (excluding current mapping)
+            validation_result = await lab_repo.validate_mapping_business_rules(
+                request.cronoscita_id,
                 request.struttura_nome,
-                mapping_id
+                request.codice_catalogo,
+                request.codoffering_wirgilio,
+                exclude_mapping_id=mapping_id
             )
             
-            if duplicate_check:
-                raise HTTPException(status_code=400, detail="A mapping with these details already exists")
+            if not validation_result["valid"]:
+                error_messages = [error["message"] for error in validation_result["errors"]]
+                raise HTTPException(
+                    status_code=409,  # Conflict status code
+                    detail={
+                        "error": "Conflitto mappatura",
+                        "details": error_messages,
+                        "validation_errors": validation_result["errors"]
+                    }
+                )
             
             # Update mapping
             mapping_data = request.dict()
@@ -707,6 +735,36 @@ def create_application() -> FastAPI:
             logger.error(f"Error getting doctors list: {str(e)}")
             raise HTTPException(status_code=500, detail="Error retrieving doctors data")
 
+
+    @app.get("/api/cronoscita/for-timeline")
+    async def get_cronoscita_for_timeline():
+        """Get active Cronoscita list for Timeline service integration"""
+        try:
+            db = await get_database()
+            cronoscita_repo = CronoscitaRepository(db)
+            
+            cronoscita_list = await cronoscita_repo.get_all_cronoscita()
+            
+            # Filter only active ones and format for Timeline
+            active_cronoscita = [
+                {
+                    "code": cronoscita["nome"],  # Use nome as the selection value
+                    "display": cronoscita["nome"],  # Same for display
+                    "cronoscita_id": cronoscita["id"]
+                }
+                for cronoscita in cronoscita_list if cronoscita.get("is_active", True)
+            ]
+            
+            return {
+                "success": True,
+                "total": len(active_cronoscita),
+                "cronoscita_options": active_cronoscita
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting cronoscita for timeline: {str(e)}")
+            raise HTTPException(status_code=500, detail="Error retrieving cronoscita options")
+    
     # ================================
     # APPLICATION STARTUP/SHUTDOWN EVENTS  
     # ================================
