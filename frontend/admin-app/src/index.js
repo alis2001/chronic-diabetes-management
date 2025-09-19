@@ -673,18 +673,20 @@ const StatusBadge = ({ status, type = 'general' }) => {
 // PAGE COMPONENTS
 // ================================
 
-const PatientsPage = () => {
+const PatientsPage = ({ cronoscitaFilter }) => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadPatientsData();
-  }, []);
+  }, [cronoscitaFilter]); // Re-load when filter changes
 
   const loadPatientsData = async () => {
     try {
-      console.log('📊 Loading patients data...');
-      const result = await adminAPI.getPatientsList();
+      console.log('📊 Loading patients data...', cronoscitaFilter ? `Filter: ${cronoscitaFilter}` : 'No filter');
+      
+      // Pass cronoscita filter to API call
+      const result = await adminAPI.getPatientsList(cronoscitaFilter);
       
       if (result.success && result.patients) {
         const tableData = result.patients.map(patient => [
@@ -723,21 +725,52 @@ const PatientsPage = () => {
     'Stato'
   ];
 
+  // Dynamic header based on filter
+  const getHeaderTitle = () => {
+    if (cronoscitaFilter) {
+      return `Gestione Pazienti - ${cronoscitaFilter}`;
+    }
+    return 'Gestione Pazienti';
+  };
+
+  const getHeaderSubtitle = () => {
+    if (cronoscitaFilter) {
+      return `Pazienti registrati nella Cronoscita: ${cronoscitaFilter}`;
+    }
+    return 'Elenco completo pazienti registrati nel sistema';
+  };
+
   return (
     <div>
       <div style={{ marginBottom: '24px' }}>
         <h2 style={{ margin: '0 0 8px 0', fontSize: '24px', fontWeight: '600' }}>
-          Gestione Pazienti
+          {getHeaderTitle()}
         </h2>
         <p style={{ margin: 0, color: '#666666' }}>
-          Elenco completo pazienti registrati nel sistema
+          {getHeaderSubtitle()}
         </p>
+        {cronoscitaFilter && (
+          <div style={{ 
+            marginTop: '8px', 
+            padding: '8px 12px', 
+            backgroundColor: '#e3f2fd', 
+            borderRadius: '4px',
+            fontSize: '14px',
+            color: '#1565c0'
+          }}>
+            🔍 Filtro attivo: {cronoscitaFilter}
+          </div>
+        )}
       </div>
       <DataTable 
         headers={headers} 
         data={data} 
         loading={loading}
-        emptyMessage="Nessun paziente registrato nel sistema"
+        emptyMessage={
+          cronoscitaFilter 
+            ? `Nessun paziente registrato nella Cronoscita: ${cronoscitaFilter}`
+            : "Nessun paziente registrato nel sistema"
+        }
       />
     </div>
   );
@@ -976,16 +1009,16 @@ const DashboardLayout = ({ user, onLogout }) => {
       );
     }
 
-    // Other tabs
+    // Other tabs - NOW PASS CRONOSCITA FILTER TO ALL TABS
     switch (activeTab) {
       case 'patients':
-        return <PatientsPage />;
+        return <PatientsPage cronoscitaFilter={cronoscitaState.selectedCronoscita} />;
       case 'doctors':
-        return <DoctorsPage />;
+        return <DoctorsPage cronoscitaFilter={cronoscitaState.selectedCronoscita} />;
       case 'visits':
-        return <VisitsPage />;
+        return <VisitsPage cronoscitaFilter={cronoscitaState.selectedCronoscita} />;
       default:
-        return <PatientsPage />;
+        return <PatientsPage cronoscitaFilter={cronoscitaState.selectedCronoscita} />;
     }
   };
 
