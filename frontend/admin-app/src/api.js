@@ -364,6 +364,32 @@ export const adminAPI = {
     return await apiRequest(`/api/admin/dashboard/prestazioni/search?query=${encodeURIComponent(query)}&limit=${limit}`);
   },
 
+  // Delete exam catalog entry
+  deleteExamCatalog: async (codiceCatalogo, params = {}) => {
+    const queryString = new URLSearchParams(params).toString();
+    const url = `/api/admin/dashboard/laboratorio/catalogo/${codiceCatalogo}?${queryString}`;
+    console.log('🔍 DELETE URL:', url); // DEBUG LOG
+    return await apiRequest(url, {
+      method: 'DELETE'
+    });
+  },
+
+  // Generic DELETE method
+  delete: async (endpoint, options = {}) => {
+    const { params, ...otherOptions } = options;
+    let url = `/api/admin${endpoint}`;
+    
+    if (params) {
+      const queryString = new URLSearchParams(params).toString();
+      url += `?${queryString}`;
+    }
+    
+    return await apiRequest(url, {
+      method: 'DELETE',
+      ...otherOptions
+    });
+  },
+
   // ================================
   // GENERIC HTTP METHODS - FIXES THE "adminAPI.get is not a function" ERROR
   // ================================

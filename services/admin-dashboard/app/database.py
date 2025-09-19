@@ -167,7 +167,7 @@ async def create_exam_catalog_indexes(db: AsyncIOMotorDatabase):
         logger.error(f"❌ Failed to create laboratory indexes: {e}")
 
 
-# services/admin-dashboard/app/database.py - ADD THIS CLASS
+#### MAster REPO
 
 class MasterCatalogRepository:
     """Repository for master prestazioni catalog"""
@@ -434,6 +434,47 @@ class LaboratorioRepository:
         except Exception as e:
             logger.error(f"❌ Error creating exam mapping: {e}")
             raise
+
+    async def get_exam_mappings_for_catalog(self, codice_catalogo: str, cronoscita_id: str) -> List[Dict[str, Any]]:
+        """Get all mappings for a specific exam catalog entry"""
+        try:
+            cursor = self.mapping_collection.find({
+                "codice_catalogo": codice_catalogo,
+                "cronoscita_id": cronoscita_id
+            })
+            results = await cursor.to_list(length=None)
+            return serialize_mongo_list(results) if results else []
+        except Exception as e:
+            logger.error(f"❌ Error getting mappings for catalog {codice_catalogo}: {e}")
+            return []
+
+    async def delete_exam_catalog_with_mappings(self, codice_catalogo: str, cronoscita_id: str) -> bool:
+        """Delete exam catalog entry and cascade delete all related mappings"""
+        try:
+            # Start with deleting related mappings first
+            mappings_result = await self.mapping_collection.delete_many({
+                "codice_catalogo": codice_catalogo,
+                "cronoscita_id": cronoscita_id
+            })
+            
+            logger.info(f"🗑️ Deleted {mappings_result.deleted_count} mappings for exam {codice_catalogo}")
+            
+            # Then delete the catalog entry
+            catalog_result = await self.catalog_collection.delete_one({
+                "codice_catalogo": codice_catalogo,
+                "cronoscita_id": cronoscita_id
+            })
+            
+            if catalog_result.deleted_count > 0:
+                logger.info(f"🗑️ Deleted catalog entry: {codice_catalogo}")
+                return True
+            else:
+                logger.warning(f"⚠️ Catalog entry not found: {codice_catalogo}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ Error during cascade deletion: {e}")
+            return False
 
     async def get_exam_mappings(self, cronoscita_id: str) -> List[Dict[str, Any]]:
         """Get exam mappings for specific Cronoscita"""

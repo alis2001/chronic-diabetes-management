@@ -17,7 +17,14 @@ async def import_xlsx_to_master_catalog(xlsx_file_path: str):
         print(f"📖 Reading XLSX: {xlsx_file_path}")
         
         # Read XLSX file
-        df = pd.read_excel(xlsx_file_path)
+        df = pd.read_excel(
+            xlsx_file_path,
+            dtype={
+                'CODICEBRANCA': str,  # Force CODICEBRANCA column to be read as string
+                'CODICECATALOGO': str,
+                'CODICEREG': str
+            }
+        )
         
         print(f"📊 Found {len(df)} rows in XLSX")
         print(f"📋 Columns: {list(df.columns)}")
@@ -46,11 +53,19 @@ async def import_xlsx_to_master_catalog(xlsx_file_path: str):
         
         for row_num, row_data in enumerate(prestazioni_data, 1):
             try:
-                # Extract XLSX columns (exact column names)
+                # Extract XLSX columns (exact column names) - FIXED: Preserve leading zeros
                 codice_catalogo = str(row_data.get("CODICECATALOGO", "")).strip()
                 codicereg = str(row_data.get("CODICEREG", "")).strip()
                 nome_esame = str(row_data.get("DESCRIZIONECATALOGO", "")).strip()
-                codice_branca = str(row_data.get("CODICEBRANCA", "")).strip()
+
+                # FIXED: Handle codice_branca to preserve leading zeros
+                codice_branca_raw = row_data.get("CODICEBRANCA", "")
+                if isinstance(codice_branca_raw, (int, float)):
+                    # If it's a number, format it as 3-digit string with leading zeros
+                    codice_branca = f"{int(codice_branca_raw):03d}"
+                else:
+                    # If it's already a string, keep it as is
+                    codice_branca = str(codice_branca_raw).strip()
                 
                 # Skip rows with missing required data
                 if not codice_catalogo or not nome_esame:

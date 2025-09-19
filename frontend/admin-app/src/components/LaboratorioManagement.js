@@ -25,6 +25,8 @@ const LaboratorioManagement = ({ cronoscita }) => {
   // Modal states
   const [showAddExamModal, setShowAddExamModal] = useState(false);
   const [showAddMappingModal, setShowAddMappingModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [examToDelete, setExamToDelete] = useState(null);
   
   const [examForm, setExamForm] = useState({
     codice_catalogo: '',       
@@ -126,19 +128,16 @@ const LaboratorioManagement = ({ cronoscita }) => {
   const handleSelectFromSearch = (prestazione) => {
     console.log('📋 Auto-filling from search result:', prestazione);
     
-    // Auto-fill the form with selected prestazione
     setExamForm({
       ...examForm,
-      codice_catalogo: prestazione.codice_catalogo,
-      codicereg: prestazione.codicereg,
-      nome_esame: prestazione.nome_esame,
-      codice_branca: prestazione.codice_branca
+      codice_catalogo: String(prestazione.codice_catalogo || ''),
+      codicereg: String(prestazione.codicereg || ''),
+      nome_esame: String(prestazione.nome_esame || ''),
+      codice_branca: String(prestazione.codice_branca || '') // Force string conversion
     });
     
-    // Hide search results
     setShowSearchResults(false);
     setSearchQuery('');
-    
   };
 
   const loadCatalogData = async () => {
@@ -182,7 +181,15 @@ const LaboratorioManagement = ({ cronoscita }) => {
       alert('Errore: Cronoscita non selezionata');
       return;
     }
-    
+
+    const sanitizedFormData = {
+      ...examForm,
+      codice_branca: String(examForm.codice_branca).trim(), // Force string and trim whitespace
+      codice_catalogo: String(examForm.codice_catalogo).trim(),
+      codicereg: String(examForm.codicereg).trim(),
+      nome_esame: String(examForm.nome_esame).trim()
+    };
+
     try {
       setLoading(true);
       console.log('📤 Creating exam for Cronoscita:', cronoscita.nome, examForm);
@@ -261,6 +268,46 @@ const LaboratorioManagement = ({ cronoscita }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleDeleteClick = (exam) => {
+    console.log('🗑️ Delete request for exam:', exam);
+    setExamToDelete(exam);
+    setShowDeleteModal(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!examToDelete) return;
+    
+    try {
+      setLoading(true);
+      console.log('🗑️ Deleting exam:', examToDelete.codice_catalogo);
+      
+      const result = await adminAPI.deleteExamCatalog(examToDelete.codice_catalogo, {
+        cronoscita_id: cronoscita.id
+      });
+      
+      console.log('✅ Exam deleted:', result);
+      alert(`Esame "${examToDelete.nome_esame}" eliminato con successo!`);
+      
+      // Refresh the catalog data
+      await loadCatalogData();
+      
+      // Close modal
+      setShowDeleteModal(false);
+      setExamToDelete(null);
+      
+    } catch (error) {
+      console.error('❌ Error deleting exam:', error);
+      alert(`Errore durante eliminazione: ${error.message || 'Errore sconosciuto'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancelDelete = () => {
+    setShowDeleteModal(false);
+    setExamToDelete(null);
   };
 
   const handleDeleteMapping = async (mappingId, examName, structureName) => {
@@ -352,6 +399,7 @@ const LaboratorioManagement = ({ cronoscita }) => {
             <div style={styles.tableCell}>Branca</div>
             <div style={styles.tableCell}>Mappings</div>
             <div style={styles.tableCell}>Stato</div>
+            <div style={styles.tableCell}>Azioni</div>
           </div>
           
           {catalog.length === 0 ? (
@@ -406,6 +454,16 @@ const LaboratorioManagement = ({ cronoscita }) => {
                   }}>
                     {exam.is_enabled ? '● Abilitato' : '○ Disabilitato'}
                   </div>
+                </div>
+                <div style={styles.tableCell}>
+                  <button
+                    onClick={() => handleDeleteClick(exam)}
+                    style={styles.buttonDanger}
+                    onMouseEnter={(e) => e.target.style.backgroundColor = '#b91c1c'}
+                    onMouseLeave={(e) => e.target.style.backgroundColor = '#dc2626'}
+                  >
+                    Elimina
+                  </button>
                 </div>
               </div>
             ))
@@ -652,10 +710,13 @@ const LaboratorioManagement = ({ cronoscita }) => {
                 type="text"
                 style={styles.input}
                 value={examForm.codice_branca}
-                onChange={(e) => setExamForm({...examForm, codice_branca: e.target.value})}
+                onChange={(e) => setExamForm({...examForm, codice_branca: String(e.target.value)})}
                 placeholder="es. 011, 014, 015, etc." 
                 required
               />
+              <div style={{fontSize: '12px', color: '#6c757d', marginTop: '4px'}}>
+                Mantiene zeri iniziali (es. 011, 014, 015)
+              </div>
             </div>
             
             <div style={styles.formGroup}>
@@ -829,6 +890,68 @@ const LaboratorioManagement = ({ cronoscita }) => {
       
       {renderAddExamModal()}
       {renderAddMappingModal()}
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && examToDelete && (
+        <div style={styles.modal} onClick={handleCancelDelete}>
+          <div style={{
+            ...styles.modalContent,
+            maxWidth: '500px',
+            textAlign: 'center'
+          }} onClick={e => e.stopPropagation()}>
+            
+            <div style={{fontSize: '48px', marginBottom: '16px'}}>⚠️</div>
+            
+            <h3 style={{margin: '0 0 16px 0', fontSize: '20px', color: '#dc2626'}}>
+              Conferma Eliminazione
+            </h3>
+            
+            <p style={{margin: '0 0 8px 0', fontSize: '16px', color: '#374151'}}>
+              Sei sicuro di voler eliminare questo esame?
+            </p>
+            
+            <div style={{
+              backgroundColor: '#f3f4f6',
+              padding: '16px',
+              borderRadius: '8px',
+              margin: '16px 0',
+              textAlign: 'left'
+            }}>
+              <div><strong>Codice:</strong> {examToDelete.codice_catalogo}</div>
+              <div><strong>Nome:</strong> {examToDelete.nome_esame}</div>
+              <div><strong>Branca:</strong> {examToDelete.codice_branca}</div>
+            </div>
+            
+            <div style={{
+              backgroundColor: '#fef2f2',
+              border: '1px solid #fecaca',
+              padding: '12px',
+              borderRadius: '6px',
+              margin: '16px 0',
+              fontSize: '14px',
+              color: '#991b1b'
+            }}>
+              <strong>⚠️ Attenzione:</strong> Questa azione eliminerà anche tutte le mappature associate.
+            </div>
+            
+            <div style={{display: 'flex', gap: '12px', justifyContent: 'center'}}>
+              <button onClick={handleCancelDelete} style={styles.buttonSecondary}>
+                Annulla
+              </button>
+              <button 
+                onClick={handleConfirmDelete}
+                disabled={loading}
+                style={{
+                  ...styles.buttonDanger,
+                  opacity: loading ? 0.6 : 1,
+                  cursor: loading ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {loading ? 'Eliminando...' : 'Elimina Definitivamente'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

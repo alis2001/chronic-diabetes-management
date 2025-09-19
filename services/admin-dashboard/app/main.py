@@ -449,6 +449,59 @@ def create_application() -> FastAPI:
             logger.error(f"Error getting exam mappings: {str(e)}")
             raise HTTPException(status_code=500, detail="Error retrieving exam mappings")
 
+    @app.delete("/dashboard/laboratorio/catalogo/{codice_catalogo}")
+    async def delete_exam_catalog(
+        codice_catalogo: str,
+        cronoscita_id: str = Query(..., description="Cronoscita ID for security")
+    ):
+        """Delete exam catalog entry and cascade delete related mappings"""
+        try:
+            db = await get_database()
+            cronoscita_repo = CronoscitaRepository(db)
+            lab_repo = LaboratorioRepository(db)
+            
+            # Verify Cronoscita exists
+            cronoscita_data = await cronoscita_repo.get_cronoscita_by_id(cronoscita_id)
+            if not cronoscita_data:
+                raise HTTPException(status_code=404, detail="Cronoscita not found")
+            
+            # Check if exam exists in this Cronoscita
+            existing_exam = await lab_repo.get_catalog_by_code(codice_catalogo, cronoscita_id)
+            if not existing_exam:
+                raise HTTPException(
+                    status_code=404, 
+                    detail=f"Esame '{codice_catalogo}' non trovato per {cronoscita_data['nome']}"
+                )
+            
+            # Get mappings count before deletion (for response info)
+            mappings = await lab_repo.get_exam_mappings_for_catalog(codice_catalogo, cronoscita_id)
+            mappings_count = len(mappings)
+            
+            # Perform cascade deletion
+            deleted_exam = await lab_repo.delete_exam_catalog_with_mappings(codice_catalogo, cronoscita_id)
+            
+            if not deleted_exam:
+                raise HTTPException(status_code=500, detail="Errore durante eliminazione esame")
+            
+            logger.info(f"✅ Exam deleted: {codice_catalogo} from {cronoscita_data['nome']} with {mappings_count} mappings")
+            
+            return {
+                "success": True,
+                "message": f"Esame '{existing_exam['nome_esame']}' eliminato con successo",
+                "deleted": {
+                    "codice_catalogo": codice_catalogo,
+                    "nome_esame": existing_exam['nome_esame'],
+                    "mappings_deleted": mappings_count,
+                    "cronoscita_nome": cronoscita_data['nome']
+                }
+            }
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error deleting exam catalog: {str(e)}")
+            raise HTTPException(status_code=500, detail="Errore interno durante eliminazione")
+
     @app.delete("/dashboard/laboratorio/mappings/{mapping_id}")
     async def delete_exam_mapping(mapping_id: str):
         """Delete exam mapping by ID"""
