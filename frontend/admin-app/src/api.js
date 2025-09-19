@@ -465,6 +465,14 @@ export const adminAPI = {
     });
   },
 
+  // UPDATE EXAM MAPPING - ADD THIS NEW FUNCTION HERE
+  updateExamMapping: async (mappingId, mappingData) => {
+    return await apiRequest(`/api/admin/dashboard/laboratorio/mappings/${mappingId}`, {
+      method: 'PUT',
+      body: JSON.stringify(mappingData)
+    });
+  },
+
   getLaboratorioOverviewByCronoscita: async (cronoscitaId) => {
     return await apiRequest(`/api/admin/dashboard/laboratorio/overview/${cronoscitaId}`);
   },
@@ -482,13 +490,6 @@ export const adminAPI = {
   // Get catalog options for mapping dropdown for specific Cronoscita
   getCatalogForMappingByCronoscita: async (cronoscitaId) => {
     return await apiRequest(`/api/admin/dashboard/laboratorio/catalogo-for-mapping/${cronoscitaId}`);
-  },
-
-  // Delete exam catalog entry
-  deleteExamCatalog: async (codiceCatalogo) => {
-    return await apiRequest(`/api/admin/dashboard/laboratorio/catalogo/${codiceCatalogo}`, {
-      method: 'DELETE'
-    });
   },
 
   // Update exam catalog entry

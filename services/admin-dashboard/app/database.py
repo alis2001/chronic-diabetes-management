@@ -518,6 +518,59 @@ class LaboratorioRepository:
         
         return results if results else []
 
+    async def get_mapping_by_id(self, mapping_id: str) -> Optional[Dict[str, Any]]:
+        """Get mapping by ID"""
+        try:
+            mapping = await self.mapping_collection.find_one({"_id": ObjectId(mapping_id)})
+            return serialize_mongo_doc(mapping) if mapping else None
+        except Exception as e:
+            logger.error(f"❌ Error getting mapping by ID: {e}")
+            return None
+
+    async def check_duplicate_mapping_exclude_id(
+        self, 
+        codice_catalogo: str, 
+        cronoscita_id: str,
+        codoffering_wirgilio: str,
+        struttura_nome: str,
+        exclude_mapping_id: str
+    ) -> bool:
+        """Check for duplicate mapping excluding the current mapping being edited"""
+        try:
+            existing = await self.mapping_collection.find_one({
+                "codice_catalogo": codice_catalogo,
+                "cronoscita_id": cronoscita_id,
+                "codoffering_wirgilio": codoffering_wirgilio,
+                "struttura_nome": struttura_nome,
+                "_id": {"$ne": ObjectId(exclude_mapping_id)}
+            })
+            return existing is not None
+        except Exception as e:
+            logger.error(f"❌ Error checking duplicate mapping: {e}")
+            return False
+
+    async def update_exam_mapping(self, mapping_id: str, mapping_data: Dict[str, Any]) -> bool:
+        """Update exam mapping"""
+        try:
+            # Add updated timestamp
+            mapping_data["updated_at"] = datetime.now()
+            
+            result = await self.mapping_collection.update_one(
+                {"_id": ObjectId(mapping_id)},
+                {"$set": mapping_data}
+            )
+            
+            if result.modified_count > 0:
+                logger.info(f"✅ Exam mapping updated: {mapping_id}")
+                return True
+            else:
+                logger.warning(f"⚠️ No changes made to mapping: {mapping_id}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ Error updating exam mapping: {e}")
+            return False
+        
     # ================================
     # STATISTICS AND OVERVIEW
     # ================================

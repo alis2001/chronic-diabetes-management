@@ -565,6 +565,64 @@ def create_application() -> FastAPI:
             logger.error(f"Error creating exam mapping: {str(e)}")
             raise HTTPException(status_code=500, detail="Error creating exam mapping")
 
+    @app.put("/dashboard/laboratorio/mappings/{mapping_id}")
+    async def update_exam_mapping(mapping_id: str, request: ExamMappingCreate):
+        """Update existing exam mapping"""
+        try:
+            db = await get_database()
+            cronoscita_repo = CronoscitaRepository(db)
+            lab_repo = LaboratorioRepository(db)
+            
+            # Verify mapping exists
+            existing_mapping = await lab_repo.get_mapping_by_id(mapping_id)
+            if not existing_mapping:
+                raise HTTPException(status_code=404, detail="Mapping not found")
+            
+            # Verify Cronoscita exists
+            cronoscita_data = await cronoscita_repo.get_cronoscita_by_id(request.cronoscita_id)
+            if not cronoscita_data:
+                raise HTTPException(status_code=400, detail="Cronoscita not found")
+            
+            # Verify catalog exam exists in this Cronoscita
+            catalog_exists = await lab_repo.get_catalog_by_code(request.codice_catalogo, request.cronoscita_id)
+            if not catalog_exists:
+                raise HTTPException(status_code=400, detail=f"Exam {request.codice_catalogo} not found in Cronoscita catalog")
+            
+            # Check for duplicate (excluding current mapping)
+            duplicate_check = await lab_repo.check_duplicate_mapping_exclude_id(
+                request.codice_catalogo,
+                request.cronoscita_id, 
+                request.codoffering_wirgilio,
+                request.struttura_nome,
+                mapping_id
+            )
+            
+            if duplicate_check:
+                raise HTTPException(status_code=400, detail="A mapping with these details already exists")
+            
+            # Update mapping
+            mapping_data = request.dict()
+            mapping_data["nome_esame_wirgilio"] = mapping_data["nome_esame_wirgilio"].upper()
+            
+            success = await lab_repo.update_exam_mapping(mapping_id, mapping_data)
+            
+            if success:
+                logger.info(f"✅ Mapping updated: {mapping_id} -> {request.struttura_nome} for Cronoscita {cronoscita_data['nome']}")
+                
+                return {
+                    "success": True,
+                    "message": f"Mapping aggiornato per {cronoscita_data['nome']}: {catalog_exists['nome_esame'].upper()} -> {request.struttura_nome}",
+                    "mapping_id": mapping_id
+                }
+            else:
+                raise HTTPException(status_code=500, detail="Failed to update mapping")
+                
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error updating exam mapping: {str(e)}")
+            raise HTTPException(status_code=500, detail="Error updating exam mapping")
+
     @app.get("/dashboard/laboratorio/catalogo-for-mapping/{cronoscita_id}")
     async def get_catalog_for_mapping(cronoscita_id: str):
         """Get simplified catalog list for mapping dropdown for specific Cronoscita"""

@@ -223,8 +223,13 @@ class ExamMappingCreate(BaseModel):
     codice_catalogo: str = Field(..., description="Reference to exam catalog")
     cronoscita_id: str = Field(..., description="Cronoscita ID this mapping belongs to")
     struttura_nome: str = Field(..., description="Healthcare structure name")
-    codoffering_wirgilio: str = Field(..., description="Wirgilio API codoffering (e.g., 301)")
-    nome_esame_wirgilio: str = Field(..., description="Exam name from Wirgilio API")
+    codoffering_wirgilio: str = Field(..., description="Wirgilio exam offering code")
+    nome_esame_wirgilio: str = Field(..., description="Exam name in Wirgilio system")
+    visualizza_nel_referto: str = Field(
+        default="S", 
+        pattern="^(S|N)$",
+        description="Visualizza nel referto: S=Sì, N=No - determina se l'esame sarà mostrato nel timeline service"
+    )
     is_active: bool = Field(True, description="Is mapping active")
 
 class ExamMappingResponse(BaseModel):

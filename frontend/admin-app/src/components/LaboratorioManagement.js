@@ -11,6 +11,9 @@ const LaboratorioManagement = ({ cronoscita }) => {
   const [activeTab, setActiveTab] = useState('catalog');
   const [loading, setLoading] = useState(false);
   
+  const [showEditMappingModal, setShowEditMappingModal] = useState(false);
+  const [editingMapping, setEditingMapping] = useState(null);
+
   // Data states
   const [catalog, setCatalog] = useState([]);
   const [mappings, setMappings] = useState([]);
@@ -43,6 +46,7 @@ const LaboratorioManagement = ({ cronoscita }) => {
     struttura_nome: '',           
     codoffering_wirgilio: '',     
     nome_esame_wirgilio: '',
+    visualizza_nel_referto: '',
     cronoscita_id: cronoscita?.id || ''       
   });
 
@@ -232,6 +236,11 @@ const LaboratorioManagement = ({ cronoscita }) => {
       return;
     }
 
+    if (!mappingForm.visualizza_nel_referto) {
+      alert('Seleziona se visualizzare l\'esame nel referto');
+      return;
+    }
+
     try {
       setLoading(true);
       console.log('📤 Creating mapping for Cronoscita:', cronoscita.nome, mappingForm);
@@ -242,6 +251,7 @@ const LaboratorioManagement = ({ cronoscita }) => {
         struttura_nome: mappingForm.struttura_nome,
         codoffering_wirgilio: mappingForm.codoffering_wirgilio,
         nome_esame_wirgilio: mappingForm.nome_esame_wirgilio.toUpperCase(),
+        visualizza_nel_referto: mappingForm.visualizza_nel_referto,  // NEW FIELD
         is_active: true
       };
       
@@ -257,6 +267,7 @@ const LaboratorioManagement = ({ cronoscita }) => {
           struttura_nome: '',
           codoffering_wirgilio: '',
           nome_esame_wirgilio: '',
+          visualizza_nel_referto: '',
           cronoscita_id: cronoscita.id
         });
         await loadMappingsData();
@@ -268,6 +279,100 @@ const LaboratorioManagement = ({ cronoscita }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleEditMapping = (mapping) => {
+    console.log('✏️ Edit mapping:', mapping);
+    
+    // Find the corresponding exam in catalogOptions
+    const selectedExam = catalogOptions.find(exam => exam.codice_catalogo === mapping.codice_catalogo);
+    
+    // Populate form with existing data
+    setMappingForm({
+      codice_catalogo: mapping.codice_catalogo,
+      selected_exam: selectedExam || null,
+      struttura_nome: mapping.struttura_nome,
+      codoffering_wirgilio: mapping.codoffering_wirgilio,
+      nome_esame_wirgilio: mapping.nome_esame_wirgilio,
+      visualizza_nel_referto: mapping.visualizza_nel_referto || 'S',
+      cronoscita_id: cronoscita.id
+    });
+    
+    setEditingMapping(mapping);
+    setShowEditMappingModal(true);
+  };
+
+  const handleUpdateMapping = async (e) => {
+    e.preventDefault();
+    
+    if (!editingMapping || !cronoscita?.id) {
+      alert('Errore: Dati mancanti per l\'aggiornamento');
+      return;
+    }
+    
+    if (!mappingForm.selected_exam) {
+      alert('Seleziona un esame dal catalogo');
+      return;
+    }
+    
+    if (!mappingForm.visualizza_nel_referto) {
+      alert('Seleziona se visualizzare l\'esame nel referto');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      console.log('📝 Updating mapping:', editingMapping.id, mappingForm);
+      
+      const mappingData = {
+        codice_catalogo: mappingForm.selected_exam.codice_catalogo,
+        cronoscita_id: cronoscita.id,
+        struttura_nome: mappingForm.struttura_nome,
+        codoffering_wirgilio: mappingForm.codoffering_wirgilio,
+        nome_esame_wirgilio: mappingForm.nome_esame_wirgilio.toUpperCase(),
+        visualizza_nel_referto: mappingForm.visualizza_nel_referto,
+        is_active: true
+      };
+      
+      const response = await adminAPI.updateExamMapping(editingMapping.id, mappingData);
+      console.log('✅ Mapping updated:', response);
+      
+      if (response.success) {
+        alert(response.message);
+        setShowEditMappingModal(false);
+        setEditingMapping(null);
+        setMappingForm({
+          codice_catalogo: '',
+          selected_exam: null,
+          struttura_nome: '',
+          codoffering_wirgilio: '',
+          nome_esame_wirgilio: '',
+          visualizza_nel_referto: '',
+          cronoscita_id: cronoscita.id
+        });
+        await loadMappingsData();
+        await loadCatalogData();
+      }
+    } catch (error) {
+      console.error('❌ Error updating mapping:', error);
+      alert('Errore durante l\'aggiornamento: ' + (error.message || error));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setShowEditMappingModal(false);
+    setEditingMapping(null);
+    setMappingForm({
+      codice_catalogo: '',
+      selected_exam: null,
+      struttura_nome: '',
+      codoffering_wirgilio: '',
+      nome_esame_wirgilio: '',
+      visualizza_nel_referto: '',
+      cronoscita_id: cronoscita.id
+    });
   };
 
   const handleDeleteClick = (exam) => {
@@ -505,6 +610,7 @@ const LaboratorioManagement = ({ cronoscita }) => {
             <div style={styles.tableCell}>Struttura</div>
             <div style={styles.tableCell}>Codice Wirgilio</div>
             <div style={styles.tableCell}>Nome Wirgilio</div>
+            <div style={styles.tableCell}>Referto</div>
             <div style={styles.tableCell}>Stato</div>
             <div style={styles.tableCell}>Azioni</div>
           </div>
@@ -526,6 +632,8 @@ const LaboratorioManagement = ({ cronoscita }) => {
               )}
             </div>
           ) : (
+            // REPLACE the entire mappings.map section in renderMappings() function with this:
+
             mappings.map((mapping, index) => (
               <div key={mapping.id || index} style={{
                 ...styles.tableRow,
@@ -546,24 +654,56 @@ const LaboratorioManagement = ({ cronoscita }) => {
                 <div style={styles.tableCell}>
                   <strong>{mapping.nome_esame_wirgilio}</strong>
                 </div>
+                {/* NEW REFERTO CELL - THIS IS WHAT WAS MISSING */}
                 <div style={styles.tableCell}>
                   <div style={{
-                    color: mapping.is_active ? '#10b981' : '#6b7280',
-                    fontWeight: '500'
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '2px 8px',
+                    borderRadius: '12px',
+                    fontSize: '12px',
+                    fontWeight: '500',
+                    backgroundColor: mapping.visualizza_nel_referto === 'S' ? '#d1fae5' : '#f3f4f6',
+                    color: mapping.visualizza_nel_referto === 'S' ? '#047857' : '#6b7280'
                   }}>
-                    {mapping.is_active ? '● Attiva' : '○ Inattiva'}
+                    {mapping.visualizza_nel_referto === 'S' ? (
+                      <>👁️ Timeline</>
+                    ) : (
+                      <>🔒 Solo Lab</>
+                    )}
                   </div>
                 </div>
+                {/* END NEW REFERTO CELL */}
                 <div style={styles.tableCell}>
-                  <button
-                    onClick={() => handleDeleteMapping(mapping.id, mapping.nome_esame_catalogo, mapping.struttura_nome)}
-                    style={styles.buttonDanger}
-                    disabled={loading}
-                    title="Rimuovi mappatura"
-                  >
-                    Rimuovi
-                  </button>
-                </div>
+                    <div style={{display: 'flex', gap: '8px'}}>
+                      <button
+                        onClick={() => handleEditMapping(mapping)}
+                        style={{
+                          ...styles.buttonPrimary,
+                          fontSize: '12px',
+                          padding: '6px 12px',
+                          backgroundColor: '#0ea5e9'
+                        }}
+                        disabled={loading}
+                        title="Modifica mappatura"
+                        onMouseEnter={(e) => e.target.style.backgroundColor = '#0284c7'}
+                        onMouseLeave={(e) => e.target.style.backgroundColor = '#0ea5e9'}
+                      >
+                        Modifica
+                      </button>
+                      <button
+                        onClick={() => handleDeleteMapping(mapping.id, mapping.nome_esame_catalogo, mapping.struttura_nome)}
+                        style={styles.buttonDanger}
+                        disabled={loading}
+                        title="Rimuovi mappatura"
+                        onMouseEnter={(e) => e.target.style.backgroundColor = '#b91c1c'}
+                        onMouseLeave={(e) => e.target.style.backgroundColor = '#dc2626'}
+                      >
+                        Rimuovi
+                      </button>
+                    </div>
+                  </div>
               </div>
             ))
           )}
@@ -826,6 +966,46 @@ const LaboratorioManagement = ({ cronoscita }) => {
                 Il nome sarà automaticamente convertito in MAIUSCOLO
               </div>
             </div>
+
+            <div style={styles.formGroup}>
+              <label style={styles.label}>Visualizza nel Referto * <span style={{color: '#dc2626'}}>(Obbligatorio)</span></label>
+              <div style={{display: 'flex', gap: '16px', alignItems: 'center', marginTop: '8px'}}>
+                <label style={{display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer'}}>
+                  <input
+                    type="radio"
+                    name="visualizza_nel_referto"
+                    value="S"
+                    checked={mappingForm.visualizza_nel_referto === 'S'}
+                    onChange={(e) => setMappingForm(prev => ({...prev, visualizza_nel_referto: e.target.value}))}
+                    style={{marginRight: '4px'}}
+                  />
+                  <span style={{fontSize: '14px', fontWeight: '500', color: '#10b981'}}>
+                    ✓ Sì - Mostra nel Timeline
+                  </span>
+                </label>
+                <label style={{display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer'}}>
+                  <input
+                    type="radio"
+                    name="visualizza_nel_referto"
+                    value="N"
+                    checked={mappingForm.visualizza_nel_referto === 'N'}
+                    onChange={(e) => setMappingForm(prev => ({...prev, visualizza_nel_referto: e.target.value}))}
+                    style={{marginRight: '4px'}}
+                  />
+                  <span style={{fontSize: '14px', fontWeight: '500', color: '#6b7280'}}>
+                    ✗ No - Solo per Laboratorio
+                  </span>
+                </label>
+              </div>
+              <div style={{fontSize: '12px', color: '#666', marginTop: '4px', fontStyle: 'italic'}}>
+                Determina se l'esame sarà visibile nel referto paziente del Timeline Service
+              </div>
+              {!mappingForm.visualizza_nel_referto && (
+                <div style={{fontSize: '12px', color: '#dc2626', marginTop: '4px', fontWeight: '500'}}>
+                  ⚠️ Seleziona un'opzione per continuare
+                </div>
+              )}
+            </div>
             
             <div style={{display: 'flex', gap: '12px', justifyContent: 'flex-end'}}>
               <button 
@@ -844,6 +1024,145 @@ const LaboratorioManagement = ({ cronoscita }) => {
                 disabled={loading || !mappingForm.selected_exam || !mappingForm.struttura_nome || !mappingForm.codoffering_wirgilio || !mappingForm.nome_esame_wirgilio}
               >
                 {loading ? 'Creando Mapping...' : 'Crea Mapping'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  };
+
+  // ADD this function after renderAddMappingModal() function:
+
+  const renderEditMappingModal = () => {
+    if (!showEditMappingModal || !editingMapping) return null;
+    
+    return (
+      <div style={styles.modal} onClick={handleCancelEdit}>
+        <div style={{
+          ...styles.modalContent,
+          maxWidth: '600px',
+          width: '90%'
+        }} onClick={e => e.stopPropagation()}>
+          <h3 style={{margin: '0 0 24px 0', fontSize: '22px', color: '#1f2937'}}>
+            ✏️ Modifica Mappatura - {cronoscita?.nome}
+          </h3>
+          
+          <div style={{
+            backgroundColor: '#f0f9ff',
+            padding: '12px 16px',
+            borderRadius: '6px',
+            marginBottom: '20px',
+            border: '1px solid #0ea5e9'
+          }}>
+            <div style={{fontSize: '14px', fontWeight: '500', color: '#0369a1'}}>
+              Mappatura corrente: {editingMapping.nome_esame_catalogo} → {editingMapping.struttura_nome}
+            </div>
+            <div style={{fontSize: '12px', color: '#0284c7', marginTop: '4px'}}>
+              Codice Wirgilio: {editingMapping.codoffering_wirgilio} | Nome: {editingMapping.nome_esame_wirgilio}
+            </div>
+          </div>
+          
+          <form onSubmit={handleUpdateMapping}>
+            {renderExamSelector()}
+            
+            <div style={styles.formGroup}>
+              <label style={styles.label}>Nome Struttura Sanitaria *</label>
+              <input
+                type="text"
+                style={styles.input}
+                value={mappingForm.struttura_nome}
+                onChange={(e) => setMappingForm({...mappingForm, struttura_nome: e.target.value})}
+                placeholder="es. ASL Roma 1, Ospedale Sant'Andrea"
+                required
+              />
+            </div>
+            
+            <div style={styles.formGroup}>
+              <label style={styles.label}>Codice Wirgilio (codoffering) *</label>
+              <input
+                type="text"
+                style={styles.input}
+                value={mappingForm.codoffering_wirgilio}
+                onChange={(e) => setMappingForm({...mappingForm, codoffering_wirgilio: e.target.value})}
+                placeholder="es. 301"
+                required
+              />
+            </div>
+            
+            <div style={styles.formGroup}>
+              <label style={styles.label}>Nome Esame Wirgilio *</label>
+              <input
+                type="text"
+                style={styles.input}
+                value={mappingForm.nome_esame_wirgilio}
+                onChange={(e) => setMappingForm({...mappingForm, nome_esame_wirgilio: e.target.value.toUpperCase()})}
+                placeholder="es. GLUCOSIO"
+                required
+              />
+              <div style={{fontSize: '12px', color: '#6c757d', marginTop: '4px'}}>
+                Il nome sarà automaticamente convertito in MAIUSCOLO
+              </div>
+            </div>
+
+            <div style={styles.formGroup}>
+              <label style={styles.label}>Visualizza nel Referto * <span style={{color: '#dc2626'}}>(Obbligatorio)</span></label>
+              <div style={{display: 'flex', gap: '16px', alignItems: 'center', marginTop: '8px'}}>
+                <label style={{display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer'}}>
+                  <input
+                    type="radio"
+                    name="edit_visualizza_nel_referto"
+                    value="S"
+                    checked={mappingForm.visualizza_nel_referto === 'S'}
+                    onChange={(e) => setMappingForm(prev => ({...prev, visualizza_nel_referto: e.target.value}))}
+                    style={{marginRight: '4px'}}
+                  />
+                  <span style={{fontSize: '14px', fontWeight: '500', color: '#10b981'}}>
+                    ✓ Sì - Mostra nel Timeline
+                  </span>
+                </label>
+                <label style={{display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer'}}>
+                  <input
+                    type="radio"
+                    name="edit_visualizza_nel_referto"
+                    value="N"
+                    checked={mappingForm.visualizza_nel_referto === 'N'}
+                    onChange={(e) => setMappingForm(prev => ({...prev, visualizza_nel_referto: e.target.value}))}
+                    style={{marginRight: '4px'}}
+                  />
+                  <span style={{fontSize: '14px', fontWeight: '500', color: '#6b7280'}}>
+                    ✗ No - Solo per Laboratorio
+                  </span>
+                </label>
+              </div>
+              <div style={{fontSize: '12px', color: '#666', marginTop: '4px', fontStyle: 'italic'}}>
+                Determina se l'esame sarà visibile nel referto paziente del Timeline Service
+              </div>
+              {!mappingForm.visualizza_nel_referto && (
+                <div style={{fontSize: '12px', color: '#dc2626', marginTop: '4px', fontWeight: '500'}}>
+                  ⚠️ Seleziona un'opzione per continuare
+                </div>
+              )}
+            </div>
+            
+            <div style={{display: 'flex', gap: '12px', justifyContent: 'flex-end'}}>
+              <button 
+                type="button" 
+                style={styles.buttonSecondary}
+                onClick={handleCancelEdit}
+              >
+                Annulla
+              </button>
+              <button 
+                type="submit" 
+                style={{
+                  ...styles.buttonPrimary,
+                  backgroundColor: '#0ea5e9',
+                  opacity: (loading || !mappingForm.selected_exam || !mappingForm.struttura_nome || !mappingForm.codoffering_wirgilio || !mappingForm.nome_esame_wirgilio || !mappingForm.visualizza_nel_referto) ? 0.6 : 1
+                }}
+                disabled={loading || !mappingForm.selected_exam || !mappingForm.struttura_nome || !mappingForm.codoffering_wirgilio || !mappingForm.nome_esame_wirgilio || !mappingForm.visualizza_nel_referto}
+              >
+                {loading ? 'Aggiornando...' : '💾 Salva Modifiche'}
               </button>
             </div>
           </form>
@@ -890,6 +1209,7 @@ const LaboratorioManagement = ({ cronoscita }) => {
       
       {renderAddExamModal()}
       {renderAddMappingModal()}
+      {renderEditMappingModal()}
       {/* Delete Confirmation Modal */}
       {showDeleteModal && examToDelete && (
         <div style={styles.modal} onClick={handleCancelDelete}>
