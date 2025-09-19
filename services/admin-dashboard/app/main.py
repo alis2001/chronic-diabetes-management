@@ -132,8 +132,7 @@ def create_application() -> FastAPI:
     else:
         templates = None
 
-    # Include authentication router
-    app.include_router(auth_router, prefix="/api/admin")
+    app.include_router(auth_router)
 
     # ================================
     # HELPER FUNCTIONS
