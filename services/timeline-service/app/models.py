@@ -11,16 +11,6 @@ from datetime import datetime, date
 from enum import Enum
 import re
 
-# Patologie predefinite
-class PatologiaEnum(str, Enum):
-    DIABETES_TYPE1 = "diabetes_mellitus_type1"
-    DIABETES_TYPE2 = "diabetes_mellitus_type2"
-    DIABETES_GESTATIONAL = "diabetes_gestational"
-    HYPERTENSION_PRIMARY = "hypertension_primary"
-    HYPERTENSION_SECONDARY = "hypertension_secondary"
-    CARDIOVASCULAR = "cardiovascular_disease"
-    CHRONIC_KIDNEY = "chronic_kidney_disease"
-
 # Opzioni stato paziente
 class PatientStatus(str, Enum):
     ACTIVE = "active"
@@ -56,7 +46,7 @@ class PatientLookupRequest(BaseModel):
     """Modello richiesta ricerca paziente"""
     cf_paziente: str = Field(..., min_length=16, max_length=16, description="Codice fiscale italiano")
     id_medico: str = Field(..., min_length=1, description="ID Medico")
-    patologia: PatologiaEnum = Field(..., description="Patologia paziente")
+    patologia: str = Field(..., description="Patologia paziente (from Cronoscita)")
     
     @validator('cf_paziente')
     def validate_codice_fiscale(cls, v):
@@ -69,7 +59,7 @@ class PatientRegistrationRequest(BaseModel):
     """Modello richiesta registrazione paziente"""
     cf_paziente: str = Field(..., min_length=16, max_length=16)
     id_medico: str = Field(..., min_length=1)
-    patologia: PatologiaEnum
+    patologia: str
     confirm_registration: bool = Field(..., description="Medico conferma registrazione paziente")
     
     @validator('cf_paziente')
@@ -82,7 +72,7 @@ class PatientRegistrationWithContactsRequest(BaseModel):
     """Richiesta registrazione paziente con contatti modificabili"""
     cf_paziente: str = Field(..., min_length=16, max_length=16)
     id_medico: str = Field(..., min_length=1)
-    patologia: PatologiaEnum
+    patologia: str
     telefono: Optional[str] = Field(None, description="Telefono inserito/modificato dal medico")
     email: Optional[str] = Field(None, description="Email inserita/modificata dal medico")
     confirm_registration: bool = Field(..., description="Conferma registrazione del medico")
@@ -148,7 +138,7 @@ class Patient(BaseModel):
     """Modello paziente per storage database"""
     cf_paziente: str
     id_medico: str
-    patologia: PatologiaEnum
+    patologia: str
     demographics: Optional[PatientDemographics] = None
     status: PatientStatus = PatientStatus.ACTIVE
     enrollment_date: datetime
@@ -278,39 +268,6 @@ HARDCODED_DOCTOR_CREDENTIALS = {
     )
 }
 
-# Tipi appuntamento disponibili per patologia (nessuna frequenza - medico decide)
-AVAILABLE_APPOINTMENT_TYPES = {
-    PatologiaEnum.DIABETES_TYPE2: [
-        AppointmentType.VISITA_DIABETOLOGICA,
-        AppointmentType.LABORATORIO_HBA1C,
-        AppointmentType.LABORATORIO_GLICEMIA,
-        AppointmentType.VISITA_OCULISTICA,
-        AppointmentType.TEST_NEUROPATIA,
-        AppointmentType.ECO_ADDOME
-    ],
-    PatologiaEnum.DIABETES_TYPE1: [
-        AppointmentType.VISITA_DIABETOLOGICA,
-        AppointmentType.LABORATORIO_HBA1C,
-        AppointmentType.LABORATORIO_GLICEMIA,
-        AppointmentType.VISITA_OCULISTICA,
-        AppointmentType.TEST_NEUROPATIA
-    ],
-    PatologiaEnum.DIABETES_GESTATIONAL: [
-        AppointmentType.VISITA_DIABETOLOGICA,
-        AppointmentType.LABORATORIO_GLICEMIA,
-        AppointmentType.VISITA_OCULISTICA
-    ],
-    PatologiaEnum.HYPERTENSION_PRIMARY: [
-        AppointmentType.VISITA_DIABETOLOGICA,
-        AppointmentType.ECO_ADDOME,
-        AppointmentType.LABORATORIO_GLICEMIA
-    ],
-    PatologiaEnum.CARDIOVASCULAR: [
-        AppointmentType.VISITA_DIABETOLOGICA,
-        AppointmentType.ECO_ADDOME,
-        AppointmentType.TEST_NEUROPATIA
-    ]
-}
 
 # Descrizioni tipi appuntamento
 APPOINTMENT_TYPE_DESCRIPTIONS = {
@@ -322,3 +279,26 @@ APPOINTMENT_TYPE_DESCRIPTIONS = {
     AppointmentType.ECO_ADDOME: "Ecografia addome completo",
     AppointmentType.TEST_NEUROPATIA: "Test per neuropatia diabetica"
 }
+
+
+
+# ================================
+# CRONOSCITA PATHOLOGY VALIDATION
+# ================================
+
+async def validate_pathology_against_database(pathology_name: str) -> bool:
+    """
+    Validate pathology against active Cronoscita in database
+    Replaces hardcoded PatologiaEnum validation
+    """
+    try:
+        from .database import get_database
+        from .cronoscita_repository import CronoscitaRepository
+        
+        db = await get_database()
+        cronoscita_repo = CronoscitaRepository(db)
+        
+        return await cronoscita_repo.validate_pathologie(pathology_name)
+    except Exception as e:
+        logger.error(f"❌ Error validating pathology: {str(e)}")
+        return False

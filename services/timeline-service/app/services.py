@@ -22,8 +22,8 @@ from .models import (
 )
 from .repositories import PatientRepository, AppointmentRepository
 from .config import (
-    HARDCODED_DOCTOR_CREDENTIALS, AVAILABLE_APPOINTMENT_TYPES,
-    APPOINTMENT_TYPE_DESCRIPTIONS, APPOINTMENT_LOCATIONS, settings
+    settings, HARDCODED_DOCTOR_CREDENTIALS,
+    APPOINTMENT_TYPE_DESCRIPTIONS
 )
 from .exceptions import (
     DoctorValidationException, PatientNotFoundException, PatientAlreadyExistsException,
@@ -229,7 +229,8 @@ class PatientService:
         # Valida medico
         if not DoctorService.validate_doctor(request.id_medico):
             raise DoctorValidationException("Credenziali medico non valide")
-        
+        if not await self._validate_pathology(request.patologia):
+            raise ValueError("Patologia non valida")
         # Verifica se il paziente esiste nel nostro sistema
         existing_patient = await self.patient_repo.find_by_cf(request.cf_paziente)
         
@@ -259,16 +260,36 @@ class PatientService:
             message="Paziente trovato nel registro demografico ma non ancora registrato",
             patient_data={
                 "demographics": demographics.dict(),
-                "suggested_pathology": request.patologia.value
+                "suggested_pathology": request.patologia
             }
         )
     
+    async def _validate_pathology(self, pathology_name: str) -> bool:
+        """Validate pathology against active Cronoscita in database"""
+        try:
+            from .database import get_database
+            from .cronoscita_repository import CronoscitaRepository
+            
+            db = await get_database()
+            cronoscita_repo = CronoscitaRepository(db)
+            
+            is_valid = await cronoscita_repo.validate_pathologie(pathology_name)
+            
+            if not is_valid:
+                logger.warning(f"⚠️ Invalid pathology attempted: {pathology_name}")
+            
+            return is_valid
+        except Exception as e:
+            logger.error(f"❌ Error validating pathology: {str(e)}")
+            return False
+
     async def register_patient(self, request: PatientRegistrationRequest) -> PatientRegistrationResponse:
         """Registra nuovo paziente per gestione timeline"""
         # Valida medico
         if not DoctorService.validate_doctor(request.id_medico):
             raise DoctorValidationException("Credenziali medico non valide")
-        
+        if not await self._validate_pathology(request.patologia):
+            raise ValueError("Patologia non valida")
         # Verifica se il paziente esiste già
         existing_patient = await self.patient_repo.find_by_cf(request.cf_paziente)
         if existing_patient:
@@ -377,12 +398,8 @@ class AppointmentService:
         if not patient:
             raise PatientNotFoundException("Paziente non trovato")
         
-        # Valida tipo appuntamento per patologia
-        available_types = AVAILABLE_APPOINTMENT_TYPES.get(patient["patologia"], [])
-        if decision.appointment_type not in available_types:
-            raise InvalidAppointmentTypeException(
-                f"Tipo appuntamento {decision.appointment_type} non disponibile per patologia {patient['patologia']}"
-            )
+        logger.info(f"Scheduling appointment type {decision.appointment_type} for pathology {patient['patologia']}")
+
         
         # Ottieni slot disponibili da scheduler
         available_slots = await self.scheduler_client.get_available_slots(
@@ -460,8 +477,9 @@ class AppointmentService:
         if not patient:
             raise PatientNotFoundException("Paziente non trovato")
         
-        available_types = AVAILABLE_APPOINTMENT_TYPES.get(patient["patologia"], [])
-        
+        from .models import AppointmentType
+        all_appointment_types = list(AppointmentType)
+
         return {
             "patient_id": cf_paziente,
             "patologia": patient["patologia"],
@@ -470,7 +488,7 @@ class AppointmentService:
                     "type": apt_type.value,
                     "description": APPOINTMENT_TYPE_DESCRIPTIONS.get(apt_type, apt_type.value)
                 }
-                for apt_type in available_types
+                for apt_type in all_appointment_types
             ]
         }
 

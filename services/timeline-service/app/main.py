@@ -158,16 +158,16 @@ def create_application() -> FastAPI:
     
     @app.get("/available-pathologie")
     async def get_available_pathologie():
-        """Get available pathologie options from admin service (Cronoscita)"""
+        """Get available pathologie options from database (Microservices)"""
         try:
-            from .config import get_available_cronoscita_pathologie
+            from .config import get_available_cronoscita_pathologie_from_db
             
-            cronoscita_options = await get_available_cronoscita_pathologie()
+            cronoscita_options = await get_available_cronoscita_pathologie_from_db()
             
             if not cronoscita_options:
                 return {
                     "success": False,
-                    "message": "Nessuna Cronoscita configurata nel sistema amministrativo",
+                    "message": "Nessuna Cronoscita configurata nel database",
                     "pathologie_options": [],
                     "total": 0
                 }

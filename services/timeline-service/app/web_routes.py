@@ -13,7 +13,6 @@ from .session import (
     session_manager, SessionCookie, require_valid_session, get_current_session
 )
 from .config import HARDCODED_DOCTOR_CREDENTIALS, settings
-from .models import PatologiaEnum
 
 logger = logging.getLogger(__name__)
 
@@ -55,10 +54,25 @@ async def login(
                 }
             )
         
-        # Validate pathology
+        # Validate pathology against database
         try:
-            PatologiaEnum(patologia)
-        except ValueError:
+            from .database import get_database
+            from .cronoscita_repository import CronoscitaRepository
+            
+            db = await get_database()
+            cronoscita_repo = CronoscitaRepository(db)
+            
+            is_valid_pathology = await cronoscita_repo.validate_pathologie(patologia)
+            if not is_valid_pathology:
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "success": False,
+                        "error": "Patologia non valida"
+                    }
+                )
+        except Exception as e:
+            logger.error(f"Error validating pathology: {str(e)}")
             return JSONResponse(
                 status_code=400,
                 content={
@@ -226,21 +240,36 @@ async def get_available_doctors():
 
 @session_router.get("/pathologies")
 async def get_available_pathologies():
-    """Get list of available pathologies for forms"""
+    """Get list of available pathologies from database (Cronoscita)"""
     
-    pathologies = [
-        {
-            "value": pathology.value,
-            "label": pathology.value.replace("_", " ").title(),
-            "category": "diabetes" if "diabetes" in pathology.value else "other"
-        }
-        for pathology in PatologiaEnum
-    ]
-    
-    return JSONResponse(content={
-        "success": True,
-        "pathologies": pathologies
-    })
+    try:
+        from .database import get_database
+        from .cronoscita_repository import CronoscitaRepository
+        
+        db = await get_database()
+        cronoscita_repo = CronoscitaRepository(db)
+        
+        cronoscita_options = await cronoscita_repo.get_active_pathologie_options()
+        
+        pathologies = [
+            {
+                "value": option["code"],
+                "label": option["display"],
+                "category": "cronoscita"
+            }
+            for option in cronoscita_options
+        ]
+        
+        return JSONResponse(content={
+            "success": True,
+            "pathologies": pathologies
+        })
+    except Exception as e:
+        logger.error(f"Error getting pathologies from database: {str(e)}")
+        return JSONResponse(content={
+            "success": False,
+            "pathologies": []
+        })
 
 @session_router.post("/update-patient-context")
 async def update_patient_context(
@@ -316,5 +345,5 @@ async def session_health():
         "redis_connected": session_manager.redis_client is not None,
         "session_expiry_hours": 10,
         "available_doctors": len(HARDCODED_DOCTOR_CREDENTIALS),
-        "available_pathologies": len(PatologiaEnum)
+        "available_pathologies": "dynamic_from_database"
     }
