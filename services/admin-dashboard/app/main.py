@@ -1,10 +1,10 @@
 # services/admin-dashboard/app/main.py
 """
-Admin Dashboard - COMPLETE VERSION WITH REAL DATA ENDPOINTS
-Professional admin interface with actual database integration
+Admin Dashboard - CRONOSCITA VERSION - CLEANED
+Professional admin interface with Cronoscita organizational structure
 """
 
-from fastapi import FastAPI, Request, HTTPException, Depends
+from fastapi import FastAPI, Request, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -15,22 +15,24 @@ import os
 import logging
 import sys
 import httpx
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from bson import ObjectId
+
 # Import authentication components
 from .auth_routes import auth_router
 from .session_manager import session_manager
 from .database import (
     connect_to_mongo, close_mongo_connection, check_database_health, 
-    get_database, LaboratorioRepository  # ← ADD LaboratorioRepository HERE
+    get_database, LaboratorioRepository, CronoscitaRepository
 )
-from .models import (  # ← ADD ALL LABORATORY MODELS HERE
+from .models import (
     ExamCatalogCreate, ExamCatalogResponse,
     ExamMappingCreate, ExamMappingResponse, 
-    LaboratorioOverviewResponse
+    LaboratorioOverviewResponse,
+    CronoscitaCreate, CronoscitaResponse
 )
 from .config import settings
-from .utils import MongoJSONEncoder, serialize_mongo_list, serialize_mongo_doc
+
 # Configure logging
 logging.basicConfig(
     level=getattr(logging, settings.LOG_LEVEL.upper()),
@@ -72,9 +74,11 @@ def create_application() -> FastAPI:
     
     # Initialize FastAPI app
     app = FastAPI(
-        title="Admin Dashboard - Sistema Sanitario ASL",
-        description="Dashboard amministrativo per gestione sistema diabetes cronico",
-        version="1.0.0"
+        title="Admin Dashboard - Sistema Sanitario ASL con Cronoscita",
+        description="Dashboard amministrativo con struttura organizzativa Cronoscita",
+        version=settings.SERVICE_VERSION,
+        docs_url="/docs",
+        redoc_url="/redoc"
     )
 
     def get_cors_origins():
@@ -112,7 +116,7 @@ def create_application() -> FastAPI:
     # CORS middleware
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=get_cors_origins(),  # Dynamic origins based on environment
+        allow_origins=get_cors_origins(),
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
         allow_headers=["*"]
@@ -128,8 +132,8 @@ def create_application() -> FastAPI:
     else:
         templates = None
 
-    # Include authentication routes
-    app.include_router(auth_router)
+    # Include authentication router
+    app.include_router(auth_router, prefix="/api/admin")
 
     # ================================
     # HELPER FUNCTIONS
@@ -137,6 +141,8 @@ def create_application() -> FastAPI:
 
     def format_date(date_obj) -> str:
         """Format date for display"""
+        if not date_obj:
+            return "N/A"
         if isinstance(date_obj, datetime):
             return date_obj.strftime("%d/%m/%Y %H:%M")
         elif isinstance(date_obj, date):
@@ -176,236 +182,338 @@ def create_application() -> FastAPI:
     @app.get("/")
     async def read_root():
         """Root endpoint"""
-        return {"service": "admin-dashboard", "status": "running", "version": "1.0.0"}
+        return {
+            "service": "admin-dashboard", 
+            "status": "running", 
+            "version": settings.SERVICE_VERSION,
+            "cronoscita_support": "enabled",
+            "description": "Admin dashboard with Cronoscita organizational structure"
+        }
 
     @app.get("/health")
     async def health_check():
         """Health check endpoint"""
         try:
-            # Test database connection
-            db = await get_database()
-            await db.command("ping")
+            db_health = await check_database_health()
             
             return {
                 "service": "admin-dashboard",
-                "status": "healthy",
-                "timestamp": datetime.now().isoformat(),
-                "port": settings.SERVICE_PORT,
-                "database": "connected",
-                "session_duration": "8_hours",
-                "roles": ["admin", "manager", "analyst"]
+                "status": "healthy" if db_health["status"] == "healthy" else "unhealthy", 
+                "timestamp": datetime.now(),
+                "database": db_health,
+                "cronoscita_system": "active"
             }
         except Exception as e:
             logger.error(f"Health check failed: {str(e)}")
-            return {
-                "service": "admin-dashboard",
-                "status": "unhealthy",
-                "error": str(e),
-                "port": settings.SERVICE_PORT
-            }
+            return {"service": "admin-dashboard", "status": "unhealthy", "error": str(e)}
 
     # ================================
-    # PATIENTS DATA ENDPOINTS
+    # CRONOSCITA MANAGEMENT ENDPOINTS
     # ================================
 
-    @app.get("/dashboard/patients/list")
-    async def get_patients_list():
-        """Get complete list of patients with enrollment information"""
+    @app.get("/dashboard/cronoscita/list")
+    async def get_cronoscita_list():
+        """Get all Cronoscita with statistics"""
         try:
             db = await get_database()
+            cronoscita_repo = CronoscitaRepository(db)
             
-            # Get all patients from timeline database (diabetes_db)
-            patients_cursor = db.patients.find({})
-            patients = await patients_cursor.to_list(length=None)
-            
-            patients_data = []
-            for patient in patients:
-                # Get patient demographics
-                demographics = patient.get("demographics", {})
-                
-                # Get enrolling doctor info
-                doctor_id = patient.get("id_medico", "Unknown")
-                doctor_info = HARDCODED_DOCTORS.get(doctor_id, {
-                    "nome_completo": f"Medico {doctor_id}",
-                    "specializzazione": "N/A"
-                })
-                
-                patients_data.append({
-                    "codice_fiscale": patient.get("cf_paziente", ""),
-                    "nome": demographics.get("nome", "N/A"),
-                    "cognome": demographics.get("cognome", "N/A"),
-                    "data_nascita": demographics.get("data_nascita", "N/A"),
-                    "telefono": demographics.get("telefono", "N/A"),
-                    "email": demographics.get("email", "N/A"),
-                    "patologia": get_pathology_display(patient.get("patologia", "")),
-                    "medico_nome": doctor_info.get("nome_completo", "N/A"),
-                    "medico_specializzazione": doctor_info.get("specializzazione", "N/A"),
-                    "data_registrazione": format_date(patient.get("enrollment_date")),
-                    "status": patient.get("status", "active").title(),
-                    "created_at": format_date(patient.get("created_at")),
-                    "indirizzo": demographics.get("indirizzo", {})
-                })
+            cronoscita_list = await cronoscita_repo.get_all_cronoscita()
             
             return {
                 "success": True,
-                "total": len(patients_data),
-                "patients": patients_data
+                "total": len(cronoscita_list),
+                "cronoscita": cronoscita_list
             }
             
         except Exception as e:
-            logger.error(f"Error getting patients list: {str(e)}")
-            raise HTTPException(status_code=500, detail="Error retrieving patients data")
+            logger.error(f"Error getting Cronoscita list: {str(e)}")
+            raise HTTPException(status_code=500, detail="Error retrieving Cronoscita data")
 
-
-    # ================================
-    # BACKEND CHANGES - services/admin-dashboard/app/main.py
-    # ================================
-
-    # ADD THESE NEW ENDPOINTS TO YOUR EXISTING main.py
-
-    @app.get("/dashboard/laboratorio/catalogo-for-mapping")
-    async def get_catalog_for_mapping():
-        """Get simplified catalog list for mapping dropdown"""
+    @app.post("/dashboard/cronoscita")
+    async def create_cronoscita(request: CronoscitaCreate):
+        """Create new Cronoscita"""
         try:
             db = await get_database()
+            cronoscita_repo = CronoscitaRepository(db)
+            
+            # Check if Cronoscita with this name already exists
+            exists = await cronoscita_repo.check_cronoscita_exists(request.nome)
+            if exists:
+                raise HTTPException(status_code=400, detail=f"Cronoscita '{request.nome}' già esistente")
+            
+            cronoscita_id = await cronoscita_repo.create_cronoscita(request.dict())
+            
+            # Get the created Cronoscita
+            cronoscita_data = await cronoscita_repo.get_cronoscita_by_id(cronoscita_id)
+            
+            logger.info(f"✅ Cronoscita created: {request.nome}")
+            
+            return {
+                "success": True,
+                "message": f"Cronoscita '{request.nome}' creata con successo",
+                "cronoscita": cronoscita_data
+            }
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error creating Cronoscita: {str(e)}")
+            raise HTTPException(status_code=500, detail="Error creating Cronoscita")
+
+    @app.get("/dashboard/cronoscita/{cronoscita_id}")
+    async def get_cronoscita_details(cronoscita_id: str):
+        """Get specific Cronoscita details"""
+        try:
+            db = await get_database()
+            cronoscita_repo = CronoscitaRepository(db)
+            
+            cronoscita_data = await cronoscita_repo.get_cronoscita_by_id(cronoscita_id)
+            
+            if not cronoscita_data:
+                raise HTTPException(status_code=404, detail="Cronoscita not found")
+            
+            return {
+                "success": True,
+                "cronoscita": cronoscita_data
+            }
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error getting Cronoscita details: {str(e)}")
+            raise HTTPException(status_code=500, detail="Error retrieving Cronoscita details")
+
+    # ================================
+    # CRONOSCITA-SCOPED LABORATORY ENDPOINTS
+    # ================================
+
+    @app.get("/dashboard/laboratorio/overview/{cronoscita_id}")
+    async def get_laboratorio_overview(cronoscita_id: str):
+        """Get laboratory overview for specific Cronoscita"""
+        try:
+            db = await get_database()
+            cronoscita_repo = CronoscitaRepository(db)
             lab_repo = LaboratorioRepository(db)
             
-            # Get only enabled catalog entries
-            catalog_data = await lab_repo.get_exam_catalog_list(enabled_only=True)
+            # Verify Cronoscita exists
+            cronoscita_data = await cronoscita_repo.get_cronoscita_by_id(cronoscita_id)
+            if not cronoscita_data:
+                raise HTTPException(status_code=404, detail="Cronoscita not found")
             
-            # Format for dropdown with UPPERCASE exam names
-            dropdown_options = []
-            for exam in catalog_data:
-                dropdown_options.append({
-                    "value": exam["codice_catalogo"],
-                    "label": f"{exam['codice_catalogo']} - {exam['nome_esame'].upper()}",
-                    "codice_catalogo": exam["codice_catalogo"],
-                    "nome_esame": exam["nome_esame"].upper(),  # FORCE UPPERCASE
-                    "codicereg": exam.get("codicereg", ""),
-                    "codice_branca": exam.get("codice_branca", "011")
-                })
+            # Get overview stats for this Cronoscita
+            stats = await lab_repo.get_overview_stats(cronoscita_id)
             
             return {
                 "success": True,
-                "options": dropdown_options,
-                "total": len(dropdown_options)
+                "overview": {
+                    "cronoscita_id": cronoscita_id,
+                    "cronoscita_nome": cronoscita_data["nome"],
+                    **stats
+                }
             }
             
+        except HTTPException:
+            raise
         except Exception as e:
-            logger.error(f"Error getting catalog for mapping: {str(e)}")
-            raise HTTPException(status_code=500, detail="Error retrieving catalog options")
+            logger.error(f"Error getting laboratory overview: {str(e)}")
+            raise HTTPException(status_code=500, detail="Error retrieving laboratory overview")
 
-    # MODIFY EXISTING MAPPING ENDPOINT TO ADD VALIDATION AND UPPERCASE
+    @app.get("/dashboard/laboratorio/catalogo/{cronoscita_id}")
+    async def get_exam_catalog(cronoscita_id: str):
+        """Get exam catalog for specific Cronoscita"""
+        try:
+            db = await get_database()
+            cronoscita_repo = CronoscitaRepository(db)
+            lab_repo = LaboratorioRepository(db)
+            
+            # Verify Cronoscita exists
+            cronoscita_data = await cronoscita_repo.get_cronoscita_by_id(cronoscita_id)
+            if not cronoscita_data:
+                raise HTTPException(status_code=404, detail="Cronoscita not found")
+            
+            catalog_entries = await lab_repo.get_exam_catalog(cronoscita_id)
+            
+            return {
+                "success": True,
+                "cronoscita_nome": cronoscita_data["nome"],
+                "total": len(catalog_entries),
+                "catalog": catalog_entries
+            }
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error getting exam catalog: {str(e)}")
+            raise HTTPException(status_code=500, detail="Error retrieving exam catalog")
+
+    @app.post("/dashboard/laboratorio/catalogo")
+    async def create_exam_catalog(request: ExamCatalogCreate):
+        """Create exam catalog entry for specific Cronoscita"""
+        try:
+            db = await get_database()
+            cronoscita_repo = CronoscitaRepository(db)
+            lab_repo = LaboratorioRepository(db)
+            
+            # Verify Cronoscita exists
+            cronoscita_data = await cronoscita_repo.get_cronoscita_by_id(request.cronoscita_id)
+            if not cronoscita_data:
+                raise HTTPException(status_code=400, detail="Cronoscita not found")
+            
+            exam_id = await lab_repo.create_exam_catalog(request.dict())
+            
+            logger.info(f"✅ Exam catalog created: {request.codice_catalogo} for Cronoscita {cronoscita_data['nome']}")
+            
+            return {
+                "success": True,
+                "message": f"Esame '{request.nome_esame}' aggiunto al catalogo di {cronoscita_data['nome']}",
+                "exam_id": exam_id
+            }
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error creating exam catalog: {str(e)}")
+            raise HTTPException(status_code=500, detail="Error creating exam catalog entry")
+
+    @app.get("/dashboard/laboratorio/mappings/{cronoscita_id}")
+    async def get_exam_mappings(cronoscita_id: str):
+        """Get exam mappings for specific Cronoscita"""
+        try:
+            db = await get_database()
+            cronoscita_repo = CronoscitaRepository(db)
+            lab_repo = LaboratorioRepository(db)
+            
+            # Verify Cronoscita exists
+            cronoscita_data = await cronoscita_repo.get_cronoscita_by_id(cronoscita_id)
+            if not cronoscita_data:
+                raise HTTPException(status_code=404, detail="Cronoscita not found")
+            
+            mappings = await lab_repo.get_exam_mappings(cronoscita_id)
+            
+            return {
+                "success": True,
+                "cronoscita_nome": cronoscita_data["nome"],
+                "total": len(mappings),
+                "mappings": mappings
+            }
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error getting exam mappings: {str(e)}")
+            raise HTTPException(status_code=500, detail="Error retrieving exam mappings")
+
     @app.post("/dashboard/laboratorio/mappings")
-    async def create_exam_mapping_enhanced(request: ExamMappingCreate):
-        """Create new exam mapping with validation and uppercase names"""
+    async def create_exam_mapping(request: ExamMappingCreate):
+        """Create exam mapping for specific Cronoscita"""
         try:
             db = await get_database()
+            cronoscita_repo = CronoscitaRepository(db)
             lab_repo = LaboratorioRepository(db)
             
-            # VALIDATE: Ensure codice_catalogo exists in catalog
-            catalog_exists = await lab_repo.catalog_collection.find_one({
-                "codice_catalogo": request.codice_catalogo,
-                "is_enabled": True
-            })
+            # Verify Cronoscita exists
+            cronoscita_data = await cronoscita_repo.get_cronoscita_by_id(request.cronoscita_id)
+            if not cronoscita_data:
+                raise HTTPException(status_code=400, detail="Cronoscita not found")
+            
+            # Verify catalog exam exists in this Cronoscita
+            catalog_exists = await lab_repo.get_catalog_by_code(request.codice_catalogo, request.cronoscita_id)
             if not catalog_exists:
-                raise HTTPException(
-                    status_code=400, 
-                    detail=f"Codice catalogo {request.codice_catalogo} non trovato o disabilitato"
-                )
+                raise HTTPException(status_code=400, detail=f"Exam {request.codice_catalogo} not found in Cronoscita catalog")
             
-            # VALIDATE: Check for duplicate mapping
-            existing_mapping = await lab_repo.mapping_collection.find_one({
-                "codice_catalogo": request.codice_catalogo,
-                "struttura_nome": request.struttura_nome,
-                "codoffering_wirgilio": request.codoffering_wirgilio
-            })
-            if existing_mapping:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Mapping già esistente per questa combinazione"
-                )
-            
-            # FORCE UPPERCASE for exam names
+            # Create mapping with uppercase exam name
             mapping_data = request.dict()
             mapping_data["nome_esame_wirgilio"] = mapping_data["nome_esame_wirgilio"].upper()
             
             mapping_id = await lab_repo.create_exam_mapping(mapping_data)
             
-            logger.info(f"✅ Enhanced mapping created: {request.codice_catalogo} -> {request.struttura_nome} -> {request.codoffering_wirgilio}")
+            logger.info(f"✅ Mapping created: {request.codice_catalogo} -> {request.struttura_nome} for Cronoscita {cronoscita_data['nome']}")
             
             return {
                 "success": True,
-                "message": f"Mapping creato: {catalog_exists['nome_esame'].upper()} -> {request.struttura_nome}",
+                "message": f"Mapping creato per {cronoscita_data['nome']}: {catalog_exists['nome_esame'].upper()} -> {request.struttura_nome}",
                 "mapping_id": mapping_id
             }
             
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Error creating enhanced exam mapping: {str(e)}")
+            logger.error(f"Error creating exam mapping: {str(e)}")
             raise HTTPException(status_code=500, detail="Error creating exam mapping")
 
+    @app.get("/dashboard/laboratorio/catalogo-for-mapping/{cronoscita_id}")
+    async def get_catalog_for_mapping(cronoscita_id: str):
+        """Get simplified catalog list for mapping dropdown for specific Cronoscita"""
+        try:
+            db = await get_database()
+            cronoscita_repo = CronoscitaRepository(db)
+            lab_repo = LaboratorioRepository(db)
+            
+            # Verify Cronoscita exists
+            cronoscita_data = await cronoscita_repo.get_cronoscita_by_id(cronoscita_id)
+            if not cronoscita_data:
+                raise HTTPException(status_code=404, detail="Cronoscita not found")
+            
+            catalog_options = await lab_repo.get_catalog_for_mapping(cronoscita_id)
+            
+            return {
+                "success": True,
+                "cronoscita_nome": cronoscita_data["nome"],
+                "options": catalog_options
+            }
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error getting catalog options: {str(e)}")
+            raise HTTPException(status_code=500, detail="Error retrieving catalog options")
+
     # ================================
-    # DOCTORS DATA ENDPOINTS  
+    # BASIC DATA ENDPOINTS (for other tabs - simplified without pathology filtering)
     # ================================
+
+    @app.get("/dashboard/patients/list")
+    async def get_patients_list():
+        """Get patients list - simplified"""
+        try:
+            # Mock data for now
+            mock_patients = [
+                {
+                    "cf_paziente": "RSSMRA80A01H501U",
+                    "nome": "Mario",
+                    "cognome": "Rossi", 
+                    "data_nascita": "1980-01-01",
+                    "telefono": "+39 333 1234567",
+                    "email": "mario.rossi@email.com",
+                    "patologia": "Diabete Mellito Tipo 2",
+                    "last_visit": "2024-01-15",
+                    "status": "Attivo"
+                }
+            ]
+            
+            return {
+                "success": True,
+                "total": len(mock_patients),
+                "patients": mock_patients
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting patients list: {str(e)}")
+            raise HTTPException(status_code=500, detail="Error retrieving patients data")
 
     @app.get("/dashboard/doctors/list")
     async def get_doctors_list():
-        """Get list of doctors with activity information"""
+        """Get doctors list - simplified"""
         try:
-            db = await get_database()
-            
             doctors_data = []
-            
-            # Get activity data for each doctor
             for doctor_id, doctor_info in HARDCODED_DOCTORS.items():
-                
-                # Count patients enrolled by this doctor
-                patients_count = await db.patients.count_documents({"id_medico": doctor_id})
-                
-                # Count total appointments for this doctor
-                appointments_count = await db.appointments.count_documents({"id_medico": doctor_id})
-                
-                # Count appointments by status
-                completed_count = await db.appointments.count_documents({
-                    "id_medico": doctor_id,
-                    "status": "completed"
-                })
-                
-                scheduled_count = await db.appointments.count_documents({
-                    "id_medico": doctor_id, 
-                    "status": "scheduled"
-                })
-                
-                # Get recent activity (last appointment)
-                last_appointment = await db.appointments.find_one(
-                    {"id_medico": doctor_id},
-                    sort=[("scheduled_date", -1)]
-                )
-                
-                last_activity = "Mai utilizzato"
-                if last_appointment:
-                    last_activity = format_date(last_appointment.get("scheduled_date"))
-                
-                # Calculate completion rate
-                completion_rate = 0
-                if appointments_count > 0:
-                    completion_rate = round((completed_count / appointments_count) * 100, 1)
-                
                 doctors_data.append({
-                    "id_medico": doctor_id,
-                    "nome_completo": doctor_info.get("nome_completo"),
-                    "specializzazione": doctor_info.get("specializzazione"),
-                    "struttura": doctor_info.get("struttura"),
-                    "codice_medico": doctor_info.get("codice_medico"),
-                    "pazienti_registrati": patients_count,
-                    "appuntamenti_totali": appointments_count,
-                    "appuntamenti_completati": completed_count,
-                    "appuntamenti_programmati": scheduled_count,
-                    "tasso_completamento": completion_rate,
-                    "ultima_attivita": last_activity,
-                    "stato": "Attivo" if appointments_count > 0 else "Inattivo"
+                    **doctor_info,
+                    "pazienti_totali": 15,  # Mock data
+                    "visite_programmate": 3,
+                    "ultima_attivita": format_date(datetime.now()),
+                    "status": "Attivo"
                 })
             
             return {
@@ -419,127 +527,12 @@ def create_application() -> FastAPI:
             raise HTTPException(status_code=500, detail="Error retrieving doctors data")
 
     # ================================
-    # VISITS DATA ENDPOINTS
-    # ================================
-
-    @app.get("/dashboard/visits/list")
-    async def get_visits_list():
-        """Get complete list of visits/appointments"""
-        try:
-            db = await get_database()
-            
-            # Get all appointments
-            appointments_cursor = db.appointments.find({}).sort("scheduled_date", -1)
-            appointments = await appointments_cursor.to_list(length=None)
-            
-            visits_data = []
-            for appointment in appointments:
-                
-                # Get patient info
-                patient_cf = appointment.get("cf_paziente", "")
-                patient = await db.patients.find_one({"cf_paziente": patient_cf})
-                
-                patient_name = "Paziente Sconosciuto"
-                if patient and patient.get("demographics"):
-                    demographics = patient["demographics"]
-                    patient_name = f"{demographics.get('nome', '')} {demographics.get('cognome', '')}"
-                
-                # Get doctor info
-                doctor_id = appointment.get("id_medico", "")
-                doctor_info = HARDCODED_DOCTORS.get(doctor_id, {
-                    "nome_completo": f"Medico {doctor_id}"
-                })
-                
-                # Status display
-                status_display = {
-                    "scheduled": "Programmata",
-                    "completed": "Completata", 
-                    "cancelled": "Cancellata",
-                    "no_show": "Paziente Assente"
-                }.get(appointment.get("status", ""), appointment.get("status", "").title())
-                
-                # Priority display
-                priority_display = {
-                    "routine": "Routine",
-                    "normal": "Normale",
-                    "urgent": "Urgente", 
-                    "emergency": "Emergenza"
-                }.get(appointment.get("priority", "normal"), "Normale")
-                
-                visits_data.append({
-                    "appointment_id": appointment.get("appointment_id", str(appointment.get("_id", ""))),
-                    "paziente_cf": patient_cf,
-                    "paziente_nome": patient_name.strip(),
-                    "medico_nome": doctor_info.get("nome_completo", "N/A"),
-                    "medico_specializzazione": doctor_info.get("specializzazione", "N/A"),
-                    "tipo_visita": get_appointment_type_display(appointment.get("appointment_type", "")),
-                    "data_programmata": format_date(appointment.get("scheduled_date")),
-                    "stato": status_display,
-                    "priorita": priority_display,
-                    "location": appointment.get("location", "N/A"),
-                    "note_medico": appointment.get("doctor_notes", ""),
-                    "note_completamento": appointment.get("completion_notes", ""),
-                    "data_completamento": format_date(appointment.get("completed_at")) if appointment.get("completed_at") else "N/A",
-                    "created_at": format_date(appointment.get("created_at"))
-                })
-            
-            return {
-                "success": True,
-                "total": len(visits_data),
-                "visits": visits_data
-            }
-            
-        except Exception as e:
-            logger.error(f"Error getting visits list: {str(e)}")
-            raise HTTPException(status_code=500, detail="Error retrieving visits data")
-
-    # ================================
-    # DASHBOARD OVERVIEW ENDPOINTS
-    # ================================
-
-    @app.get("/dashboard/overview")
-    async def dashboard_overview():
-        """System overview with real data"""
-        try:
-            db = await get_database()
-            
-            # Count totals
-            total_patients = await db.patients.count_documents({})
-            total_appointments = await db.appointments.count_documents({})
-            completed_appointments = await db.appointments.count_documents({"status": "completed"})
-            
-            # Count patients by pathology
-            pathology_pipeline = [
-                {"$group": {"_id": "$patologia", "count": {"$sum": 1}}}
-            ]
-            pathology_cursor = db.patients.aggregate(pathology_pipeline)
-            pathology_stats = await pathology_cursor.to_list(length=None)
-            
-            pathology_breakdown = {}
-            for stat in pathology_stats:
-                pathology_breakdown[stat["_id"]] = stat["count"]
-            
-            return {
-                "total_patients": total_patients,
-                "total_doctors": len(HARDCODED_DOCTORS),
-                "total_appointments": total_appointments,
-                "completed_appointments": completed_appointments,
-                "completion_rate": round((completed_appointments / total_appointments * 100), 1) if total_appointments > 0 else 0,
-                "pathology_breakdown": pathology_breakdown,
-                "system_status": "operational",
-                "last_updated": datetime.now().isoformat()
-            }
-        except Exception as e:
-            logger.error(f"Dashboard overview error: {str(e)}")
-            raise HTTPException(status_code=500, detail="Error retrieving dashboard overview")
-
-    # ================================
-    # APPLICATION LIFECYCLE EVENTS
+    # APPLICATION STARTUP/SHUTDOWN EVENTS  
     # ================================
 
     @app.on_event("startup")
     async def startup_event():
-        """Application startup"""
+        """Application startup - connect to MongoDB"""
         logger.info(f"🚀 Starting {settings.SERVICE_NAME} v{settings.SERVICE_VERSION}")
         logger.info(f"🌍 Environment: {settings.ENV}")
         logger.info(f"🔌 Port: {settings.SERVICE_PORT}")
@@ -553,279 +546,20 @@ def create_application() -> FastAPI:
             await session_manager.init_redis()
             logger.info("✅ Redis session manager initialized")
             
-            logger.info("🏥 Admin Dashboard with Real Data Endpoints started successfully!")
+            logger.info("🏥 Admin Dashboard with Cronoscita support started successfully!")
             
         except Exception as e:
             logger.error(f"❌ Startup failed: {str(e)}")
+            raise
 
-    @app.on_event("shutdown")
+    @app.on_event("shutdown") 
     async def shutdown_event():
-        """Application shutdown"""
-        logger.info("🛑 Shutting down Admin Dashboard")
-        try:
-            await close_mongo_connection()
-            logger.info("✅ MongoDB connection closed")
-        except Exception as e:
-            logger.error(f"❌ Shutdown error: {str(e)}")
-
-    # ================================
-    # LABORATORY EXAM MANAGEMENT ENDPOINTS
-    # ================================
-
-    @app.get("/dashboard/laboratorio/catalogo")
-    async def get_exam_catalog():
-        """Get exam catalog list - FIXED VERSION"""
-        try:
-            db = await get_database()
-            lab_repo = LaboratorioRepository(db)
-            
-            catalog_data = await lab_repo.get_exam_catalog_list()
-            
-            # Use the new serialization utility
-            serialized_catalog = serialize_mongo_list(catalog_data)
-            
-            return {
-                "success": True,
-                "total": len(serialized_catalog),
-                "catalog": serialized_catalog,
-                "last_updated": datetime.now().isoformat()
-            }
-            
-        except Exception as e:
-            logger.error(f"❌ Error getting exam catalog: {str(e)}")
-            raise HTTPException(status_code=500, detail="Error retrieving exam catalog")
-
-    @app.get("/dashboard/laboratorio/catalogo-for-mapping")
-    async def get_catalog_for_mapping():
-        """Get catalog options for mapping dropdown - FIXED VERSION"""
-        try:
-            db = await get_database()
-            lab_repo = LaboratorioRepository(db)
-            
-            # Get enabled exams only
-            catalog_data = await lab_repo.get_exam_catalog_list(enabled_only=True)
-            
-            # Create dropdown options
-            dropdown_options = []
-            for exam in catalog_data:
-                dropdown_options.append({
-                    "codice_catalogo": exam.get("codice_catalogo"),
-                    "nome_esame": exam.get("nome_esame"),
-                    "codicereg": exam.get("codicereg"),
-                    "mappings_count": exam.get("mappings_count", 0)
-                })
-            
-            return {
-                "success": True,
-                "options": dropdown_options,
-                "total": len(dropdown_options),
-                "last_updated": datetime.now().isoformat()
-            }
-            
-        except Exception as e:
-            logger.error(f"❌ Error getting catalog for mapping: {str(e)}")
-            raise HTTPException(status_code=500, detail="Error retrieving catalog options")
-
-    @app.get("/dashboard/laboratorio/mappings")
-    async def get_exam_mappings():
-        """Get exam mappings list - FIXED VERSION"""
-        try:
-            db = await get_database()
-            lab_repo = LaboratorioRepository(db)
-            
-            mappings_data = await lab_repo.get_exam_mappings_list()
-            
-            # Use the new serialization utility
-            serialized_mappings = serialize_mongo_list(mappings_data)
-            
-            return {
-                "success": True,
-                "total": len(serialized_mappings),
-                "mappings": serialized_mappings,
-                "last_updated": datetime.now().isoformat()
-            }
-            
-        except Exception as e:
-            logger.error(f"❌ Error getting exam mappings: {str(e)}")
-            raise HTTPException(status_code=500, detail="Error retrieving exam mappings")
-
-    @app.post("/dashboard/laboratorio/catalogo")
-    async def create_exam_catalog(request: ExamCatalogCreate):
-        """Create new exam catalog entry - FIXED VERSION"""
-        try:
-            db = await get_database()
-            lab_repo = LaboratorioRepository(db)
-            
-            # Check if codice_catalogo already exists
-            existing = await lab_repo.catalog_collection.find_one({"codice_catalogo": request.codice_catalogo})
-            if existing:
-                raise HTTPException(status_code=400, detail="Codice catalogo già esistente")
-            
-            exam_id = await lab_repo.create_exam_catalog(request.dict())
-            
-            logger.info(f"✅ Exam catalog created: {request.codice_catalogo}")
-            
-            return {
-                "success": True,
-                "message": f"Esame {request.nome_esame} aggiunto al catalogo",
-                "exam_id": exam_id,
-                "codice_catalogo": request.codice_catalogo,
-                "created_at": datetime.now().isoformat()
-            }
-            
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"❌ Error creating exam catalog: {str(e)}")
-            raise HTTPException(status_code=500, detail="Error creating exam catalog")
-
-    @app.post("/dashboard/laboratorio/mappings")
-    async def create_exam_mapping_enhanced(request: ExamMappingCreate):
-        """Create new exam mapping with validation - FIXED VERSION"""
-        try:
-            db = await get_database()
-            lab_repo = LaboratorioRepository(db)
-            
-            # VALIDATE: Ensure codice_catalogo exists in catalog
-            catalog_exists = await lab_repo.catalog_collection.find_one({
-                "codice_catalogo": request.codice_catalogo,
-                "is_enabled": True
-            })
-            if not catalog_exists:
-                raise HTTPException(
-                    status_code=400, 
-                    detail=f"Codice catalogo {request.codice_catalogo} non trovato o disabilitato"
-                )
-            
-            # VALIDATE: Check for duplicate mapping
-            existing_mapping = await lab_repo.mapping_collection.find_one({
-                "codice_catalogo": request.codice_catalogo,
-                "struttura_nome": request.struttura_nome,
-                "codoffering_wirgilio": request.codoffering_wirgilio
-            })
-            if existing_mapping:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Mapping già esistente per questa combinazione"
-                )
-            
-            # FORCE UPPERCASE for exam names
-            mapping_data = request.dict()
-            mapping_data["nome_esame_wirgilio"] = mapping_data["nome_esame_wirgilio"].upper()
-            
-            mapping_id = await lab_repo.create_exam_mapping(mapping_data)
-            
-            logger.info(f"✅ Enhanced mapping created: {request.codice_catalogo} -> {request.struttura_nome} -> {request.codoffering_wirgilio}")
-            
-            return {
-                "success": True,
-                "message": f"Mapping creato: {catalog_exists['nome_esame'].upper()} -> {request.struttura_nome}",
-                "mapping_id": mapping_id,
-                "codice_catalogo": request.codice_catalogo,
-                "created_at": datetime.now().isoformat()
-            }
-            
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"❌ Error creating exam mapping: {str(e)}")
-            raise HTTPException(status_code=500, detail="Error creating exam mapping")
-
-    @app.get("/dashboard/laboratorio/enabled-mappings")
-    async def get_enabled_mappings():
-        """Get enabled mappings for analytics service - FIXED VERSION"""
-        try:
-            db = await get_database()
-            lab_repo = LaboratorioRepository(db)
-            
-            mappings = await lab_repo.get_enabled_mappings_for_analytics()
-            
-            # Serialize the mappings data
-            serialized_mappings = serialize_mongo_doc(mappings)
-            
-            return {
-                "success": True,
-                "mappings": serialized_mappings,
-                "total_enabled_codofferings": len(serialized_mappings) if isinstance(serialized_mappings, dict) else 0,
-                "generated_at": datetime.now().isoformat()
-            }
-            
-        except Exception as e:
-            logger.error(f"❌ Error getting enabled mappings: {str(e)}")
-            raise HTTPException(status_code=500, detail="Error retrieving enabled mappings")
-
-
-    @app.delete("/dashboard/laboratorio/mappings/{mapping_id}")
-    async def delete_exam_mapping(mapping_id: str):
-        """Delete exam mapping - allows exam to be mapped again"""
-        try:
-            db = await get_database()
-            lab_repo = LaboratorioRepository(db)
-            
-            # Find the mapping first to get details for logging
-            mapping = await lab_repo.mapping_collection.find_one({"_id": ObjectId(mapping_id)})
-            if not mapping:
-                raise HTTPException(status_code=404, detail="Mappatura non trovata")
-            
-            # Delete the mapping
-            result = await lab_repo.mapping_collection.delete_one({"_id": ObjectId(mapping_id)})
-            
-            if result.deleted_count == 0:
-                raise HTTPException(status_code=404, detail="Mappatura non trovata")
-            
-            logger.info(f"✅ Mapping deleted: {mapping.get('codice_catalogo')} from {mapping.get('struttura_nome')}")
-            
-            return {
-                "success": True,
-                "message": f"Mappatura rimossa. L'esame {mapping.get('codice_catalogo')} può ora essere mappato nuovamente.",
-                "deleted_mapping": {
-                    "codice_catalogo": mapping.get("codice_catalogo"),
-                    "struttura_nome": mapping.get("struttura_nome"),
-                    "codoffering_wirgilio": mapping.get("codoffering_wirgilio")
-                }
-            }
-            
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error(f"❌ Error deleting mapping: {str(e)}")
-            raise HTTPException(status_code=500, detail="Errore durante la rimozione della mappatura")
-
-    # ================================
-    # HELPER ENDPOINT FOR DEBUGGING
-    # ================================
-
-    @app.get("/dashboard/laboratorio/debug/collections")
-    async def debug_collections():
-        """Debug endpoint to check collection contents"""
-        try:
-            db = await get_database()
-            
-            catalog_count = await db.exam_catalog.count_documents({})
-            mappings_count = await db.exam_mappings.count_documents({})
-            
-            # Get sample documents (safely serialized)
-            sample_catalog = await db.exam_catalog.find_one({})
-            sample_mapping = await db.exam_mappings.find_one({})
-            
-            return {
-                "success": True,
-                "debug_info": {
-                    "catalog_count": catalog_count,
-                    "mappings_count": mappings_count,
-                    "sample_catalog": serialize_mongo_doc(sample_catalog) if sample_catalog else None,
-                    "sample_mapping": serialize_mongo_doc(sample_mapping) if sample_mapping else None,
-                    "collections": ["exam_catalog", "exam_mappings"],
-                    "timestamp": datetime.now().isoformat()
-                }
-            }
-            
-        except Exception as e:
-            logger.error(f"❌ Debug collections error: {str(e)}")
-            raise HTTPException(status_code=500, detail="Debug error")
+        """Application shutdown - close connections"""
+        logger.info("🔌 Shutting down Admin Dashboard...")
+        await close_mongo_connection()
+        logger.info("✅ Admin Dashboard shutdown complete")
 
     return app
 
-
-# Create the app instance
+# Create the FastAPI application
 app = create_application()

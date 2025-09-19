@@ -9,6 +9,8 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 from enum import Enum
 import re
+import secrets
+import string
 
 class UserRole(str, Enum):
     ADMIN = "admin"
@@ -176,28 +178,37 @@ class UserProfileResponse(BaseModel):
 # ================================
 
 class ExamCatalogCreate(BaseModel):
-    """Request model for creating exam catalog entry - CORRECTED FIELD NAMES"""
+    """Request model for creating exam catalog entry - WITH CRONOSCITA SUPPORT"""
     codice_catalogo: str = Field(..., description="Official catalog code (e.g., 90271.003)")
     codicereg: str = Field(..., description="CODICEREG from Excel (e.g., 90.27.1)")
     nome_esame: str = Field(..., description="Official exam name")
+    cronoscita_id: str = Field(..., description="Cronoscita ID this exam belongs to")
     codice_branca: str = Field(default="011", description="Medical branch code - always 011 for laboratory")
     branch_description: Optional[str] = Field(default="Branca Laboratorio d'Analisi", description="Branch description")
     descrizione: Optional[str] = Field(None, description="Additional description")
     is_enabled: bool = Field(True, description="Is exam enabled for doctors")
 
+
 class ExamCatalogResponse(BaseModel):
-    """Response model for exam catalog entry - CORRECTED FIELD NAMES"""
+    """Response model for exam catalog entry - WITH CRONOSCITA SUPPORT"""
     id: str
     codice_catalogo: str
-    codicereg: str  # CORRECTED: This is CODICEREG (e.g., 90.27.1)
+    codicereg: str
     nome_esame: str
-    codice_branca: str  # CORRECTED: This is the actual branch code (e.g., "011")
+    cronoscita_id: str
+    cronoscita_nome: Optional[str] = None  # Populated from join
+    codice_branca: str
     branch_description: Optional[str]
     descrizione: Optional[str]
     is_enabled: bool
     created_at: datetime
     updated_at: datetime
-    mappings_count: int = 0  # Number of Wirgilio mappings
+    mappings_count: int = 0
+    
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }
 
 # Add branch constants
 MEDICAL_BRANCHES = {
@@ -210,33 +221,94 @@ MEDICAL_BRANCHES = {
 }
 
 class ExamMappingCreate(BaseModel):
-    """Request model for creating exam mapping"""
+    """Request model for creating exam mapping - WITH CRONOSCITA SUPPORT"""
     codice_catalogo: str = Field(..., description="Reference to exam catalog")
+    cronoscita_id: str = Field(..., description="Cronoscita ID this mapping belongs to")
     struttura_nome: str = Field(..., description="Healthcare structure name")
     codoffering_wirgilio: str = Field(..., description="Wirgilio API codoffering (e.g., 301)")
     nome_esame_wirgilio: str = Field(..., description="Exam name from Wirgilio API")
     is_active: bool = Field(True, description="Is mapping active")
 
 class ExamMappingResponse(BaseModel):
-    """Response model for exam mapping"""
+    """Response model for exam mapping - WITH CRONOSCITA SUPPORT"""
     id: str
     codice_catalogo: str
     nome_esame_catalogo: str  # From catalog
+    cronoscita_id: str
+    cronoscita_nome: Optional[str] = None  # Populated from join
     struttura_nome: str
     codoffering_wirgilio: str
     nome_esame_wirgilio: str
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }
 
 class LaboratorioOverviewResponse(BaseModel):
-    """Overview response for laboratory management"""
+    """Overview response for laboratory management - WITH CRONOSCITA SUPPORT"""
+    cronoscita_id: str
+    cronoscita_nome: str
     total_catalog_exams: int
     enabled_catalog_exams: int
     total_mappings: int
     active_mappings: int
     strutture_count: int
     last_updated: datetime
+    
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }
+
+class CronoscitaCreate(BaseModel):
+    """Request model for creating Cronoscita"""
+    nome: str = Field(..., min_length=2, max_length=100, description="Nome Cronoscita (sarà convertito in maiuscolo)")
+    
+    @validator('nome')
+    def validate_nome(cls, v):
+        """Validate and transform nome to uppercase"""
+        if not v or not v.strip():
+            raise ValueError('Nome Cronoscita è richiesto')
+        
+        nome_clean = v.strip().upper()
+        
+        # Check for valid characters (letters, numbers, spaces, common punctuation)
+        if not re.match(r'^[A-Z0-9\s\-\.\_]+$', nome_clean):
+            raise ValueError('Nome può contenere solo lettere, numeri, spazi e caratteri - . _')
+        
+        if len(nome_clean) < 2:
+            raise ValueError('Nome deve essere di almeno 2 caratteri')
+        
+        return nome_clean
+
+class CronoscitaResponse(BaseModel):
+    """Response model for Cronoscita"""
+    id: str
+    nome: str
+    codice: str  # Short random ID for reference (e.g., "CR-A7B2")
+    created_at: datetime
+    updated_at: datetime
+    
+    # Statistics
+    total_catalogo_esami: int = 0
+    total_mappings: int = 0
+    active_mappings: int = 0
+    is_active: bool = True
+    
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }
+
+def generate_cronoscita_codice() -> str:
+    """Generate a random short code for Cronoscita (e.g., CR-A7B2)"""
+    # Generate 4 random alphanumeric characters
+    random_chars = ''.join(secrets.choice(string.ascii_uppercase + string.digits) for _ in range(4))
+    return f"CR-{random_chars}"
 
 # ================================
 # CONSTANTS

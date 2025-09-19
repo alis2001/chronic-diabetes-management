@@ -499,3 +499,414 @@ html {
     margin: 2cm;
   }
 }
+
+/* frontend/admin-app/src/index.css */
+/* ADD THESE CRONOSCITA STYLES TO YOUR EXISTING index.css FILE */
+
+/* ================================ */
+/* CRONOSCITA SELECTOR STYLES */
+/* ================================ */
+
+.cronoscita-selector-bar {
+  background-color: #f8f9fa;
+  border-bottom: 2px solid #e9ecef;
+  padding: 12px 0;
+  position: sticky;
+  top: 73px; /* Below main header */
+  z-index: 98;
+}
+
+.cronoscita-selector-content {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.cronoscita-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.cronoscita-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #495057;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.cronoscita-dropdown {
+  padding: 8px 16px;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  background-color: #ffffff;
+  color: #495057;
+  min-width: 200px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cronoscita-dropdown:hover {
+  border-color: #90caf9;
+  box-shadow: 0 0 0 0.2rem rgba(144, 202, 249, 0.25);
+}
+
+.selected-cronoscita {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background-color: #e3f2fd;
+  border: 1px solid #90caf9;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #1565c0;
+}
+
+.cronoscita-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.create-cronoscita-btn {
+  padding: 8px 16px;
+  background-color: #28a745;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.create-cronoscita-btn:hover {
+  background-color: #218838;
+  transform: translateY(-1px);
+}
+
+.change-cronoscita-btn {
+  padding: 8px 16px;
+  background-color: #6c757d;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.change-cronoscita-btn:hover {
+  background-color: #5a6268;
+  transform: translateY(-1px);
+}
+
+/* ================================ */
+/* MODAL STYLES */
+/* ================================ */
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+}
+
+.modal-content {
+  background-color: #ffffff;
+  border-radius: 12px;
+  padding: 24px;
+  min-width: 400px;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  animation: slideIn 0.3s ease;
+}
+
+.modal-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #212529;
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #495057;
+  margin-bottom: 6px;
+}
+
+.form-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  font-size: 14px;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #80bdff;
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.form-input:invalid {
+  border-color: #dc3545;
+}
+
+.form-help-text {
+  font-size: 12px;
+  color: #6c757d;
+  margin-top: 4px;
+}
+
+.button-group {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 24px;
+}
+
+.btn-primary {
+  padding: 10px 20px;
+  background-color: #007bff;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-primary:hover {
+  background-color: #0056b3;
+  transform: translateY(-1px);
+}
+
+.btn-primary:disabled {
+  background-color: #6c757d;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-secondary {
+  padding: 10px 20px;
+  background-color: #6c757d;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-secondary:hover {
+  background-color: #5a6268;
+  transform: translateY(-1px);
+}
+
+.btn-success {
+  padding: 10px 20px;
+  background-color: #28a745;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-success:hover {
+  background-color: #218838;
+  transform: translateY(-1px);
+}
+
+/* ================================ */
+/* CRONOSCITA LIST STYLES */
+/* ================================ */
+
+.cronoscita-list {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid #e9ecef;
+  border-radius: 6px;
+  margin-bottom: 16px;
+}
+
+.cronoscita-item {
+  padding: 12px 16px;
+  border-bottom: 1px solid #f1f3f4;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.cronoscita-item:hover {
+  background-color: #f8f9fa;
+}
+
+.cronoscita-item:last-child {
+  border-bottom: none;
+}
+
+.cronoscita-item.selected {
+  background-color: #e3f2fd;
+  border-left: 3px solid #2196f3;
+}
+
+.cronoscita-item-info {
+  flex: 1;
+}
+
+.cronoscita-item-name {
+  font-weight: 600;
+  color: #212529;
+  margin-bottom: 4px;
+}
+
+.cronoscita-item-code {
+  font-size: 12px;
+  color: #6c757d;
+  font-family: 'Courier New', monospace;
+}
+
+.cronoscita-item-stats {
+  font-size: 11px;
+  color: #6c757d;
+  text-align: right;
+}
+
+/* ================================ */
+/* EMPTY STATES */
+/* ================================ */
+
+.no-cronoscita-selected {
+  text-align: center;
+  padding: 48px 24px;
+  background-color: #f8f9fa;
+  border: 1px dashed #ced4da;
+  border-radius: 8px;
+  margin: 24px auto;
+  max-width: 500px;
+}
+
+.no-cronoscita-selected h3 {
+  color: #495057;
+  font-size: 18px;
+  margin-bottom: 8px;
+}
+
+.no-cronoscita-selected p {
+  color: #6c757d;
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+/* ================================ */
+/* ANIMATIONS */
+/* ================================ */
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideIn {
+  from { 
+    opacity: 0; 
+    transform: translateY(-20px) scale(0.95); 
+  }
+  to { 
+    opacity: 1; 
+    transform: translateY(0) scale(1); 
+  }
+}
+
+/* ================================ */
+/* LOADING STATES */
+/* ================================ */
+
+.cronoscita-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  font-size: 14px;
+  color: #6c757d;
+}
+
+.cronoscita-loading::before {
+  content: "";
+  width: 16px;
+  height: 16px;
+  border: 2px solid #f3f3f3;
+  border-top: 2px solid #007bff;
+  border-radius: 50%;
+  margin-right: 8px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* ================================ */
+/* RESPONSIVE DESIGN */
+/* ================================ */
+
+@media (max-width: 768px) {
+  .cronoscita-selector-content {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+  }
+  
+  .cronoscita-info {
+    flex-direction: column;
+    gap: 8px;
+    align-items: stretch;
+  }
+  
+  .cronoscita-dropdown,
+  .selected-cronoscita {
+    min-width: auto;
+    width: 100%;
+  }
+  
+  .modal-content {
+    margin: 16px;
+    min-width: auto;
+    max-width: none;
+  }
+}

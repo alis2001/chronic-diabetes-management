@@ -234,6 +234,334 @@ const tableStyles = {
   }
 };
 
+
+// Cronoscita Selection Hook
+const useCronoscitaSelection = () => {
+  const [selectedCronoscita, setSelectedCronoscita] = useState(null);
+  const [cronoscitaList, setCronoscitaList] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  // Load from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('selected_cronoscita');
+    if (saved) {
+      try {
+        setSelectedCronoscita(JSON.parse(saved));
+      } catch (error) {
+        console.warn('Error loading saved Cronoscita:', error);
+        localStorage.removeItem('selected_cronoscita');
+      }
+    }
+    loadCronoscitaList();
+  }, []);
+
+  // Save to localStorage whenever selection changes
+  useEffect(() => {
+    if (selectedCronoscita) {
+      localStorage.setItem('selected_cronoscita', JSON.stringify(selectedCronoscita));
+    } else {
+      localStorage.removeItem('selected_cronoscita');
+    }
+  }, [selectedCronoscita]);
+
+  const loadCronoscitaList = async () => {
+    try {
+      setLoading(true);
+      const response = await adminAPI.get('/dashboard/cronoscita/list');
+      
+      if (response.success) {
+        setCronoscitaList(response.cronoscita);
+        
+        // If we have a selected Cronoscita, update it with fresh data
+        if (selectedCronoscita) {
+          const updatedCronoscita = response.cronoscita.find(
+            c => c.id === selectedCronoscita.id
+          );
+          if (updatedCronoscita) {
+            setSelectedCronoscita(updatedCronoscita);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error loading Cronoscita list:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const selectCronoscita = (cronoscita) => {
+    setSelectedCronoscita(cronoscita);
+  };
+
+  const clearSelection = () => {
+    setSelectedCronoscita(null);
+  };
+
+  const createCronoscita = async (nome) => {
+    try {
+      const response = await adminAPI.post('/dashboard/cronoscita', { nome });
+      
+      if (response.success) {
+        await loadCronoscitaList();
+        setSelectedCronoscita(response.cronoscita);
+        return { success: true, cronoscita: response.cronoscita };
+      } else {
+        return { success: false, error: response.message || 'Errore durante la creazione' };
+      }
+    } catch (error) {
+      console.error('Error creating Cronoscita:', error);
+      return { 
+        success: false, 
+        error: error.response?.data?.detail || 'Errore durante la creazione' 
+      };
+    }
+  };
+
+  return {
+    selectedCronoscita,
+    cronoscitaList,
+    loading,
+    selectCronoscita,
+    clearSelection,
+    createCronoscita,
+    loadCronoscitaList
+  };
+};
+
+// Cronoscita Selector Component
+const CronoscitaSelector = ({ cronoscitaState }) => {
+  const [showModal, setShowModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newCronoscitaName, setNewCronoscitaName] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState('');
+
+  const {
+    selectedCronoscita,
+    cronoscitaList,
+    loading,
+    selectCronoscita,
+    clearSelection,
+    createCronoscita
+  } = cronoscitaState;
+
+  const handleCreateCronoscita = async (e) => {
+    e.preventDefault();
+    
+    if (!newCronoscitaName.trim()) {
+      setCreateError('Nome Cronoscita è richiesto');
+      return;
+    }
+
+    setCreating(true);
+    setCreateError('');
+
+    const result = await createCronoscita(newCronoscitaName.trim());
+    
+    if (result.success) {
+      setNewCronoscitaName('');
+      setShowCreateModal(false);
+      alert(`Cronoscita "${result.cronoscita.nome}" creata con successo!`);
+    } else {
+      setCreateError(result.error);
+    }
+    
+    setCreating(false);
+  };
+
+  const handleCronoscitaSelect = (cronoscita) => {
+    selectCronoscita(cronoscita);
+    setShowModal(false);
+  };
+
+  return (
+    <>
+      <div className="cronoscita-selector-bar">
+        <div className="cronoscita-selector-content">
+          <div className="cronoscita-info">
+            <span className="cronoscita-label">Cronoscita:</span>
+            
+            {selectedCronoscita ? (
+              <div className="selected-cronoscita">
+                <span>🏥</span>
+                <div>
+                  <div style={{ fontWeight: '600' }}>{selectedCronoscita.nome}</div>
+                  <div style={{ fontSize: '11px', opacity: '0.8' }}>
+                    {selectedCronoscita.codice} • {selectedCronoscita.total_catalogo_esami} esami • {selectedCronoscita.active_mappings} mappings
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="cronoscita-dropdown">
+                <span style={{ color: '#6c757d', fontStyle: 'italic' }}>
+                  Nessuna Cronoscita selezionata
+                </span>
+              </div>
+            )}
+          </div>
+
+          <div className="cronoscita-actions">
+            <button 
+              className="create-cronoscita-btn"
+              onClick={() => setShowCreateModal(true)}
+              disabled={loading}
+            >
+              + Nuova
+            </button>
+            
+            <button 
+              className="change-cronoscita-btn"
+              onClick={() => setShowModal(true)}
+              disabled={loading || cronoscitaList.length === 0}
+            >
+              {selectedCronoscita ? 'Cambia' : 'Seleziona'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Cronoscita Selection Modal */}
+      {showModal && (
+        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3 className="modal-title">Seleziona Cronoscita</h3>
+            
+            {cronoscitaList.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '24px', color: '#6c757d' }}>
+                <p>Nessuna Cronoscita disponibile.</p>
+                <p>Crea la prima Cronoscita per iniziare.</p>
+              </div>
+            ) : (
+              <div className="cronoscita-list">
+                {cronoscitaList.map((cronoscita) => (
+                  <div
+                    key={cronoscita.id}
+                    className={`cronoscita-item ${selectedCronoscita?.id === cronoscita.id ? 'selected' : ''}`}
+                    onClick={() => handleCronoscitaSelect(cronoscita)}
+                  >
+                    <div className="cronoscita-item-info">
+                      <div className="cronoscita-item-name">{cronoscita.nome}</div>
+                      <div className="cronoscita-item-code">{cronoscita.codice}</div>
+                    </div>
+                    <div className="cronoscita-item-stats">
+                      <div>{cronoscita.total_catalogo_esami} esami</div>
+                      <div>{cronoscita.active_mappings} mappings</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="button-group">
+              <button 
+                className="btn-secondary" 
+                onClick={() => setShowModal(false)}
+              >
+                Annulla
+              </button>
+              {selectedCronoscita && (
+                <button 
+                  className="btn-secondary" 
+                  onClick={() => {
+                    clearSelection();
+                    setShowModal(false);
+                  }}
+                >
+                  Deseleziona
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Cronoscita Modal */}
+      {showCreateModal && (
+        <div className="modal-overlay" onClick={() => setShowCreateModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <h3 className="modal-title">Crea Nuova Cronoscita</h3>
+            
+            <form onSubmit={handleCreateCronoscita}>
+              <div className="form-group">
+                <label className="form-label">Nome Cronoscita *</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={newCronoscitaName}
+                  onChange={(e) => setNewCronoscitaName(e.target.value)}
+                  placeholder="Es: ASLROMA1, OSPEDALE-SANT-ANDREA"
+                  maxLength={100}
+                  disabled={creating}
+                  autoFocus
+                />
+                <div className="form-help-text">
+                  Il nome sarà convertito automaticamente in MAIUSCOLO. 
+                  Lettere, numeri, spazi e caratteri - . _ consentiti.
+                </div>
+              </div>
+
+              {createError && (
+                <div style={{ 
+                  padding: '8px 12px', 
+                  backgroundColor: '#f8d7da', 
+                  border: '1px solid #f5c6cb',
+                  borderRadius: '4px', 
+                  color: '#721c24', 
+                  fontSize: '14px',
+                  marginBottom: '16px'
+                }}>
+                  {createError}
+                </div>
+              )}
+
+              <div className="button-group">
+                <button 
+                  type="button"
+                  className="btn-secondary" 
+                  onClick={() => {
+                    setShowCreateModal(false);
+                    setNewCronoscitaName('');
+                    setCreateError('');
+                  }}
+                  disabled={creating}
+                >
+                  Annulla
+                </button>
+                <button 
+                  type="submit"
+                  className="btn-success" 
+                  disabled={creating || !newCronoscitaName.trim()}
+                >
+                  {creating ? 'Creando...' : 'Crea Cronoscita'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
+// No Cronoscita Selected Placeholder
+const NoCronoscitaSelected = ({ onCreateClick, onSelectClick }) => (
+  <div className="no-cronoscita-selected">
+    <h3>🏥 Seleziona una Cronoscita</h3>
+    <p>
+      Per gestire esami e mappature del laboratorio, 
+      devi prima selezionare o creare una Cronoscita.
+    </p>
+    <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+      <button className="btn-success" onClick={onCreateClick}>
+        + Crea Nuova
+      </button>
+      <button className="btn-primary" onClick={onSelectClick}>
+        Seleziona Esistente
+      </button>
+    </div>
+  </div>
+);
+
 // ================================
 // DATA TABLE COMPONENTS
 // ================================
@@ -607,12 +935,13 @@ const Navigation = ({ activeTab, onTabChange }) => {
 
 const DashboardLayout = ({ user, onLogout }) => {
   const [activeTab, setActiveTab] = useState('patients');
-  const navigate = useNavigate(); // This is now inside Router context
+  const navigate = useNavigate();
+  const cronoscitaState = useCronoscitaSelection();
 
   const handleLogout = async () => {
     try {
       await authAPI.logout();
-      navigate('/'); // This will now work correctly
+      navigate('/');
     } catch (error) {
       console.warn('Logout API call failed:', error);
     }
@@ -620,13 +949,39 @@ const DashboardLayout = ({ user, onLogout }) => {
   };
 
   const renderContent = () => {
+    // For Laboratory tab, check Cronoscita selection
+    if (activeTab === 'laboratorio') {
+      if (!cronoscitaState.selectedCronoscita) {
+        return (
+          <NoCronoscitaSelected 
+            onCreateClick={() => {
+              // Trigger create modal
+              const createBtn = document.querySelector('.create-cronoscita-btn');
+              if (createBtn) createBtn.click();
+            }}
+            onSelectClick={() => {
+              // Trigger select modal  
+              const selectBtn = document.querySelector('.change-cronoscita-btn');
+              if (selectBtn) selectBtn.click();
+            }}
+          />
+        );
+      }
+      
+      // Pass the selected Cronoscita to LaboratorioManagement
+      return (
+        <LaboratorioManagement 
+          cronoscita={cronoscitaState.selectedCronoscita} 
+        />
+      );
+    }
+
+    // Other tabs
     switch (activeTab) {
       case 'patients':
         return <PatientsPage />;
       case 'doctors':
         return <DoctorsPage />;
-      case 'laboratorio':
-        return <LaboratorioPage />;  // ← ADD THIS CASE
       case 'visits':
         return <VisitsPage />;
       default:
@@ -646,7 +1001,7 @@ const DashboardLayout = ({ user, onLogout }) => {
                 Admin Dashboard
               </h1>
               <p style={tableStyles.brandSubtitle}>
-                Sistema Gestione Sanitario
+                Sistema Gestione Sanitario con Cronoscita
               </p>
             </div>
           </div>
@@ -677,6 +1032,9 @@ const DashboardLayout = ({ user, onLogout }) => {
           </div>
         </div>
       </header>
+
+      {/* NEW: Cronoscita Selector */}
+      <CronoscitaSelector cronoscitaState={cronoscitaState} />
 
       {/* Navigation */}
       <Navigation activeTab={activeTab} onTabChange={setActiveTab} />

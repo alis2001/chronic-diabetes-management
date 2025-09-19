@@ -302,6 +302,24 @@ export const authAPI = {
 // ================================
 
 export const adminAPI = {
+
+
+  // Cronoscita management
+  getCronoscitaList: async () => {
+    return await apiRequest('/api/admin/dashboard/cronoscita/list');
+  },
+
+  createCronoscita: async (cronoscitaData) => {
+    return await apiRequest('/api/admin/dashboard/cronoscita', {
+      method: 'POST',
+      body: JSON.stringify(cronoscitaData)
+    });
+  },
+
+  getCronoscitaDetails: async (cronoscitaId) => {
+    return await apiRequest(`/api/admin/dashboard/cronoscita/${cronoscitaId}`);
+  },
+
   // System overview with real data
   getSystemOverview: async () => {
     return await apiRequest('/api/admin/dashboard/overview');
@@ -414,6 +432,25 @@ export const adminAPI = {
       method: 'POST',
       body: JSON.stringify(mappingData)
     });
+  },
+
+  getLaboratorioOverviewByCronoscita: async (cronoscitaId) => {
+    return await apiRequest(`/api/admin/dashboard/laboratorio/overview/${cronoscitaId}`);
+  },
+
+  // Get exam catalog for specific Cronoscita  
+  getExamCatalogForCronoscita: async (cronoscitaId) => {
+    return await apiRequest(`/api/admin/dashboard/laboratorio/catalogo/${cronoscitaId}`);
+  },
+
+  // Get exam mappings for specific Cronoscita
+  getExamMappingsForCronoscita: async (cronoscitaId) => {
+    return await apiRequest(`/api/admin/dashboard/laboratorio/mappings/${cronoscitaId}`);
+  },
+
+  // Get catalog options for mapping dropdown for specific Cronoscita
+  getCatalogForMappingByCronoscita: async (cronoscitaId) => {
+    return await apiRequest(`/api/admin/dashboard/laboratorio/catalogo-for-mapping/${cronoscitaId}`);
   },
 
   // Delete exam catalog entry
