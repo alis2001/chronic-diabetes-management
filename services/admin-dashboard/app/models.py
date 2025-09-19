@@ -178,16 +178,23 @@ class UserProfileResponse(BaseModel):
 # ================================
 
 class ExamCatalogCreate(BaseModel):
-    """Request model for creating exam catalog entry - WITH CRONOSCITA SUPPORT"""
-    codice_catalogo: str = Field(..., description="Official catalog code (e.g., 90271.003)")
-    codicereg: str = Field(..., description="CODICEREG from Excel (e.g., 90.27.1)")
-    nome_esame: str = Field(..., description="Official exam name")
-    cronoscita_id: str = Field(..., description="Cronoscita ID this exam belongs to")
-    codice_branca: str = Field(default="011", description="Medical branch code - always 011 for laboratory")
-    branch_description: Optional[str] = Field(default="Branca Laboratorio d'Analisi", description="Branch description")
-    descrizione: Optional[str] = Field(None, description="Additional description")
-    is_enabled: bool = Field(True, description="Is exam enabled for doctors")
+    """Create exam catalog - HYBRID: Manual entry + Master validation"""
+    # MANUAL ENTRY FIELDS (same as XLSX columns)
+    codice_catalogo: str = Field(..., description="CODICECATALOGO - must match master")
+    codicereg: str = Field(..., description="CODICEREG - must match master")  
+    nome_esame: str = Field(..., description="DESCRIZIONECATALOGO - must match master")
+    codice_branca: str = Field(..., description="CODICEBRANCA - must match master")
+    
+    # SYSTEM FIELDS
+    cronoscita_id: str = Field(..., description="Target Cronoscita ID")
+    note: Optional[str] = Field("", description="Optional specialist notes")
+    is_enabled: bool = Field(True, description="Is exam enabled")
 
+class PrestazioneSearchRequest(BaseModel):
+    """Search master prestazioni"""
+    query: str = Field(..., min_length=2, description="Search term")
+    limit: int = Field(default=20, le=50)
+    codice_branca: Optional[str] = None
 
 class ExamCatalogResponse(BaseModel):
     """Response model for exam catalog entry - WITH CRONOSCITA SUPPORT"""
@@ -210,15 +217,6 @@ class ExamCatalogResponse(BaseModel):
             datetime: lambda v: v.isoformat()
         }
 
-# Add branch constants
-MEDICAL_BRANCHES = {
-    "002": "Branca Cardiologia",
-    "008": "Branca Diagnostica per Immagini", 
-    "009": "Branca Diabetologia",
-    "011": "Branca Laboratorio d'Analisi",
-    "015": "Branca Neurologia",
-    "016": "Branca Oculistica"
-}
 
 class ExamMappingCreate(BaseModel):
     """Request model for creating exam mapping - WITH CRONOSCITA SUPPORT"""
@@ -284,6 +282,16 @@ class CronoscitaCreate(BaseModel):
             raise ValueError('Nome deve essere di almeno 2 caratteri')
         
         return nome_clean
+
+class MasterPrestazione(BaseModel):
+    """Master prestazioni catalog (imported from XLSX)"""
+    codice_catalogo: str      # CODICECATALOGO 
+    codicereg: str           # CODICEREG
+    nome_esame: str          # DESCRIZIONECATALOGO  
+    codice_branca: str       # CODICEBRANCA
+    branch_description: str  # Auto-populated from MEDICAL_BRANCHES
+    is_active: bool = True
+    imported_at: datetime
 
 class CronoscitaResponse(BaseModel):
     """Response model for Cronoscita"""

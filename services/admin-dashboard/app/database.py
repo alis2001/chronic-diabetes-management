@@ -166,6 +166,83 @@ async def create_exam_catalog_indexes(db: AsyncIOMotorDatabase):
     except Exception as e:
         logger.error(f"❌ Failed to create laboratory indexes: {e}")
 
+
+# services/admin-dashboard/app/database.py - ADD THIS CLASS
+
+class MasterCatalogRepository:
+    """Repository for master prestazioni catalog"""
+    
+    def __init__(self, db: AsyncIOMotorDatabase):
+        self.database = db
+        self.master_collection = db.master_prestazioni
+    
+    async def validate_prestazione(self, exam_data: Dict[str, str]) -> Dict[str, Any]:
+        """Validate manual entry against master catalog"""
+        try:
+            # Find exact match in master catalog
+            master_entry = await self.master_collection.find_one({
+                "codice_catalogo": exam_data["codice_catalogo"],
+                "is_active": True
+            })
+            
+            if not master_entry:
+                return {
+                    "valid": False,
+                    "error": f"Codice catalogo '{exam_data['codice_catalogo']}' non trovato nel catalogo master"
+                }
+            
+            # Validate all fields match exactly
+            errors = []
+            if master_entry["codicereg"] != exam_data["codicereg"]:
+                errors.append(f"CODICEREG non corrisponde. Atteso: '{master_entry['codicereg']}', Inserito: '{exam_data['codicereg']}'")
+            
+            if master_entry["nome_esame"].upper() != exam_data["nome_esame"].upper():
+                errors.append(f"Nome esame non corrisponde. Atteso: '{master_entry['nome_esame']}'")
+            
+            if master_entry["codice_branca"] != exam_data["codice_branca"]:
+                errors.append(f"Codice branca non corrisponde. Atteso: '{master_entry['codice_branca']}', Inserito: '{exam_data['codice_branca']}'")
+            
+            if errors:
+                return {
+                    "valid": False,
+                    "error": "Dati non corrispondono al catalogo master:\n" + "\n".join(errors),
+                    "master_data": master_entry
+                }
+            
+            return {
+                "valid": True,
+                "master_data": master_entry
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error validating prestazione: {e}")
+            return {
+                "valid": False,
+                "error": f"Errore durante validazione: {str(e)}"
+            }
+    
+    async def search_prestazioni(self, query: str, limit: int = 20) -> List[Dict]:
+        """Search prestazioni in master catalog"""
+        try:
+            search_filter = {
+                "is_active": True,
+                "$or": [
+                    {"nome_esame": {"$regex": query.upper(), "$options": "i"}},
+                    {"codice_catalogo": {"$regex": query, "$options": "i"}}
+                ]
+            }
+            
+            cursor = self.master_collection.find(search_filter).limit(limit)
+            results = await cursor.to_list(length=limit)
+            
+            return serialize_mongo_list(results)
+            
+        except Exception as e:
+            logger.error(f"❌ Error searching prestazioni: {e}")
+            return []
+
+
+
 # ================================
 # LABORATORY REPOSITORY - COMPLETE FIXED VERSION
 # ================================
@@ -213,7 +290,26 @@ class LaboratorioRepository:
         except Exception as e:
             logger.error(f"❌ Error creating exam catalog: {e}")
             raise
-    
+        
+
+    async def delete_exam_mapping(self, mapping_id: str) -> bool:
+        """Delete exam mapping by ID"""
+        try:
+            from bson import ObjectId
+            result = await self.mapping_collection.delete_one({"_id": ObjectId(mapping_id)})
+            
+            if result.deleted_count > 0:
+                logger.info(f"✅ Exam mapping deleted: {mapping_id}")
+                return True
+            else:
+                logger.warning(f"❌ Mapping not found for deletion: {mapping_id}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ Error deleting exam mapping {mapping_id}: {e}")
+            raise
+        
+
     async def get_exam_catalog(self, cronoscita_id: str) -> List[Dict[str, Any]]:
         """Get exam catalog for specific Cronoscita"""
         try:

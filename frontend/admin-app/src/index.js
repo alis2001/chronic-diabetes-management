@@ -12,7 +12,7 @@ import LaboratorioManagement from './components/LaboratorioManagement';
 
 
 // ================================
-// BEAUTIFUL TABLE STYLES
+// TABLE STYLES
 // ================================
 
 const tableStyles = {
@@ -895,7 +895,7 @@ const Navigation = ({ activeTab, onTabChange }) => {
   const navItems = [
     { id: 'patients', label: 'Pazienti', icon: '👥' },
     { id: 'doctors', label: 'Medici', icon: '👨‍⚕️' },
-    { id: 'laboratorio', label: 'Laboratorio', icon: '🔬' }, 
+    { id: 'laboratorio', label: 'Prestazioni', icon: '🔬' }, 
     { id: 'visits', label: 'Visite', icon: '📅' }
   ];
 
@@ -1001,7 +1001,7 @@ const DashboardLayout = ({ user, onLogout }) => {
                 Admin Dashboard
               </h1>
               <p style={tableStyles.brandSubtitle}>
-                Sistema Gestione Sanitario con Cronoscita
+                Sistema Gestione Sanitario
               </p>
             </div>
           </div>

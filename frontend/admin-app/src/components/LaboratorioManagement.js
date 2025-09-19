@@ -16,6 +16,12 @@ const LaboratorioManagement = ({ cronoscita }) => {
   const [mappings, setMappings] = useState([]);
   const [catalogOptions, setCatalogOptions] = useState([]);
 
+  // search varibales
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+
   // Modal states
   const [showAddExamModal, setShowAddExamModal] = useState(false);
   const [showAddMappingModal, setShowAddMappingModal] = useState(false);
@@ -24,7 +30,7 @@ const LaboratorioManagement = ({ cronoscita }) => {
     codice_catalogo: '',       
     codicereg: '',            
     nome_esame: '',           
-    codice_branca: '011',     
+    codice_branca: '',   
     descrizione: '',
     cronoscita_id: cronoscita?.id || ''           
   });
@@ -68,6 +74,71 @@ const LaboratorioManagement = ({ cronoscita }) => {
       console.error('❌ Error loading catalog options:', error);
       setCatalogOptions([]);
     }
+  };
+
+  // ADD THIS NEW FUNCTION (around line 80-90)
+  const handleSearchPrestazioni = async (searchValue) => {
+    if (searchValue.length < 2) {
+      setSearchResults([]);
+      setShowSearchResults(false);
+      return;
+    }
+    
+    try {
+      setSearchLoading(true);
+      console.log('🔍 Auto-searching prestazioni:', searchValue);
+      
+      const response = await adminAPI.get(`/dashboard/prestazioni/search?query=${searchValue}&limit=20`);
+      
+      if (response.success) {
+        setSearchResults(response.prestazioni || []);
+        setShowSearchResults(true);
+        console.log('✅ Auto-search results:', response.prestazioni.length);
+      }
+    } catch (error) {
+      console.error('❌ Auto-search error:', error);
+      // Don't show alert for auto-search errors - just log them
+    } finally {
+      setSearchLoading(false);
+    }
+  };
+
+  // ADD this new debounced search function (prevents too many API calls):
+  const [searchTimeout, setSearchTimeout] = useState(null);
+
+  const handleSearchInputChange = (value) => {
+    setSearchQuery(value);
+    
+    // Clear previous timeout
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+    
+    // Set new timeout - search after user stops typing for 500ms
+    const newTimeout = setTimeout(() => {
+      handleSearchPrestazioni(value);
+    }, 500);
+    
+    setSearchTimeout(newTimeout);
+  };
+
+
+  const handleSelectFromSearch = (prestazione) => {
+    console.log('📋 Auto-filling from search result:', prestazione);
+    
+    // Auto-fill the form with selected prestazione
+    setExamForm({
+      ...examForm,
+      codice_catalogo: prestazione.codice_catalogo,
+      codicereg: prestazione.codicereg,
+      nome_esame: prestazione.nome_esame,
+      codice_branca: prestazione.codice_branca
+    });
+    
+    // Hide search results
+    setShowSearchResults(false);
+    setSearchQuery('');
+    
   };
 
   const loadCatalogData = async () => {
@@ -454,6 +525,91 @@ const LaboratorioManagement = ({ cronoscita }) => {
           </h3>
           
           <form onSubmit={handleAddExam}>
+            {/* NEW: SEARCH SECTION */}
+            <div style={{marginBottom: '24px', padding: '16px', backgroundColor: '#f8f9ff', borderRadius: '8px', border: '1px solid #e1e7ff'}}>
+              <h4 style={{margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600', color: '#4f46e5'}}>
+                🔍 Opzione 1: Cerca nel Catalogo Master
+              </h4>
+              
+              <div style={{display: 'flex', gap: '8px', marginBottom: '12px', alignItems: 'center'}}>
+                <input
+                  type="text"
+                  placeholder="Inizia a digitare per cercare (es. UREA, GLUCOSIO)..."
+                  value={searchQuery}
+                  onChange={(e) => handleSearchInputChange(e.target.value)}
+                  style={{
+                    ...styles.input,
+                    flex: '1',
+                    fontSize: '14px',
+                    backgroundColor: searchQuery.length >= 2 ? '#f0f9ff' : '#ffffff'
+                  }}
+                />
+                
+                {searchLoading && (
+                  <div style={{
+                    padding: '8px 16px',
+                    color: '#6b7280',
+                    fontSize: '14px'
+                  }}>
+                    🔄 Ricerca...
+                  </div>
+                )}
+              </div>
+              
+              {/* SEARCH RESULTS */}
+              {showSearchResults && (
+                <div style={{
+                  maxHeight: '200px',
+                  overflowY: 'auto',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  backgroundColor: 'white'
+                }}>
+                  {searchResults.length === 0 ? (
+                    <div style={{padding: '12px', textAlign: 'center', color: '#6b7280'}}>
+                      Nessun risultato trovato per "{searchQuery}"
+                    </div>
+                  ) : (
+                    searchResults.map((prestazione, index) => (
+                      <div
+                        key={prestazione.codice_catalogo}
+                        onClick={() => handleSelectFromSearch(prestazione)}
+                        style={{
+                          padding: '12px',
+                          borderBottom: index < searchResults.length - 1 ? '1px solid #f3f4f6' : 'none',
+                          cursor: 'pointer',
+                          backgroundColor: 'white'
+                        }}
+                        onMouseEnter={(e) => e.target.style.backgroundColor = '#f9fafb'}
+                        onMouseLeave={(e) => e.target.style.backgroundColor = 'white'}
+                      >
+                        <div style={{fontWeight: '600', fontSize: '14px'}}>
+                          {prestazione.codice_catalogo} - {prestazione.nome_esame}
+                        </div>
+                        <div style={{fontSize: '12px', color: '#6b7280', marginTop: '4px'}}>
+                          Registro: {prestazione.codicereg} | Branca: {prestazione.codice_branca} - {prestazione.branch_description}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* DIVIDER */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              margin: '24px 0',
+              fontSize: '14px',
+              color: '#6b7280'
+            }}>
+              <div style={{flex: '1', height: '1px', backgroundColor: '#e5e7eb'}}></div>
+              <span style={{padding: '0 16px', backgroundColor: 'white'}}>OPPURE INSERIMENTO MANUALE</span>
+              <div style={{flex: '1', height: '1px', backgroundColor: '#e5e7eb'}}></div>
+            </div>
+
+            {/* EXISTING MANUAL FIELDS - Keep exactly as they are */}
             <div style={styles.formGroup}>
               <label style={styles.label}>Codice Catalogo *</label>
               <input
@@ -491,37 +647,61 @@ const LaboratorioManagement = ({ cronoscita }) => {
             </div>
             
             <div style={styles.formGroup}>
-              <label style={styles.label}>Codice Branca</label>
+              <label style={styles.label}>Codice Branca *</label>
               <input
                 type="text"
                 style={styles.input}
                 value={examForm.codice_branca}
                 onChange={(e) => setExamForm({...examForm, codice_branca: e.target.value})}
-                placeholder="011"
-                disabled
+                placeholder="es. 011, 014, 015, etc." 
+                required
               />
             </div>
             
             <div style={styles.formGroup}>
-              <label style={styles.label}>Descrizione</label>
+              <label style={styles.label}>Note Specialistiche (Opzionale)</label>
               <textarea
-                style={{...styles.input, minHeight: '80px'}}
+                style={{
+                  ...styles.input,
+                  minHeight: '80px',
+                  resize: 'vertical'
+                }}
                 value={examForm.descrizione}
                 onChange={(e) => setExamForm({...examForm, descrizione: e.target.value})}
-                placeholder="Descrizione aggiuntiva dell'esame..."
+                placeholder="Note aggiuntive per questa prestazione..."
+                rows={3}
               />
             </div>
             
-            <div style={{display: 'flex', gap: '12px', justifyContent: 'flex-end'}}>
-              <button 
-                type="button" 
-                style={styles.buttonSecondary}
+            <div style={{display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '24px'}}>
+              <button
+                type="button"
                 onClick={() => setShowAddExamModal(false)}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: '#f3f4f6',
+                  color: '#374151',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer'
+                }}
               >
                 Annulla
               </button>
-              <button type="submit" style={styles.buttonPrimary} disabled={loading}>
-                {loading ? 'Salvando...' : 'Salva Esame'}
+              <button
+                type="submit"
+                disabled={loading}
+                style={{
+                  padding: '10px 20px',
+                  backgroundColor: loading ? '#9ca3af' : '#10b981',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                  fontWeight: '600'
+                }}
+              >
+                {loading ? 'Validazione...' : 'Aggiungi e Valida'}
               </button>
             </div>
           </form>
@@ -616,10 +796,10 @@ const LaboratorioManagement = ({ cronoscita }) => {
     <div style={styles.container}>
       <div style={styles.header}>
         <h1 style={{margin: '0 0 8px 0', fontSize: '28px', color: '#1f2937'}}>
-          🔬 Gestione Laboratorio d'Analisi
+          Gestione Prestazioni Mediche
         </h1>
         <p style={{margin: '0', color: '#6b7280', fontSize: '16px'}}>
-          Sistema gestione catalogo esami e mappature per <strong>{cronoscita?.nome}</strong> ({cronoscita?.codice})
+          Sistema gestione catalogo prestazioni e mappature per <strong>{cronoscita?.nome}</strong> ({cronoscita?.codice})
         </p>
       </div>
       

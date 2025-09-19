@@ -23,7 +23,8 @@ from .auth_routes import auth_router
 from .session_manager import session_manager
 from .database import (
     connect_to_mongo, close_mongo_connection, check_database_health, 
-    get_database, LaboratorioRepository, CronoscitaRepository
+    get_database, LaboratorioRepository, CronoscitaRepository,
+    MasterCatalogRepository 
 )
 from .models import (
     ExamCatalogCreate, ExamCatalogResponse,
@@ -346,34 +347,79 @@ def create_application() -> FastAPI:
             logger.error(f"Error getting exam catalog: {str(e)}")
             raise HTTPException(status_code=500, detail="Error retrieving exam catalog")
 
-    @app.post("/dashboard/laboratorio/catalogo")
+    @app.get("/dashboard/prestazioni/search")
+    async def search_master_prestazioni(
+        query: str = Query(..., min_length=2, description="Search term"), 
+        limit: int = Query(20, le=50)
+    ):
+        """Search master prestazioni catalog"""
+        try:
+            db = await get_database()
+            master_repo = MasterCatalogRepository(db)
+            
+            results = await master_repo.search_prestazioni(query, limit)
+            
+            return {
+                "success": True,
+                "query": query,
+                "total_found": len(results),
+                "prestazioni": results
+            }
+            
+        except Exception as e:
+            logger.error(f"Error searching prestazioni: {str(e)}")
+            raise HTTPException(status_code=500, detail="Error searching prestazioni")
+
+
+
+    @app.post("/dashboard/laboratorio/catalogo")  # Keep existing endpoint name
     async def create_exam_catalog(request: ExamCatalogCreate):
-        """Create exam catalog entry for specific Cronoscita"""
+        """Create exam catalog with master validation"""
         try:
             db = await get_database()
             cronoscita_repo = CronoscitaRepository(db)
             lab_repo = LaboratorioRepository(db)
+            master_repo = MasterCatalogRepository(db)  # NEW
             
             # Verify Cronoscita exists
             cronoscita_data = await cronoscita_repo.get_cronoscita_by_id(request.cronoscita_id)
             if not cronoscita_data:
-                raise HTTPException(status_code=400, detail="Cronoscita not found")
+                raise HTTPException(status_code=400, detail="Cronoscita non trovata")
             
-            exam_id = await lab_repo.create_exam_catalog(request.dict())
+            # VALIDATE AGAINST MASTER CATALOG
+            validation = await master_repo.validate_prestazione({
+                "codice_catalogo": request.codice_catalogo,
+                "codicereg": request.codicereg,
+                "nome_esame": request.nome_esame,
+                "codice_branca": request.codice_branca
+            })
             
-            logger.info(f"✅ Exam catalog created: {request.codice_catalogo} for Cronoscita {cronoscita_data['nome']}")
+            if not validation["valid"]:
+                logger.warning(f"❌ Validation failed: {validation['error']}")
+                raise HTTPException(status_code=400, detail=validation["error"])
+            
+            # Add branch description from master
+            exam_data = request.dict()
+            exam_data["branch_description"] = validation["master_data"]["branch_description"]
+            
+            exam_id = await lab_repo.create_exam_catalog(exam_data)
+            
+            logger.info(f"✅ Validated exam added: {request.codice_catalogo} to {cronoscita_data['nome']}")
             
             return {
                 "success": True,
-                "message": f"Esame '{request.nome_esame}' aggiunto al catalogo di {cronoscita_data['nome']}",
-                "exam_id": exam_id
+                "message": f"Esame '{request.nome_esame}' aggiunto e validato per {cronoscita_data['nome']}",
+                "exam_id": exam_id,
+                "validated": True
             }
             
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Error creating exam catalog: {str(e)}")
-            raise HTTPException(status_code=500, detail="Error creating exam catalog entry")
+            logger.error(f"Error creating validated exam: {str(e)}")
+            raise HTTPException(status_code=500, detail="Errore durante creazione esame")
+    
+
 
     @app.get("/dashboard/laboratorio/mappings/{cronoscita_id}")
     async def get_exam_mappings(cronoscita_id: str):
@@ -402,6 +448,31 @@ def create_application() -> FastAPI:
         except Exception as e:
             logger.error(f"Error getting exam mappings: {str(e)}")
             raise HTTPException(status_code=500, detail="Error retrieving exam mappings")
+
+    @app.delete("/dashboard/laboratorio/mappings/{mapping_id}")
+    async def delete_exam_mapping(mapping_id: str):
+        """Delete exam mapping by ID"""
+        try:
+            db = await get_database()
+            lab_repo = LaboratorioRepository(db)
+            
+            # Delete the mapping
+            success = await lab_repo.delete_exam_mapping(mapping_id)
+            
+            if success:
+                logger.info(f"✅ Mapping deleted: {mapping_id}")
+                return {
+                    "success": True,
+                    "message": "Mappatura rimossa con successo"
+                }
+            else:
+                raise HTTPException(status_code=404, detail="Mapping not found")
+                
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error deleting exam mapping: {str(e)}")
+            raise HTTPException(status_code=500, detail="Error deleting exam mapping")
 
     @app.post("/dashboard/laboratorio/mappings")
     async def create_exam_mapping(request: ExamMappingCreate):

@@ -66,7 +66,7 @@ ADMIN_NAVIGATION: List[Dict[str, str]] = [
     {"name": "Dashboard", "url": "/", "icon": "🏠"},
     {"name": "Pazienti", "url": "/patients", "icon": "👥"},
     {"name": "Medici", "url": "/doctors", "icon": "👨‍⚕️"},
-    {"name": "Laboratorio", "url": "/laboratorio", "icon": "🔬"},  # ← ADD THIS LINE
+    {"name": "Prestazioni", "url": "/prestazioni", "icon": "🏥"},
     {"name": "Sistema", "url": "/system", "icon": "⚙️"},
     {"name": "Report", "url": "/reports", "icon": "📊"}
 ]

@@ -359,6 +359,11 @@ export const adminAPI = {
     return await apiRequest('/api/admin/dashboard/laboratorio/catalogo-for-mapping');
   },
 
+  // Search master prestazioni catalog
+  searchPrestazioni: async (query, limit = 20) => {
+    return await apiRequest(`/api/admin/dashboard/prestazioni/search?query=${encodeURIComponent(query)}&limit=${limit}`);
+  },
+
   // ================================
   // GENERIC HTTP METHODS - FIXES THE "adminAPI.get is not a function" ERROR
   // ================================
