@@ -1547,7 +1547,7 @@ export const PatientTimeline = ({ patientId, doctorId, onScheduleAppointment }) 
 
               {/* Scheduler Iframe */}
               <iframe
-                src={`http://${window.location.hostname}:8003?patient=${patientId}&doctor=${doctorId}&lang=it`}
+                src={`http://${window.location.hostname}:3013?patient=${patientId}&doctor=${doctorId}&lang=it`}
                 style={{
                   width: '100%',
                   height: 'calc(100% - 80px)', // Subtract header height

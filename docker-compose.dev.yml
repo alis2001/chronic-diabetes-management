@@ -242,6 +242,30 @@ services:
       - ./frontend/admin-app:/app
       - /app/node_modules
 
+  scheduler-frontend:
+    build:
+      context: ./frontend/scheduler-app
+      dockerfile: Dockerfile.dev
+    container_name: diabetes-scheduler-frontend
+    restart: unless-stopped
+    ports:
+      - "${SCHEDULER_FRONTEND_PORT:-3013}:3000"  # Scheduler frontend port
+    environment:
+      # Dynamic API configuration
+      - REACT_APP_SCHEDULER_API_URL=http://${VM_HOST:-localhost}:${SCHEDULER_SERVICE_PORT:-8003}
+      - REACT_APP_TIMELINE_API_URL=http://${VM_HOST:-localhost}:${TIMELINE_SERVICE_PORT:-8001}
+      - REACT_APP_API_GATEWAY_URL=http://${VM_HOST:-localhost}:${API_GATEWAY_PORT:-8080}
+      - CHOKIDAR_USEPOLLING=true
+    depends_on:
+      - scheduler-service
+      - timeline-service
+      - api-gateway
+    networks:
+      - diabetes-network
+    volumes:
+      - ./frontend/scheduler-app:/app
+      - /app/node_modules
+      
   # ========================================
   # DEVELOPMENT TOOLS
   # ========================================
