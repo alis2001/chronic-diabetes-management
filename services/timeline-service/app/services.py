@@ -543,34 +543,41 @@ class TimelineService:
         self.patient_repo = patient_repo
     
     async def get_patient_timeline(self, cf_paziente: str, id_medico: str) -> TimelineResponse:
-        """Ottieni timeline completa paziente"""
-        # Valida medico
+        """
+        Ottieni timeline completa paziente con cronoscita_id per scheduler
+        UPDATED: Include cronoscita_id for scheduler integration
+        """
+        
+        # Validazione medico
         if not DoctorService.validate_doctor(id_medico):
             raise DoctorValidationException("Credenziali medico non valide")
         
-        # Ottieni paziente
+        # Trova paziente
         patient = await self.patient_repo.find_by_cf(cf_paziente)
         if not patient:
-            raise PatientNotFoundException("Paziente non trovato")
+            raise PatientNotFoundException(f"Paziente {cf_paziente} non trovato")
         
-        # Ottieni tutti gli appuntamenti
-        appointments = await self.appointment_repo.find_by_patient(cf_paziente)
+        # Ottieni appuntamenti
+        appointments = await self.appointment_repo.get_patient_appointments(cf_paziente)
         
-        # Categorizza appuntamenti
+        # Categorizza appuntamenti per data
         today = date.today()
-        precedenti = []  # Appuntamenti passati
-        oggi = []        # Appuntamenti di oggi
-        successivo = []  # Appuntamenti futuri
+        precedenti = []
+        oggi = []
+        successivo = []
         
         for apt in appointments:
-            appointment_date = apt["scheduled_date"].date()
+            appointment_date = apt.get("appointment_date")
+            if isinstance(appointment_date, datetime):
+                appointment_date = appointment_date.date()
+            elif isinstance(appointment_date, str):
+                appointment_date = datetime.strptime(appointment_date, "%Y-%m-%d").date()
             
             apt_summary = AppointmentSummary(
-                appointment_id=str(apt.get("appointment_id", apt.get("_id"))),
-                date=appointment_date.strftime("%d/%m/%Y"),
-                time=apt["scheduled_date"].strftime("%H:%M"),
-                type=APPOINTMENT_TYPE_DESCRIPTIONS.get(apt["appointment_type"], apt["appointment_type"]),
-                status=apt["status"],
+                appointment_id=apt.get("appointment_id"),
+                appointment_date=appointment_date.strftime("%Y-%m-%d"),
+                appointment_type=apt.get("appointment_type", "visita_diabetologica"),
+                status=apt.get("status", "scheduled"),
                 priority=apt.get("priority", "normal"),
                 location=apt.get("location"),
                 notes=apt.get("doctor_notes")
@@ -587,17 +594,48 @@ class TimelineService:
         patient_name = None
         if patient.get("demographics"):
             demographics = patient["demographics"]
-            patient_name = f"{demographics.get('nome', '')} {demographics.get('cognome', '')}"
+            nome = demographics.get('nome', '').strip()
+            cognome = demographics.get('cognome', '').strip()
+            if nome or cognome:
+                patient_name = f"{nome} {cognome}".strip()
+        
+        # CRITICAL: Get cronoscita_id from patient data
+        cronoscita_id = None
+        patologia_name = patient.get("patologia", "")
+        
+        # Try to extract cronoscita_id from patient data
+        if patient.get("cronoscita_id"):
+            cronoscita_id = patient["cronoscita_id"]
+        elif patient.get("pathology_id"):
+            cronoscita_id = patient["pathology_id"]
+        elif patient.get("patologia_id"):
+            cronoscita_id = patient["patologia_id"]
+        else:
+            # Try to lookup cronoscita_id by patologia name
+            try:
+                from .cronoscita_repository import CronoscitaRepository
+                cronoscita_repo = CronoscitaRepository(self.patient_repo.db)
+                cronoscita_id = await cronoscita_repo.find_cronoscita_id_by_name(patologia_name)
+                logger.info(f"📋 Found cronoscita_id by name lookup: {cronoscita_id}")
+            except Exception as e:
+                logger.warning(f"⚠️ Could not lookup cronoscita_id by name: {e}")
+        
+        if not cronoscita_id:
+            logger.warning(f"⚠️ Missing cronoscita_id for patient {cf_paziente} - scheduler integration may fail")
         
         return TimelineResponse(
             patient_id=cf_paziente,
             patient_name=patient_name,
-            patologia=patient["patologia"],
+            patologia=patologia_name,
+            cronoscita_id=cronoscita_id,  # CRITICAL for scheduler
+            patologia_id=cronoscita_id,   # Alias for compatibility
             enrollment_date=patient["enrollment_date"].strftime("%d/%m/%Y"),
             precedenti=precedenti,
             oggi=oggi,
             successivo=successivo,
-            total_appointments=len(appointments)
+            total_appointments=len(appointments),
+            can_schedule_next=None,  # Will be set by separate endpoint
+            last_referto_date=None   # Could be enhanced later
         )
 
 class RefertoService:

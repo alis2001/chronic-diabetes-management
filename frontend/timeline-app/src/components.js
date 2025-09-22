@@ -1266,12 +1266,71 @@ export const PatientTimeline = ({ patientId, doctorId, onScheduleAppointment }) 
     }
   }, [patientId, doctorId]);
 
+  // ================================
+  // SCHEDULER POSTMESSAGE HANDLING - NEW
+  // ================================
+  useEffect(() => {
+    if (!showScheduler) return;
+
+    const handleSchedulerMessage = (event) => {
+      // Security check in production
+      const allowedPorts = ['3013', '3010']; // Scheduler and Timeline ports
+      if (process.env.NODE_ENV === 'production' && 
+          !allowedPorts.some(port => event.origin.includes(port))) {
+        return;
+      }
+
+      console.log('📩 Received message from scheduler:', event.data);
+
+      switch (event.data.type) {
+        case 'APPOINTMENT_SCHEDULED':
+          console.log('✅ Appointment scheduled successfully:', event.data.data);
+          
+          // Show success message with Italian format
+          const appointmentDate = new Date(event.data.data.appointment_date).toLocaleDateString('it-IT');
+          alert(`✅ Appuntamento programmato con successo per ${appointmentDate}!\n` +
+                `Esami selezionati: ${event.data.data.exam_count}`);
+          
+          // Refresh timeline to show new appointment
+          loadTimeline();
+          
+          // Re-check referto status
+          checkCanScheduleNext();
+          
+          // Close scheduler
+          setShowScheduler(false);
+          break;
+
+        case 'CLOSE_SCHEDULER':
+          console.log('🔒 Scheduler requested to close');
+          setShowScheduler(false);
+          break;
+
+        case 'SCHEDULER_ERROR':
+          console.error('❌ Scheduler error:', event.data.data);
+          alert(`❌ Errore scheduler: ${event.data.data.message || 'Errore imprevisto'}`);
+          break;
+
+        default:
+          console.log('📨 Unknown scheduler message:', event.data.type);
+          break;
+      }
+    };
+
+    window.addEventListener('message', handleSchedulerMessage);
+    
+    return () => {
+      window.removeEventListener('message', handleSchedulerMessage);
+    };
+  }, [showScheduler]);
+
   const loadTimeline = async () => {
     setLoading(true);
     setError(null);
     try {
       const response = await timelineAPI.getTimeline(patientId, doctorId);
       setTimeline(response);
+      console.log('📋 Timeline loaded:', response); // Debug timeline data
     } catch (error) {
       setError(error.message);
     }
@@ -1292,6 +1351,119 @@ export const PatientTimeline = ({ patientId, doctorId, onScheduleAppointment }) 
     }
     setCheckingReferto(false);
   };
+
+  // ================================
+  // SCHEDULER URL BUILDER - NEW
+  // ================================
+  const buildSchedulerUrl = () => {
+    if (!timeline || !patientId || !doctorId) {
+      console.warn('⚠️ Missing data for scheduler URL:', {
+        timeline: !!timeline,
+        patientId: !!patientId,
+        doctorId: !!doctorId
+      });
+      return 'about:blank'; // Prevent invalid URL
+    }
+    
+    const cronoscita_id = timeline.cronoscita_id || timeline.patologia_id;
+    if (!cronoscita_id) {
+      console.error('❌ Missing cronoscita_id for scheduler URL');
+      return 'about:blank';
+    }
+    
+    const baseUrl = `http://${window.location.hostname}:3013`;
+    const params = new URLSearchParams({
+      cf_paziente: patientId,
+      cronoscita_id: cronoscita_id,
+      id_medico: doctorId,
+      patient_name: encodeURIComponent(timeline.patient_name || `Paziente ${patientId}`),
+      cronoscita_name: encodeURIComponent(timeline.patologia || 'Patologia')
+    });
+    
+    const schedulerUrl = `${baseUrl}?${params.toString()}`;
+    console.log('🔗 Scheduler URL built:', schedulerUrl);
+    
+    // Validate URL before returning
+    try {
+      new URL(schedulerUrl);
+      return schedulerUrl;
+    } catch (error) {
+      console.error('❌ Invalid scheduler URL:', error);
+      return 'about:blank';
+    }
+  };
+
+  // ================================
+  // SCHEDULER OPEN HANDLER - NEW
+  // ================================
+  const handleOpenScheduler = () => {
+    if (!timeline) {
+      alert('❌ Caricamento timeline in corso. Attendere...');
+      return;
+    }
+    
+    // Enhanced validation with detailed error messages
+    console.log('🔍 Validating scheduler prerequisites:', {
+      timeline_loaded: !!timeline,
+      cronoscita_id: timeline.cronoscita_id,
+      patologia_id: timeline.patologia_id,
+      patologia_name: timeline.patologia,
+      scheduler_available: timeline.scheduler_available,
+      patient_name: timeline.patient_name
+    });
+    
+    // Check if scheduler is explicitly disabled
+    if (timeline.scheduler_available === false) {
+      alert(`❌ Scheduler non disponibile:\n${timeline.scheduler_error || 'Cronoscita non configurata'}\n\nContattare l'amministratore per configurare la Cronoscita per questo paziente.`);
+      return;
+    }
+    
+    // Check for cronoscita_id (most critical)
+    if (!timeline.cronoscita_id && !timeline.patologia_id) {
+      alert(`❌ Impossibile aprire scheduler:\n\nCronoscita non configurata per il paziente.\nPatologia: ${timeline.patologia || 'Non specificata'}\n\n🔧 Soluzioni:\n• Contattare l'amministratore\n• Verificare configurazione Cronoscita\n• Ricontrollare registrazione paziente`);
+      return;
+    }
+    
+    // Check for patient identification
+    if (!timeline.patient_name && !patientId) {
+      alert('❌ Informazioni paziente incomplete. Ricaricare la timeline.');
+      return;
+    }
+    
+    // Check for pathology information
+    if (!timeline.patologia) {
+      console.warn('⚠️ Missing patologia name - scheduler may have limited functionality');
+    }
+    
+    // All checks passed - prepare scheduler data
+    const schedulerData = {
+      cf_paziente: patientId,
+      cronoscita_id: timeline.cronoscita_id || timeline.patologia_id,
+      patient_name: timeline.patient_name || `Paziente ${patientId}`,
+      patologia: timeline.patologia || 'Patologia non specificata',
+      doctor_id: doctorId
+    };
+    
+    console.log('📅 Opening scheduler with validated data:', schedulerData);
+    
+    // Show loading state briefly
+    setShowScheduler(true);
+    
+    // Optional: Show confirmation for first-time users
+    if (localStorage.getItem('scheduler_first_time') !== 'false') {
+      setTimeout(() => {
+        alert('💡 Scheduler Professionale:\n\n• Seleziona data con colori densità\n• Scegli esami configurati dall\'admin\n• Un solo appuntamento per patologia\n\n✅ Pronto per la programmazione!');
+        localStorage.setItem('scheduler_first_time', 'false');
+      }, 1000);
+    }
+  };
+
+  const handleSchedulerLoadError = () => {
+    console.error('❌ Scheduler iframe failed to load');
+    alert('❌ Errore caricamento scheduler:\n\nIl servizio di programmazione non è disponibile.\nProvare a:\n• Ricaricare la pagina\n• Verificare connessione di rete\n• Contattare supporto tecnico');
+    setShowScheduler(false);
+  };
+
 
   if (loading) {
     return (
@@ -1360,71 +1532,81 @@ export const PatientTimeline = ({ patientId, doctorId, onScheduleAppointment }) 
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '20px',
-              fontWeight: '700',
               color: 'white',
-              boxShadow: '0 4px 15px rgba(59, 130, 246, 0.3)'
+              fontSize: '18px',
+              fontWeight: 'bold',
+              boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)'
             }}>
-              {(timeline.patient_name || timeline.patient_id).charAt(0)}
+              👤
             </div>
-            <div>
-              <div style={{
-                fontSize: '18px',
+            
+            <div style={{flex: 1}}>
+              <h3 style={{
+                margin: 0,
+                fontSize: '20px',
                 fontWeight: '700',
-                color: '#1d1d1f',
-                marginBottom: '2px'
+                color: '#1e40af',
+                lineHeight: '1.2'
               }}>
-                {timeline.patient_name || timeline.patient_id}
-              </div>
+                {timeline.patient_name || `Paziente ${patientId}`}
+              </h3>
+              
               <div style={{
-                fontSize: '13px',
-                color: '#6b7280',
-                fontWeight: '500'
+                display: 'flex',
+                alignItems: 'center',
+                gap: '15px',
+                marginTop: '6px',
+                flexWrap: 'wrap'
               }}>
-                CF: {timeline.patient_id}
+                <span style={{
+                  fontSize: '13px',
+                  color: '#6b7280',
+                  fontFamily: 'Monaco, monospace',
+                  background: 'rgba(107, 114, 128, 0.1)',
+                  padding: '2px 8px',
+                  borderRadius: '4px'
+                }}>
+                  {patientId}
+                </span>
+                
+                <span style={{
+                  fontSize: '13px',
+                  color: '#059669',
+                  background: 'rgba(5, 150, 105, 0.1)',
+                  padding: '3px 8px',
+                  borderRadius: '12px',
+                  fontWeight: '500'
+                }}>
+                  📋 {timeline.patologia}
+                </span>
+                
+                <span style={{
+                  fontSize: '12px',
+                  color: '#6b7280'
+                }}>
+                  Dal: {timeline.enrollment_date}
+                </span>
               </div>
             </div>
           </div>
-
-          {/* Condition & Visits - Secondary Info */}
+          
+          {/* Action Buttons */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
-            gap: '30px',
-            fontSize: '14px'
+            gap: '12px'
           }}>
+            {/* Appointment Count */}
             <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
+              background: 'rgba(59, 130, 246, 0.1)',
               padding: '8px 16px',
-              background: 'rgba(16, 185, 129, 0.1)',
-              borderRadius: '12px',
-              border: '1px solid rgba(16, 185, 129, 0.2)'
+              borderRadius: '20px',
+              fontSize: '13px',
+              color: '#1e40af',
+              fontWeight: '600',
+              border: '1px solid rgba(59, 130, 246, 0.2)'
             }}>
-              <span style={{fontSize: '16px'}}>🩺</span>
-              <div>
-                <div style={{fontWeight: '600', color: '#059669'}}>
-                  {PATOLOGIE[timeline.patologia] || timeline.patologia}
-                </div>
-              </div>
-            </div>
-            
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '8px 16px',
-              background: 'rgba(245, 158, 11, 0.1)',
-              borderRadius: '12px',
-              border: '1px solid rgba(245, 158, 11, 0.2)'
-            }}>
-              <span style={{fontSize: '16px'}}>📊</span>
-              <div>
-                <div style={{fontWeight: '600', color: '#d97706'}}>
-                  {timeline.total_appointments} Visite
-                </div>
-              </div>
+              📅 {timeline.total_appointments} visite
             </div>
           </div>
         </div>
@@ -1438,7 +1620,7 @@ export const PatientTimeline = ({ patientId, doctorId, onScheduleAppointment }) 
         onTimelineUpdate={loadTimeline}
         canScheduleNext={canScheduleNext}
         checkingReferto={checkingReferto}
-        onOpenScheduler={() => setShowScheduler(true)}
+        onOpenScheduler={handleOpenScheduler} // UPDATED - Use new handler
       />
 
       {/* 🔥 PROFESSIONAL TABBED SECTION */}
@@ -1447,7 +1629,10 @@ export const PatientTimeline = ({ patientId, doctorId, onScheduleAppointment }) 
         doctorId={doctorId}
         onRefertoSaved={checkCanScheduleNext}
       />
-      {/* Scheduler Iframe Modal */}
+
+      {/* ================================
+          SCHEDULER IFRAME MODAL - UPDATED
+          ================================ */}
       {showScheduler && (
         <>
           {/* Backdrop with fade animation */}
@@ -1481,7 +1666,7 @@ export const PatientTimeline = ({ patientId, doctorId, onScheduleAppointment }) 
               border: '2px solid rgba(59, 130, 246, 0.2)'
             }}>
               
-              {/* Modal Header - Matching your UI style */}
+              {/* Modal Header - Professional styling */}
               <div style={{
                 background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
                 color: 'white',
@@ -1509,7 +1694,7 @@ export const PatientTimeline = ({ patientId, doctorId, onScheduleAppointment }) 
                       Programmazione Appuntamento
                     </h3>
                     <p style={{margin: '2px 0 0 0', fontSize: '14px', opacity: 0.9}}>
-                      Paziente: {patientId} • Medico: {doctorId}
+                      {timeline.patient_name} ({patientId}) • {timeline.patologia}
                     </p>
                   </div>
                 </div>
@@ -1545,18 +1730,35 @@ export const PatientTimeline = ({ patientId, doctorId, onScheduleAppointment }) 
                 </button>
               </div>
 
-              {/* Scheduler Iframe */}
+              {/* Scheduler Iframe - UPDATED URL */}
               <iframe
-                src={`http://${window.location.hostname}:3013?patient=${patientId}&doctor=${doctorId}&lang=it`}
+                src={buildSchedulerUrl()}
                 style={{
                   width: '100%',
-                  height: 'calc(100% - 80px)', // Subtract header height
+                  height: 'calc(100% - 80px)',
                   border: 'none',
                   backgroundColor: '#fafafa'
                 }}
                 title="Scheduler Professionale"
                 allow="clipboard-read; clipboard-write"
                 sandbox="allow-scripts allow-same-origin allow-forms"
+                onLoad={() => console.log('📅 Scheduler iframe loaded successfully')}
+                onError={handleSchedulerLoadError}
+                // Add timeout fallback
+                ref={(iframe) => {
+                  if (iframe) {
+                    const timeout = setTimeout(() => {
+                      if (iframe.contentDocument?.readyState !== 'complete') {
+                        handleSchedulerLoadError();
+                      }
+                    }, 10000); // 10 second timeout
+                    
+                    iframe.onload = () => {
+                      clearTimeout(timeout);
+                      console.log('📅 Scheduler iframe loaded successfully');
+                    };
+                  }
+                }}
               />
 
               {/* Loading State Overlay */}
@@ -1626,7 +1828,6 @@ export const PatientTimeline = ({ patientId, doctorId, onScheduleAppointment }) 
           `}</style>
         </>
       )}      
-      {/* 🔥 REMOVED SCHEDULE APPOINTMENT BUTTON */}
     </div>
   );
 };

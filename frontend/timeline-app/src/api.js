@@ -143,12 +143,89 @@ export const timelineAPI = {
    * Ottieni timeline completa paziente
    * ✅ UPDATED: /api/timeline/timeline/{cf_paziente}
    */
-  getTimeline: (cf_paziente, id_medico) => 
-    apiRequest(`/api/timeline/timeline/${cf_paziente}?id_medico=${id_medico}`),
-  
-  // ================================
-  // OPERAZIONI APPUNTAMENTI - UPDATED ROUTES
-  // ================================
+  getTimeline: async (cf_paziente, id_medico) => {
+    try {
+      console.log('📋 Loading timeline with cronoscita data...', { cf_paziente, id_medico });
+      
+      // Get timeline data from backend
+      const timeline = await apiRequest(`/api/timeline/timeline/${cf_paziente}?id_medico=${id_medico}`);
+      
+      console.log('📊 Timeline response:', timeline);
+      
+      // Check if cronoscita_id is present
+      if (!timeline.cronoscita_id && !timeline.patologia_id) {
+        console.warn('⚠️ Timeline missing cronoscita_id, attempting fallback lookup...');
+        
+        try {
+          // Fallback: Try to get cronoscita_id from patient lookup
+          // Use the patologia from timeline or try common ones
+          const patologiaToTry = timeline.patologia || 'DIABETES_T2';
+          
+          const patientLookup = await apiRequest('/api/timeline/patients/lookup', {
+            method: 'POST',
+            body: JSON.stringify({ 
+              cf_paziente, 
+              id_medico, 
+              patologia: patologiaToTry 
+            })
+          });
+          
+          if (patientLookup.success && patientLookup.patient_data?.cronoscita_id) {
+            timeline.cronoscita_id = patientLookup.patient_data.cronoscita_id;
+            timeline.patologia_id = patientLookup.patient_data.cronoscita_id;
+            console.log('✅ Cronoscita ID added from patient lookup:', timeline.cronoscita_id);
+          } else if (patientLookup.success && patientLookup.patient_data?.patologia_id) {
+            timeline.cronoscita_id = patientLookup.patient_data.patologia_id;
+            timeline.patologia_id = patientLookup.patient_data.patologia_id;
+            console.log('✅ Cronoscita ID added from patologia_id:', timeline.cronoscita_id);
+          }
+          
+        } catch (fallbackError) {
+          console.warn('⚠️ Fallback cronoscita lookup failed:', fallbackError.message);
+          
+          // Final fallback: Try to extract from available pathologies
+          try {
+            const pathologies = getPatologieOptions();
+            if (pathologies.length > 0) {
+              // Find matching pathology by name
+              const matchingPathology = pathologies.find(p => 
+                p.label.toLowerCase().includes(timeline.patologia?.toLowerCase() || '') ||
+                timeline.patologia?.toLowerCase().includes(p.label.toLowerCase() || '')
+              );
+              
+              if (matchingPathology) {
+                timeline.cronoscita_id = matchingPathology.value;
+                timeline.patologia_id = matchingPathology.value;
+                console.log('✅ Cronoscita ID matched from pathologies list:', timeline.cronoscita_id);
+              }
+            }
+          } catch (pathologyError) {
+            console.warn('⚠️ Pathology matching failed:', pathologyError.message);
+          }
+        }
+      }
+      
+      // Final validation
+      if (!timeline.cronoscita_id && !timeline.patologia_id) {
+        console.error('❌ Could not determine cronoscita_id - scheduler integration will fail');
+        timeline.scheduler_available = false;
+        timeline.scheduler_error = 'Cronoscita non configurata per questo paziente';
+      } else {
+        timeline.scheduler_available = true;
+        console.log('✅ Timeline ready for scheduler integration:', {
+          cronoscita_id: timeline.cronoscita_id,
+          patient_name: timeline.patient_name,
+          patologia: timeline.patologia
+        });
+      }
+      
+      return timeline;
+      
+    } catch (error) {
+      console.error('❌ Error getting timeline:', error);
+      throw error;
+    }
+  },
   
   /**
    * Programma nuovo appuntamento

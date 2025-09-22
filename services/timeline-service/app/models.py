@@ -106,7 +106,7 @@ class RefertoSaveResponse(BaseModel):
         json_encoders = {
             datetime: lambda v: v.isoformat()
         }
-        
+
 # Modelli Input
 class PatientLookupRequest(BaseModel):
     """Modello richiesta ricerca paziente"""
@@ -272,15 +272,24 @@ class AppointmentSummary(BaseModel):
     notes: Optional[str] = None
 
 class TimelineResponse(BaseModel):
-    """Risposta timeline completa"""
-    patient_id: str
-    patient_name: Optional[str] = None
-    patologia: str
-    enrollment_date: str
-    precedenti: List[AppointmentSummary]  # Appuntamenti passati
-    oggi: List[AppointmentSummary]        # Appuntamenti di oggi
-    successivo: List[AppointmentSummary]  # Appuntamenti futuri
-    total_appointments: int
+    """Risposta timeline paziente con informazioni cronoscita per scheduler"""
+    patient_id: str = Field(..., description="Codice fiscale paziente")
+    patient_name: Optional[str] = Field(None, description="Nome completo paziente")
+    patologia: str = Field(..., description="Nome patologia")
+    
+    # CRITICAL: Add cronoscita_id for scheduler integration
+    cronoscita_id: Optional[str] = Field(None, description="ID Cronoscita per scheduler")
+    patologia_id: Optional[str] = Field(None, description="Alias per cronoscita_id") 
+    
+    enrollment_date: str = Field(..., description="Data arruolamento")
+    precedenti: List[AppointmentSummary] = Field(default_factory=list)
+    oggi: List[AppointmentSummary] = Field(default_factory=list)
+    successivo: List[AppointmentSummary] = Field(default_factory=list)
+    total_appointments: int = Field(default=0)
+    
+    # Additional scheduler integration fields
+    can_schedule_next: Optional[bool] = Field(None, description="Può programmare prossimo appuntamento")
+    last_referto_date: Optional[str] = Field(None, description="Data ultimo referto")
     
 class HealthResponse(BaseModel):
     """Risposta controllo stato"""

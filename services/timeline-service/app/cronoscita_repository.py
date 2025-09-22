@@ -138,6 +138,99 @@ class CronoscitaRepository:
                 "error": str(e)
             }
 
+    async def find_cronoscita_id_by_name(self, patologia_name: str) -> Optional[str]:
+        """
+        Find cronoscita_id by patologia name for scheduler integration
+        Used when patient data doesn't have cronoscita_id but has patologia name
+        """
+        try:
+            if not patologia_name or not patologia_name.strip():
+                return None
+            
+            # Clean and normalize patologia name
+            patologia_clean = patologia_name.strip().upper()
+            
+            # Try exact match first
+            cronoscita = await self.collection.find_one({
+                "nome": patologia_clean,
+                "is_active": True
+            })
+            
+            if cronoscita:
+                logger.info(f"✅ Found cronoscita_id by exact match: {patologia_clean}")
+                return str(cronoscita["_id"])
+            
+            # Try partial match if exact match fails
+            cronoscita = await self.collection.find_one({
+                "nome": {"$regex": patologia_clean, "$options": "i"},
+                "is_active": True
+            })
+            
+            if cronoscita:
+                logger.info(f"✅ Found cronoscita_id by partial match: {patologia_clean}")
+                return str(cronoscita["_id"])
+            
+            # Try common aliases/mappings
+            patologia_mappings = {
+                "DIABETES_T2": ["DIABETE TIPO 2", "DIABETE MELLITO TIPO 2", "DM2"],
+                "DIABETES_T1": ["DIABETE TIPO 1", "DIABETE MELLITO TIPO 1", "DM1"], 
+                "HYPERTENSION": ["IPERTENSIONE", "IPERTENSIONE ARTERIOSA"],
+                "OBESITY": ["OBESITÀ", "OBESITA"],
+                "METABOLIC_SYNDROME": ["SINDROME METABOLICA"]
+            }
+            
+            for key, aliases in patologia_mappings.items():
+                if patologia_clean in aliases or any(alias in patologia_clean for alias in aliases):
+                    cronoscita = await self.collection.find_one({
+                        "nome": {"$regex": key, "$options": "i"},
+                        "is_active": True
+                    })
+                    if cronoscita:
+                        logger.info(f"✅ Found cronoscita_id by alias mapping: {key}")
+                        return str(cronoscita["_id"])
+            
+            logger.warning(f"⚠️ No cronoscita_id found for patologia: {patologia_name}")
+            return None
+            
+        except Exception as e:
+            logger.error(f"❌ Error finding cronoscita_id by name: {e}")
+            return None
+
+    async def ensure_patient_has_cronoscita_id(self, patient_data: dict) -> dict:
+        """
+        Ensure patient data includes cronoscita_id for scheduler compatibility
+        Updates patient document if cronoscita_id is missing but can be determined
+        """
+        try:
+            # If cronoscita_id already exists, return as-is
+            if patient_data.get("cronoscita_id"):
+                return patient_data
+            
+            # Try to find cronoscita_id by patologia name
+            patologia_name = patient_data.get("patologia")
+            if not patologia_name:
+                return patient_data
+            
+            cronoscita_id = await self.find_cronoscita_id_by_name(patologia_name)
+            if cronoscita_id:
+                # Update patient data with found cronoscita_id
+                patient_data["cronoscita_id"] = cronoscita_id
+                patient_data["patologia_id"] = cronoscita_id  # Alias
+                
+                # Optionally update database (uncomment if needed)
+                # await self.db.patients.update_one(
+                #     {"cf_paziente": patient_data.get("cf_paziente")},
+                #     {"$set": {"cronoscita_id": cronoscita_id, "patologia_id": cronoscita_id}}
+                # )
+                
+                logger.info(f"✅ Added cronoscita_id to patient data: {cronoscita_id}")
+            
+            return patient_data
+            
+        except Exception as e:
+            logger.error(f"❌ Error ensuring cronoscita_id: {e}")
+            return patient_data
+    
 # ================================
 # MICROSERVICES HELPER FUNCTIONS
 # ================================
