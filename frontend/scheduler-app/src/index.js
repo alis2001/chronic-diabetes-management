@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
+import { schedulerAPI } from './api';
 
 // ================================
 // MAIN SCHEDULER APPLICATION
@@ -73,18 +74,15 @@ const SchedulerApp = () => {
     try {
       console.log('📅 Loading scheduling data from backend...');
       
-      const response = await fetch(
-        `/api/scheduler/scheduling-data/${patientInfo.cf_paziente}?` +
-        `cronoscita_id=${patientInfo.cronoscita_id}&` +
-        `id_medico=${patientInfo.id_medico}&` +
-        `days_ahead=30`,
-        {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' }
-        }
+      // Use the dynamic API from api.js
+      // Use the dynamic API from api.js
+      const data = await schedulerAPI.getSchedulingData(
+        patientInfo.cf_paziente,
+        patientInfo.cronoscita_id, 
+        patientInfo.id_medico,
+        30
       );
 
-      const data = await response.json();
 
       if (!response.ok) {
         if (response.status === 409 && data.validation_result) {
@@ -150,16 +148,11 @@ const SchedulerApp = () => {
 
       console.log('📝 Scheduling appointment:', appointmentData);
 
-      const response = await fetch('/api/scheduler/appointments/schedule', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...appointmentData,
-          created_by_doctor: patientData.id_medico
-        })
-      });
-
-      const result = await response.json();
+      // Use the dynamic API from api.js
+      const result = await schedulerAPI.scheduleAppointment(
+        appointmentData,
+        patientData.id_medico
+      );
 
       if (!response.ok) {
         setError(result.message || 'Errore durante programmazione appuntamento');

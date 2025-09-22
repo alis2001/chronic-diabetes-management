@@ -5,8 +5,11 @@ Date-based appointment scheduling with visual density gradients - NO CIRCULAR RE
 """
 
 from pydantic import BaseModel, Field, validator
-from typing import Optional, List, Dict, Any
-from datetime import datetime, date
+from typing import List, Dict, Optional, Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .models import DateDensity
+    from datetime import datetime, date
 from enum import Enum
 import re
 
@@ -109,8 +112,7 @@ class DoctorDensityResponse(BaseModel):
     end_date: date = Field(..., description="Period end")
     total_days: int = Field(..., description="Days analyzed")
     
-    # Density data - NO CIRCULAR REFERENCE
-    dates: List[DateDensity] = Field(default_factory=list, description="Date density data")
+    dates: List["DateDensity"] = Field(default_factory=list, description="Date density data")
     
     # Simple statistics
     total_future_appointments: int = Field(default=0, description="Total appointments")

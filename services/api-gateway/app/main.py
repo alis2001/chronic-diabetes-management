@@ -30,6 +30,7 @@ def get_cors_origins():
         f"http://{vm_host}:3010",  # Timeline Frontend
         f"http://{vm_host}:3011",  # Analytics Frontend  
         f"http://{vm_host}:3012",  # Admin Frontend
+        f"http://{vm_host}:3013",
         f"http://{vm_host}:8080",  # API Gateway (for internal calls)
     ]
     
@@ -45,6 +46,7 @@ def get_cors_origins():
             "http://localhost:3010",
             "http://localhost:3011", 
             "http://localhost:3012",
+            "http://localhost:3013",
             "http://localhost:8080"
         ])
     
@@ -70,8 +72,8 @@ SERVICES = {
     "timeline": os.getenv("TIMELINE_SERVICE_URL", "http://timeline-service:8001"),
     "analytics": os.getenv("ANALYTICS_SERVICE_URL", "http://analytics-service:8002"), 
     "scheduler": os.getenv("SCHEDULER_SERVICE_URL", "http://scheduler-service:8003"),
-    "admin": os.getenv("ADMIN_SERVICE_URL", "http://admin-dashboard:8084"),  # ← KEEP THIS
-    "melody": os.getenv("MELODY_SERVICE_URL", "http://localhost:5002")      # ← ONLY ADD THIS
+    "admin": os.getenv("ADMIN_SERVICE_URL", "http://admin-dashboard:8084"),
+    "melody": os.getenv("MELODY_SERVICE_URL", "http://localhost:5002")   
 }
 
 class HealthResponse(BaseModel):

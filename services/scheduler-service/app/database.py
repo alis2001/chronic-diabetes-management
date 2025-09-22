@@ -13,8 +13,7 @@ from collections import defaultdict
 from bson import ObjectId
 
 from .models import (
-    DensityLevel, DateDensity, DensityVisualization, 
-    DENSITY_COLORS, AppointmentDocument, ExamForScheduling
+    DensityLevel, DateDensity, AppointmentDocument, ExamForScheduling
 )
 
 logger = logging.getLogger(__name__)

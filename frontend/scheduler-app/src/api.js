@@ -4,7 +4,35 @@
 // All requests go through /api/scheduler/* routes
 
 // ✅ UPDATED: All requests go through API Gateway
-const API_BASE_URL = process.env.REACT_APP_API_GATEWAY_URL || `http://${window.location.hostname}:8080`;
+const getApiBaseUrl = () => {
+  // Priority 1: Environment variable from Docker
+  if (process.env.REACT_APP_API_GATEWAY_URL) {
+    console.log('📡 Using API Gateway from env:', process.env.REACT_APP_API_GATEWAY_URL);
+    return process.env.REACT_APP_API_GATEWAY_URL;
+  }
+  
+  // Priority 2: Direct scheduler service as fallback
+  if (process.env.REACT_APP_SCHEDULER_API_URL) {
+    console.log('📡 Using direct scheduler API from env:', process.env.REACT_APP_SCHEDULER_API_URL);
+    return process.env.REACT_APP_SCHEDULER_API_URL;
+  }
+  
+  // Priority 3: Default to API Gateway on same host
+  const defaultUrl = `http://${window.location.hostname}:8080`;
+  console.log('📡 Using default API Gateway URL:', defaultUrl);
+  return defaultUrl;
+};
+
+const API_BASE_URL = getApiBaseUrl();
+
+// Debug logging
+console.log('🔧 Scheduler API Configuration:');
+console.log('  • API_BASE_URL:', API_BASE_URL);
+console.log('  • Current window location:', window.location.href);
+console.log('  • Environment variables:');
+console.log('    - REACT_APP_API_GATEWAY_URL:', process.env.REACT_APP_API_GATEWAY_URL);
+console.log('    - REACT_APP_SCHEDULER_API_URL:', process.env.REACT_APP_SCHEDULER_API_URL);
+
 
 // Error handling class
 class SchedulerAPIError extends Error {
@@ -16,10 +44,20 @@ class SchedulerAPIError extends Error {
   }
 }
 
-// Generic API request handler
 const apiRequest = async (url, options = {}) => {
+  // CRITICAL: Ensure we never call the frontend's own port
+  if (API_BASE_URL.includes(':3013')) {
+    throw new SchedulerAPIError(
+      'CONFIGURAZIONE ERRATA: Il frontend scheduler non può chiamare la sua stessa porta. Verificare REACT_APP_API_GATEWAY_URL.',
+      0
+    );
+  }
+
   try {
-    const response = await fetch(`${API_BASE_URL}${url}`, {
+    const fullUrl = `${API_BASE_URL}${url}`;
+    console.log('🌐 API Request:', fullUrl);
+    
+    const response = await fetch(fullUrl, {
       headers: {
         'Content-Type': 'application/json',
         ...options.headers,
@@ -31,6 +69,17 @@ const apiRequest = async (url, options = {}) => {
     try {
       data = await response.json();
     } catch (e) {
+      // Handle non-JSON responses (like proxy errors)
+      const textResponse = await response.text();
+      console.error('❌ Non-JSON response:', textResponse);
+      
+      if (textResponse.includes('Proxy error') || textResponse.includes('502 Bad Gateway')) {
+        throw new SchedulerAPIError(
+          'Il servizio scheduler non è disponibile. Verificare che tutti i servizi backend siano avviati.',
+          response.status
+        );
+      }
+      
       throw new SchedulerAPIError('Risposta del server non valida', response.status);
     }
     
@@ -52,7 +101,6 @@ const apiRequest = async (url, options = {}) => {
       } else if (data.message) {
         errorMessage = data.message;
       } else if (data.validation_result && data.validation_result.message) {
-        // Handle scheduler validation errors
         errorMessage = data.validation_result.message;
         errorDetails = data.validation_result;
       }
@@ -65,7 +113,10 @@ const apiRequest = async (url, options = {}) => {
     if (error instanceof SchedulerAPIError) throw error;
     
     if (error.name === 'TypeError' && error.message.includes('fetch')) {
-      throw new SchedulerAPIError('Impossibile connettersi al server. Verificare la connessione.', 0);
+      throw new SchedulerAPIError(
+        'Impossibile connettersi al Gateway API. Verificare che tutti i servizi backend siano avviati.',
+        0
+      );
     }
     
     throw new SchedulerAPIError(`Errore di rete: ${error.message}`, 0);
