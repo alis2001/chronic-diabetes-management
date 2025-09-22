@@ -142,6 +142,14 @@ class AppointmentRepository:
             logger.error(f"Error finding appointments for patient {cf_paziente}: {e}")
             raise DatabaseException(f"Failed to find appointments: {str(e)}")
     
+    async def get_patient_appointments(self, cf_paziente: str) -> List[Dict[str, Any]]:
+        """
+        Get all appointments for a patient - Timeline Service Integration
+        This is an alias for find_by_patient() to match the method name expected by TimelineService
+        """
+        logger.info(f"📅 Getting appointments for patient {cf_paziente}")
+        return await self.find_by_patient(cf_paziente)
+
     async def find_by_id(self, appointment_id: str) -> Optional[Dict[str, Any]]:
         """Find appointment by ID"""
         try:
