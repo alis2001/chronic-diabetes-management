@@ -41,6 +41,72 @@ class AppointmentPriority(str, Enum):
     URGENT = "urgent"
     EMERGENCY = "emergency"
 
+# Insert these models after AppointmentPriority enum and before PatientLookupRequest
+
+# Stato referto medico
+class RefertoStatus(str, Enum):
+    DRAFT = "bozza"
+    COMPLETED = "completato"
+    REVIEWED = "revisionato" 
+    ARCHIVED = "archiviato"
+
+# Referto data model
+class Referto(BaseModel):
+    """Modello referto medico per storage database"""
+    referto_id: Optional[str] = None
+    cf_paziente: str = Field(..., description="Codice fiscale paziente")
+    id_medico: str = Field(..., description="ID medico")
+    appointment_id: Optional[str] = Field(None, description="ID appuntamento associato")
+    
+    # Contenuto referto
+    testo_referto: str = Field(..., min_length=10, description="Testo refertazione medica")
+    diagnosi: Optional[str] = Field(None, description="Diagnosi principale")
+    terapia_prescritta: Optional[str] = Field(None, description="Terapia prescritta")
+    note_medico: Optional[str] = Field(None, description="Note aggiuntive")
+    
+    # Metadati
+    status: RefertoStatus = Field(default=RefertoStatus.DRAFT)
+    data_visita: date = Field(default_factory=date.today)
+    data_compilazione: datetime = Field(default_factory=datetime.now)
+    
+    # Sistema
+    created_at: datetime = Field(default_factory=datetime.now)
+    updated_at: datetime = Field(default_factory=datetime.now)
+    
+    class Config:
+        use_enum_values = True
+        json_encoders = {
+            datetime: lambda v: v.isoformat(),
+            date: lambda v: v.isoformat()
+        }
+
+# Request models for Referto
+class RefertoSaveRequest(BaseModel):
+    """Richiesta salvataggio referto"""
+    cf_paziente: str = Field(..., min_length=16, max_length=16)
+    id_medico: str = Field(...)
+    appointment_id: Optional[str] = None
+    testo_referto: str = Field(..., min_length=10, description="Minimo 10 caratteri")
+    diagnosi: Optional[str] = None
+    terapia_prescritta: Optional[str] = None
+    note_medico: Optional[str] = None
+    data_visita: date = Field(default_factory=date.today)
+
+# Response models for Referto  
+class RefertoSaveResponse(BaseModel):
+    """Risposta salvataggio referto"""
+    success: bool
+    message: str
+    referto_id: str
+    status: str
+    can_schedule_next: bool = Field(description="Se true, può programmare prossimo appuntamento")
+    saved_at: datetime
+    
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }
+        
 # Modelli Input
 class PatientLookupRequest(BaseModel):
     """Modello richiesta ricerca paziente"""

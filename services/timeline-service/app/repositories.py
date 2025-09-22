@@ -10,7 +10,7 @@ from datetime import datetime, date
 from motor.motor_asyncio import AsyncIOMotorDatabase
 import logging
 
-from .models import Patient, Appointment, AppointmentStatus
+from .models import Patient, Appointment, AppointmentStatus, Referto
 from .exceptions import DatabaseException, PatientNotFoundException, AppointmentNotFoundException
 
 logger = logging.getLogger(__name__)
@@ -269,3 +269,111 @@ class AppointmentRepository:
         except Exception as e:
             logger.error(f"Error getting appointment statistics: {e}")
             raise DatabaseException(f"Failed to get statistics: {str(e)}")
+        
+# Add this class at the END of your existing repositories.py file
+# Insert after the AppointmentRepository class
+
+class RefertoRepository:
+    """Repository per operazioni referto medico"""
+    
+    def __init__(self, db: AsyncIOMotorDatabase):
+        self.db = db
+        self.collection = db.referti
+    
+    async def save_referto(self, referto) -> str:
+        """Salva nuovo referto o aggiorna esistente"""
+        try:
+            # Genera ID se non presente
+            if not referto.referto_id:
+                referto.referto_id = f"REF_{int(datetime.now().timestamp())}"
+            
+            # Converte a dict e serializza per MongoDB
+            referto_dict = referto.dict()
+            referto_dict = serialize_for_mongodb(referto_dict)
+            referto_dict["updated_at"] = datetime.now()
+            
+            # Upsert: aggiorna se esiste, crea se non esiste
+            result = await self.collection.update_one(
+                {"referto_id": referto.referto_id},
+                {"$set": referto_dict},
+                upsert=True
+            )
+            
+            logger.info(f"Referto salvato: {referto.referto_id} per paziente {referto.cf_paziente}")
+            return referto.referto_id
+            
+        except Exception as e:
+            logger.error(f"Errore salvataggio referto: {e}")
+            raise DatabaseException(f"Errore nel salvataggio referto: {str(e)}")
+    
+    async def find_by_patient(self, cf_paziente: str) -> List[Dict[str, Any]]:
+        """Trova tutti i referti di un paziente"""
+        try:
+            cursor = self.collection.find(
+                {"cf_paziente": cf_paziente.upper()}
+            ).sort("data_visita", -1)  # Più recenti prima
+            
+            return await cursor.to_list(length=None)
+            
+        except Exception as e:
+            logger.error(f"Errore ricerca referti paziente {cf_paziente}: {e}")
+            raise DatabaseException(f"Errore ricerca referti: {str(e)}")
+    
+    async def find_by_id(self, referto_id: str) -> Optional[Dict[str, Any]]:
+        """Trova referto per ID"""
+        try:
+            return await self.collection.find_one({"referto_id": referto_id})
+        except Exception as e:
+            logger.error(f"Errore ricerca referto {referto_id}: {e}")
+            raise DatabaseException(f"Errore ricerca referto: {str(e)}")
+    
+    async def find_by_appointment(self, appointment_id: str) -> Optional[Dict[str, Any]]:
+        """Trova referto associato ad appuntamento"""
+        try:
+            return await self.collection.find_one({"appointment_id": appointment_id})
+        except Exception as e:
+            logger.error(f"Errore ricerca referto per appuntamento {appointment_id}: {e}")
+            raise DatabaseException(f"Errore ricerca referto: {str(e)}")
+    
+    async def update_status(self, referto_id: str, new_status: str) -> bool:
+        """Aggiorna stato referto"""
+        try:
+            result = await self.collection.update_one(
+                {"referto_id": referto_id},
+                {
+                    "$set": {
+                        "status": new_status,
+                        "updated_at": datetime.now()
+                    }
+                }
+            )
+            return result.modified_count > 0
+        except Exception as e:
+            logger.error(f"Errore aggiornamento stato referto {referto_id}: {e}")
+            raise DatabaseException(f"Errore aggiornamento referto: {str(e)}")
+    
+    async def check_referto_exists_for_patient_today(self, cf_paziente: str, id_medico: str) -> bool:
+        """Controlla se esiste già un referto per il paziente oggi"""
+        try:
+            from datetime import date, datetime
+            today = date.today()
+            
+            # Create datetime range for today (start and end of day)
+            start_of_day = datetime.combine(today, datetime.min.time())
+            end_of_day = datetime.combine(today, datetime.max.time())
+            
+            count = await self.collection.count_documents({
+                "cf_paziente": cf_paziente.upper(),
+                "id_medico": id_medico,
+                "data_visita": {
+                    "$gte": start_of_day,
+                    "$lte": end_of_day
+                }
+            })
+            
+            logger.info(f"🔍 Checking referto for {cf_paziente} + {id_medico} on {today}: found {count} referti")
+            return count > 0
+            
+        except Exception as e:
+            logger.error(f"Errore controllo referto esistente: {e}")
+            return False

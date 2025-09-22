@@ -1,10 +1,4 @@
 # services/timeline-service/app/routers.py
-"""
-Timeline Service Routers - Versione Italiana
-Organizzazione pulita dei route con separazione corretta delle responsabilità
-Aggiornato: Endpoint registrazione con contatti modificabili, messaggi in italiano
-"""
-
 from fastapi import APIRouter, Depends, Query, HTTPException
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from datetime import datetime
@@ -13,22 +7,22 @@ from typing import List, Optional, Dict, Any
 import logging
 
 from .database import get_database
-from .repositories import PatientRepository, AppointmentRepository
+from .repositories import PatientRepository, AppointmentRepository, RefertoRepository
 from .services import (
     PatientService, AppointmentService, TimelineService,
     WirgilioService, SchedulerClientService,
-    MelodyIntegrationService, DoctorService 
+    MelodyIntegrationService, DoctorService, RefertoService
 )
 from .models import (
     PatientLookupRequest, PatientLookupResponse,
     PatientRegistrationRequest, PatientRegistrationResponse,
     PatientRegistrationWithContactsRequest,
     DoctorAppointmentDecision, AppointmentSchedulingResponse,
-    AppointmentCompletionRequest, TimelineResponse, HealthResponse
+    AppointmentCompletionRequest, TimelineResponse, HealthResponse,
+    RefertoSaveRequest, RefertoSaveResponse
 )
 from .exceptions import map_to_http_exception, TimelineServiceException
 from .config import settings
-
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +71,18 @@ async def get_timeline_service(
 async def get_melody_integration_service() -> MelodyIntegrationService:
     """Ottieni istanza servizio integrazione Melody"""
     return MelodyIntegrationService()
+
+async def get_referto_repository(db: AsyncIOMotorDatabase = Depends(get_database)) -> RefertoRepository:
+    """Ottieni istanza repository referto"""
+    return RefertoRepository(db)
+
+async def get_referto_service(
+    referto_repo: RefertoRepository = Depends(get_referto_repository),
+    patient_repo: PatientRepository = Depends(get_patient_repository),
+    appointment_repo: AppointmentRepository = Depends(get_appointment_repository)
+) -> RefertoService:
+    """Ottieni istanza servizio referto"""
+    return RefertoService(referto_repo, patient_repo, appointment_repo)
 
 # ================================
 # ROUTER PRINCIPALE
@@ -210,6 +216,7 @@ async def get_patient_timeline(
 # ================================
 
 appointment_router = APIRouter(prefix="/appointments", tags=["Gestione Appuntamenti"])
+referto_router = APIRouter(prefix="/referti", tags=["Gestione Referti"])
 
 @appointment_router.post("/schedule", response_model=AppointmentSchedulingResponse)
 async def schedule_appointment(
@@ -264,6 +271,70 @@ async def get_available_appointment_types(
     except TimelineServiceException as e:
         raise map_to_http_exception(e)
 
+@referto_router.post("/save", response_model=RefertoSaveResponse)
+async def save_referto(
+    request: RefertoSaveRequest,
+    referto_service: RefertoService = Depends(get_referto_service)
+):
+    """
+    Salva referto medico
+    
+    - Valida medico e paziente
+    - Controlla lunghezza minima testo (10 caratteri)
+    - Salva referto come 'completato'
+    - Abilita programmazione prossimo appuntamento
+    """
+    try:
+        return await referto_service.save_referto(request)
+    except TimelineServiceException as e:
+        raise map_to_http_exception(e)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@referto_router.get("/patient/{cf_paziente}")
+async def get_patient_referti(
+    cf_paziente: str,
+    id_medico: str = Query(..., description="ID Medico per autorizzazione"),
+    referto_service: RefertoService = Depends(get_referto_service)
+):
+    """
+    Ottieni tutti i referti di un paziente
+    
+    - Lista referti ordinati per data (più recenti prima)
+    - Solo medici autorizzati possono accedere
+    """
+    try:
+        referti = await referto_service.get_patient_referti(cf_paziente, id_medico)
+        return {
+            "success": True,
+            "cf_paziente": cf_paziente,
+            "referti": referti,
+            "total_count": len(referti)
+        }
+    except TimelineServiceException as e:
+        raise map_to_http_exception(e)
+
+@referto_router.get("/can-schedule/{cf_paziente}")
+async def check_can_schedule_next(
+    cf_paziente: str,
+    id_medico: str = Query(..., description="ID Medico per autorizzazione"),
+    referto_service: RefertoService = Depends(get_referto_service)
+):
+    """
+    Controlla se medico può programmare prossimo appuntamento
+    
+    - Restituisce true se referto è stato salvato per oggi
+    - Utilizzato dal frontend per abilitare/disabilitare bottone 'Successivo'
+    """
+    try:
+        can_schedule = await referto_service.check_can_schedule_next_appointment(cf_paziente, id_medico)
+        return {
+            "success": True,
+            "can_schedule_next": can_schedule,
+            "message": "Referto completato, prossimo appuntamento disponibile" if can_schedule else "Completare referto prima di programmare prossimo appuntamento"
+        }
+    except TimelineServiceException as e:
+        raise map_to_http_exception(e)
 # ================================
 # ROUTES COMPATIBILITÀ LEGACY
 # ================================
@@ -392,6 +463,28 @@ async def create_voice_workflow_url(
         logger.error(f"Error creating voice workflow URL: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
+@referto_router.get("/today/{cf_paziente}")
+async def get_todays_referto(
+    cf_paziente: str,
+    id_medico: str = Query(..., description="ID Medico per autorizzazione"),
+    referto_service: RefertoService = Depends(get_referto_service)
+):
+    """
+    Ottieni referto di oggi per paziente e medico
+    
+    - Restituisce referto esistente se già salvato oggi
+    - Usato dal frontend per mostrare referto salvato e disabilitare editing
+    """
+    try:
+        referto = await referto_service.get_todays_referto(cf_paziente, id_medico)
+        return {
+            "success": True,
+            "cf_paziente": cf_paziente,
+            "has_referto_today": referto is not None,
+            "referto": referto
+        }
+    except TimelineServiceException as e:
+        raise map_to_http_exception(e)
 
 # ================================
 # RACCOLTA TUTTI I ROUTER
@@ -399,14 +492,16 @@ async def create_voice_workflow_url(
 
 def get_all_routers():
     """
-    Return all routers including session management routes
+    Return all routers including session management and referto routes
     """
     routers = [
         main_router,
         patient_router,
         appointment_router,
         timeline_router,
-        session_router  # ADD THIS LINE - Session management routes for React frontend
+        referto_router,       
+        session_router,       
+        legacy_router
     ]
     
     return routers

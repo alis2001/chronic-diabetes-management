@@ -600,4 +600,130 @@ class TimelineService:
             total_appointments=len(appointments)
         )
 
+class RefertoService:
+    """Servizio per logica di business referto medico"""
+    
+    def __init__(
+        self, 
+        referto_repo,  # RefertoRepository
+        patient_repo: PatientRepository,
+        appointment_repo: AppointmentRepository
+    ):
+        self.referto_repo = referto_repo
+        self.patient_repo = patient_repo
+        self.appointment_repo = appointment_repo
+    
+    async def save_referto(self, request) -> Dict[str, Any]:  # RefertoSaveRequest -> RefertoSaveResponse
+        """Salva referto medico con validazioni complete"""
+        
+        # Validazione medico
+        if not DoctorService.validate_doctor(request.id_medico):
+            raise DoctorValidationException("Credenziali medico non valide")
+        
+        # Validazione paziente esiste
+        patient = await self.patient_repo.find_by_cf(request.cf_paziente)
+        if not patient:
+            raise PatientNotFoundException(f"Paziente {request.cf_paziente} non trovato")
+        
+        # Validazione testo referto
+        if len(request.testo_referto.strip()) < 10:
+            raise ValueError("Il referto deve contenere almeno 10 caratteri")
+        
+        # Crea oggetto referto dal modello
+        from .models import Referto, RefertoStatus
+        
+        now = datetime.now()
+        referto_data = Referto(
+            cf_paziente=request.cf_paziente.upper(),
+            id_medico=request.id_medico,
+            appointment_id=request.appointment_id,
+            testo_referto=request.testo_referto.strip(),
+            diagnosi=request.diagnosi.strip() if request.diagnosi else None,
+            terapia_prescritta=request.terapia_prescritta.strip() if request.terapia_prescritta else None,
+            note_medico=request.note_medico.strip() if request.note_medico else None,
+            status=RefertoStatus.COMPLETED,  # Automaticamente completato quando salvato
+            data_visita=request.data_visita,
+            data_compilazione=now,
+            created_at=now,
+            updated_at=now
+        )
+        
+        # Salva nel database
+        referto_id = await self.referto_repo.save_referto(referto_data)
+        
+        logger.info(f"Referto salvato: {referto_id} per paziente {request.cf_paziente} dal medico {request.id_medico}")
+        
+        # Restituisci risposta
+        from .models import RefertoSaveResponse
+        return RefertoSaveResponse(
+            success=True,
+            message=f"Referto salvato con successo per paziente {request.cf_paziente}",
+            referto_id=referto_id,
+            status="completato",
+            can_schedule_next=True,  # Ora può programmare prossimo appuntamento
+            saved_at=now
+        )
+    
+    async def get_todays_referto(self, cf_paziente: str, id_medico: str) -> Optional[Dict[str, Any]]:
+        """Ottieni referto di oggi per paziente e medico"""
+        
+        # Validazione medico
+        if not DoctorService.validate_doctor(id_medico):
+            raise DoctorValidationException("Credenziali medico non valide")
+        
+        # Validazione paziente esiste
+        patient = await self.patient_repo.find_by_cf(cf_paziente)
+        if not patient:
+            raise PatientNotFoundException(f"Paziente {cf_paziente} non trovato")
+        
+        # Cerca referto di oggi
+        from datetime import date, datetime
+        today = date.today()
+        
+        # Create datetime range for today (start and end of day)
+        start_of_day = datetime.combine(today, datetime.min.time())
+        end_of_day = datetime.combine(today, datetime.max.time())
+        
+        try:
+            referto = await self.referto_repo.collection.find_one({
+                "cf_paziente": cf_paziente.upper(),
+                "id_medico": id_medico,
+                "data_visita": {
+                    "$gte": start_of_day,
+                    "$lte": end_of_day
+                }
+            })
+            
+            if referto:
+                # Serializza MongoDB ObjectId
+                referto["id"] = str(referto["_id"])
+                del referto["_id"]
+            
+            return referto
+            
+        except Exception as e:
+            logger.error(f"Errore ricerca referto oggi: {e}")
+            return None
 
+    async def get_patient_referti(self, cf_paziente: str, id_medico: str) -> List[Dict[str, Any]]:
+        """Ottieni tutti i referti di un paziente"""
+        
+        # Validazione medico
+        if not DoctorService.validate_doctor(id_medico):
+            raise DoctorValidationException("Credenziali medico non valide")
+        
+        # Validazione paziente esiste
+        patient = await self.patient_repo.find_by_cf(cf_paziente)
+        if not patient:
+            raise PatientNotFoundException(f"Paziente {cf_paziente} non trovato")
+        
+        # Ottieni referti
+        referti = await self.referto_repo.find_by_patient(cf_paziente)
+        
+        return referti
+    
+    async def check_can_schedule_next_appointment(self, cf_paziente: str, id_medico: str) -> bool:
+        """Controlla se medico può programmare prossimo appuntamento"""
+        
+        # Per ora, controlla solo se esiste almeno un referto per il paziente oggi
+        return await self.referto_repo.check_referto_exists_for_patient_today(cf_paziente, id_medico)

@@ -176,6 +176,41 @@ export const timelineAPI = {
    */
   getAvailableTypes: (cf_paziente, id_medico) => 
     apiRequest(`/api/timeline/appointments/available-types/${cf_paziente}?id_medico=${id_medico}`),
+
+  saveReferto: async (refertoData) => {
+    const response = await apiRequest('/referti/save', {
+      method: 'POST',
+      body: JSON.stringify({
+        cf_paziente: refertoData.cf_paziente,
+        id_medico: refertoData.id_medico,
+        appointment_id: refertoData.appointment_id || null,
+        testo_referto: refertoData.testo_referto,
+        diagnosi: refertoData.diagnosi || null,
+        terapia_prescritta: refertoData.terapia_prescritta || null,
+        note_medico: refertoData.note_medico || null,
+        data_visita: refertoData.data_visita || new Date().toISOString().split('T')[0]
+      })
+    });
+    return response;
+  },
+
+  checkCanScheduleNext: async (cf_paziente, id_medico) => {
+    const params = new URLSearchParams({ id_medico });
+    const response = await apiRequest(`/referti/can-schedule/${cf_paziente}?${params}`);
+    return response;
+  },
+
+  getPatientReferti: async (cf_paziente, id_medico) => {
+    const params = new URLSearchParams({ id_medico });
+    const response = await apiRequest(`/referti/patient/${cf_paziente}?${params}`);
+    return response;
+  },
+
+  getTodaysReferto: async (cf_paziente, id_medico) => {
+    const params = new URLSearchParams({ id_medico });
+    const response = await apiRequest(`/referti/today/${cf_paziente}?${params}`);
+    return response;
+  }
 };
 
 // ================================

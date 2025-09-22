@@ -362,6 +362,11 @@ async def admin_proxy(path: str, request: Request):
     logger.info(f"🏥 Admin route: /api/admin/{path}")
     return await proxy_request("admin", f"/{path}", request)
 
+@app.api_route("/referti/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def referto_proxy(path: str, request: Request):
+    """Route all /referti/* requests to timeline service"""
+    logger.info(f"📄 Referto route: /referti/{path}")
+    return await proxy_request("timeline", f"/referti/{path}", request)
 # ================================
 # STARTUP/SHUTDOWN EVENTS
 # ================================

@@ -1,6 +1,3 @@
-// frontend/timeline-app/src/components.js
-// Complete Healthcare Components with STEP 2 UI Improvements
-// 🔥 STEP 2: Compressed patient info, non-clickable timeline, professional tabs
 
 import React, { useState, useEffect, useRef } from 'react';
 import { 
@@ -426,7 +423,8 @@ export const PatientRegistration = ({ lookupResult, formData, onRegistrationSucc
 // 🔥 STEP 2: NON-CLICKABLE TIMELINE WITH SUCCESSIVO
 // ================================
 
-export const InnovativeTimeline = ({ appointments, patientId, doctorId, onTimelineUpdate }) => {
+export const InnovativeTimeline = ({ appointments, patientId, doctorId, onTimelineUpdate, canScheduleNext, checkingReferto, onOpenScheduler
+ }) => {
   const pastScrollRef = useRef(null);
 
   // FIXED: Proper date-based appointment organization
@@ -556,18 +554,18 @@ export const InnovativeTimeline = ({ appointments, patientId, doctorId, onTimeli
           </div>
         </div>
 
-        {/* Future Section (Right - Only One Appointment) */}
+        {/* Future Section (Right - Clean Light Yellow Successivo Button) */}
         <div style={styles.futureSection}>
           {hasFutureAppt ? (
+            // Has existing future appointment - show as info only
             <div
               style={{
                 ...styles.timelinePoint,
                 ...styles.futurePoint,
-                cursor: 'default' // 🔥 NON-CLICKABLE
+                cursor: 'default'
               }}
               title={`${future[0].type} - ${future[0].date}`}
             >
-              {/* 🔥 CHANGED FROM "NEXT" TO "Successivo" */}
               Successivo
               <div style={{
                 ...styles.pointLabel,
@@ -579,22 +577,32 @@ export const InnovativeTimeline = ({ appointments, patientId, doctorId, onTimeli
               </div>
             </div>
           ) : (
-            <div style={{
-              ...styles.timelinePoint,
-              backgroundColor: '#e5e7eb',
-              cursor: 'default',
-              color: '#9ca3af',
-              fontSize: '10px'
-            }}>
-              Successivo
-              <div style={{
-                ...styles.pointLabel,
-                backgroundColor: 'rgba(156, 163, 175, 0.1)',
-                color: '#9ca3af',
-                borderColor: '#e5e7eb'
-              }}>
-                Nessun appuntamento
-              </div>
+            // No future appointment - clean light yellow button
+            <div
+              style={{
+                ...styles.timelinePoint,
+                backgroundColor: canScheduleNext ? '#fef3c7' : '#e5e7eb',
+                cursor: canScheduleNext ? 'pointer' : 'not-allowed',
+                color: canScheduleNext ? '#92400e' : '#9ca3af',
+                fontSize: '12px',
+                fontWeight: '600',
+                border: canScheduleNext ? '2px solid #fed7aa' : '2px solid #d1d5db',
+                transition: 'all 0.3s ease'
+              }}
+              onClick={canScheduleNext ? onOpenScheduler : undefined}
+              title={canScheduleNext ? 'Programma prossimo appuntamento' : 'Completa referto prima'}
+              onMouseEnter={(e) => {
+                if (canScheduleNext) {
+                  e.target.style.backgroundColor = '#fde68a';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (canScheduleNext) {
+                  e.target.style.backgroundColor = '#fef3c7';
+                }
+              }}
+            >
+              {checkingReferto ? 'Controllo...' : 'Successivo'}
             </div>
           )}
         </div>
@@ -645,17 +653,18 @@ export const InnovativeTimeline = ({ appointments, patientId, doctorId, onTimeli
 // 🔥 STEP 2: PROFESSIONAL TABBED SECTION
 // ================================
 
-// REPLACE the ProfessionalTabs component in frontend/timeline-app/src/components.js with this:
-
-// COMPLETE ProfessionalTabs component - Replace the entire component in your components.js file
-
-const ProfessionalTabs = ({ patientId, doctorId }) => {
+const ProfessionalTabs = ({ patientId, doctorId, onRefertoSaved }) => {
   const [activeTab, setActiveTab] = useState('refertazione');
   const [referto, setReferto] = useState('');
   const [diario, setDiario] = useState('');
-  
+  const [saving, setSaving] = useState(false);
+  const [refertoSaved, setRefertoSaved] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
   // Analytics iframe state - simplified (no minimize/maximize state)
   const [analyticsLoaded, setAnalyticsLoaded] = useState(false);
+  const [hasExistingReferto, setHasExistingReferto] = useState(false);
+  const [loadingExistingReferto, setLoadingExistingReferto] = useState(false);
+  const [existingRefertoData, setExistingRefertoData] = useState(null);
 
   // CSS animation for AI sparkles
   const sparkleStyle = `
@@ -672,6 +681,10 @@ const ProfessionalTabs = ({ patientId, doctorId }) => {
         transform: scale(1) rotate(360deg); 
         opacity: 1; 
       }
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
     }
     .ai-sparkle { 
       animation: sparkle-pulse 2s ease-in-out infinite;
@@ -708,6 +721,10 @@ const ProfessionalTabs = ({ patientId, doctorId }) => {
       setAnalyticsLoaded(true);
     }
   };
+
+  useEffect(() => {
+    loadExistingReferto();
+  }, [patientId, doctorId]);
 
   const handleVoiceRecording = async () => {
     try {
@@ -772,77 +789,306 @@ const ProfessionalTabs = ({ patientId, doctorId }) => {
     }
   };
 
+  const loadExistingReferto = async () => {
+    if (!patientId || !doctorId) return;
+
+    setLoadingExistingReferto(true);
+    try {
+      const response = await timelineAPI.getTodaysReferto(patientId, doctorId);
+      
+      if (response.success && response.has_referto_today && response.referto) {
+        // Found existing referto for today
+        setHasExistingReferto(true);
+        setExistingRefertoData(response.referto);
+        setReferto(response.referto.testo_referto || '');
+        setRefertoSaved(true);
+        setSaveMessage('Referto già salvato oggi ✅');
+        console.log('✅ Loaded existing referto:', response.referto);
+      } else {
+        // No existing referto for today
+        setHasExistingReferto(false);
+        setExistingRefertoData(null);
+        setReferto('');
+        setRefertoSaved(false);
+        setSaveMessage('');
+      }
+    } catch (error) {
+      console.error('❌ Error loading existing referto:', error);
+      setHasExistingReferto(false);
+      setExistingRefertoData(null);
+    }
+    setLoadingExistingReferto(false);
+  };
+
   // Render tab content based on active tab
   const renderTabContent = () => {
     switch (activeTab) {
       case 'refertazione':
+        const canSave = referto.trim().length >= 10 && !hasExistingReferto;
+        const isReadOnly = hasExistingReferto || refertoSaved;
+
+        const handleSaveReferto = async () => {
+          if (!canSave) {
+            setSaveMessage('Il referto deve contenere almeno 10 caratteri');
+            return;
+          }
+
+          if (hasExistingReferto) {
+            setSaveMessage('Referto già salvato per oggi. Non è possibile salvare nuovamente.');
+            return;
+          }
+
+          setSaving(true);
+          setSaveMessage('');
+
+          try {
+            const refertoData = {
+              cf_paziente: patientId,
+              id_medico: doctorId,
+              testo_referto: referto,
+              data_visita: new Date().toISOString().split('T')[0]
+            };
+
+            const response = await timelineAPI.saveReferto(refertoData);
+            
+            if (response.success) {
+              setRefertoSaved(true);
+              setHasExistingReferto(true);
+              setSaveMessage('Referto salvato con successo! ✅');
+              console.log('✅ Referto saved successfully:', response);
+              if (onRefertoSaved) {
+                onRefertoSaved();
+              }
+            } else {
+              setSaveMessage('Errore nel salvataggio del referto');
+            }
+          } catch (error) {
+            console.error('❌ Error saving referto:', error);
+            setSaveMessage('Errore di connessione durante il salvataggio');
+          }
+
+          setSaving(false);
+        };
+
         return (
           <div style={{...tabContentStyles.refertazione, padding: '35px', borderRadius: '16px', border: '2px solid', borderColor: tabContentStyles.refertazione.borderColor}}>
             {/* Add CSS styles */}
             <style>{sparkleStyle}</style>
             
-            <div style={{marginBottom: '25px'}}>
+            {/* Loading existing referto */}
+            {loadingExistingReferto && (
+              <div style={{
+                padding: '15px',
+                borderRadius: '8px',
+                marginBottom: '20px',
+                background: 'rgba(59, 130, 246, 0.1)',
+                border: '1px solid rgba(59, 130, 246, 0.2)',
+                color: '#1d4ed8',
+                fontSize: '14px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px'
+              }}>
+                <div style={{
+                  width: '16px',
+                  height: '16px',
+                  border: '2px solid rgba(59, 130, 246, 0.3)',
+                  borderTop: '2px solid #3b82f6',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite'
+                }}></div>
+                Caricamento referto esistente...
+              </div>
+            )}
+            
+            {/* Header with Save Button */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '20px'
+            }}>
+              <h3 style={{
+                margin: 0,
+                fontSize: '20px',
+                fontWeight: '600',
+                color: '#1d4ed8'
+              }}>
+                Refertazione Medica
+                {hasExistingReferto && (
+                  <span style={{
+                    fontSize: '12px',
+                    fontWeight: '500',
+                    color: '#059669',
+                    marginLeft: '10px',
+                    padding: '4px 8px',
+                    background: 'rgba(16, 185, 129, 0.1)',
+                    borderRadius: '6px',
+                    border: '1px solid rgba(16, 185, 129, 0.3)'
+                  }}>
+                    Salvato Oggi
+                  </span>
+                )}
+              </h3>
+
+              {/* Salva Referto Button */}
               <button
-                onClick={handleVoiceRecording}
+                onClick={handleSaveReferto}
+                disabled={!canSave || saving || hasExistingReferto}
                 style={{
-                  padding: '12px 24px',
-                  background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
-                  color: 'white',
+                  padding: '10px 20px',
+                  background: hasExistingReferto
+                    ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                    : canSave && !saving
+                      ? (refertoSaved 
+                          ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                          : 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)')
+                      : '#e5e7eb',
+                  color: (hasExistingReferto || refertoSaved || canSave) && !saving ? 'white' : '#9ca3af',
                   border: 'none',
-                  borderRadius: '12px',
-                  fontSize: '15px',
+                  borderRadius: '8px',
+                  fontSize: '14px',
                   fontWeight: '600',
-                  cursor: 'pointer',
+                  cursor: (canSave || hasExistingReferto) && !saving ? 'pointer' : 'not-allowed',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
-                  boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)',
+                  boxShadow: (canSave || hasExistingReferto) && !saving ? '0 4px 12px rgba(59, 130, 246, 0.2)' : 'none',
                   transition: 'all 0.3s ease',
-                  marginBottom: '20px'
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.transform = 'translateY(-2px)';
-                  e.target.style.boxShadow = '0 6px 20px rgba(59, 130, 246, 0.4)';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.transform = 'translateY(0px)';
-                  e.target.style.boxShadow = '0 4px 12px rgba(59, 130, 246, 0.3)';
+                  minWidth: '140px',
+                  justifyContent: 'center',
+                  opacity: hasExistingReferto ? 0.8 : 1
                 }}
               >
-                {/* CHANGED: AI Sparkle instead of microphone */}
-                <span className="ai-sparkle">✨</span>
-                Registrazione Vocale AI
+                {saving ? (
+                  <>
+                    <span style={{
+                      width: '16px',
+                      height: '16px',
+                      border: '2px solid #ffffff40',
+                      borderTop: '2px solid white',
+                      borderRadius: '50%',
+                      animation: 'spin 1s linear infinite'
+                    }} />
+                    Salvando...
+                  </>
+                ) : hasExistingReferto ? (
+                  <>
+                    ✅ Già Salvato
+                  </>
+                ) : refertoSaved ? (
+                  <>
+                    ✅ Salvato
+                  </>
+                ) : (
+                  <>
+                    💾 Salva Referto
+                  </>
+                )}
               </button>
             </div>
-            
+
+            {/* Save Message */}
+            {saveMessage && (
+              <div style={{
+                padding: '10px 15px',
+                borderRadius: '8px',
+                marginBottom: '20px',
+                background: (refertoSaved || hasExistingReferto) ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                border: `1px solid ${(refertoSaved || hasExistingReferto) ? '#10b981' : '#ef4444'}`,
+                color: (refertoSaved || hasExistingReferto) ? '#059669' : '#dc2626',
+                fontSize: '14px',
+                fontWeight: '500'
+              }}>
+                {saveMessage}
+              </div>
+            )}
+
+            {/* Voice Recording Button - only show if not already saved */}
+            {!hasExistingReferto && (
+              <div style={{marginBottom: '25px'}}>
+                <button
+                  onClick={handleVoiceRecording}
+                  style={{
+                    padding: '12px 24px',
+                    background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '12px',
+                    fontSize: '15px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)',
+                    transition: 'all 0.3s ease',
+                    marginBottom: '20px'
+                  }}
+                >
+                  <span className="ai-sparkle">✨</span>
+                  <span>🎤 Referto Vocale AI</span>
+                </button>
+              </div>
+            )}
+
+            {/* Referto Textarea */}
             <textarea
               value={referto}
-              onChange={(e) => setReferto(e.target.value)}
-              placeholder="Inserisci le note del referto medico..."
+              onChange={(e) => {
+                if (!isReadOnly) {
+                  setReferto(e.target.value);
+                  // Reset saved state when text changes after saving
+                  if (refertoSaved && e.target.value !== referto) {
+                    setRefertoSaved(false);
+                    setSaveMessage('');
+                  }
+                }
+              }}
+              readOnly={isReadOnly}
+              placeholder={isReadOnly ? "Referto salvato - visualizzazione in sola lettura" : "Inserisci qui la refertazione medica del paziente..."}
               style={{
                 width: '100%',
-                height: '400px',
+                height: '350px',
                 padding: '20px',
-                border: '2px solid rgba(59, 130, 246, 0.2)',
+                border: `2px solid ${isReadOnly ? 'rgba(16, 185, 129, 0.2)' : 'rgba(59, 130, 246, 0.2)'}`,
                 borderRadius: '12px',
                 fontSize: '16px',
                 fontFamily: 'inherit',
                 lineHeight: '1.6',
                 resize: 'vertical',
-                backgroundColor: 'rgba(255, 255, 255, 0.8)',
-                transition: 'all 0.3s ease'
+                backgroundColor: isReadOnly ? 'rgba(248, 250, 252, 0.8)' : 'rgba(255, 255, 255, 0.8)',
+                transition: 'all 0.3s ease',
+                cursor: isReadOnly ? 'not-allowed' : 'text',
+                color: isReadOnly ? '#4b5563' : '#1f2937'
               }}
               onFocus={(e) => {
-                e.target.style.borderColor = '#3b82f6';
-                e.target.style.backgroundColor = 'rgba(255, 255, 255, 0.95)';
-                e.target.style.boxShadow = '0 0 0 4px rgba(59, 130, 246, 0.1)';
+                if (!isReadOnly) {
+                  e.target.style.borderColor = '#3b82f6';
+                  e.target.style.backgroundColor = 'rgba(255, 255, 255, 0.95)';
+                  e.target.style.boxShadow = '0 0 0 4px rgba(59, 130, 246, 0.1)';
+                }
               }}
               onBlur={(e) => {
-                e.target.style.borderColor = 'rgba(59, 130, 246, 0.2)';
-                e.target.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
-                e.target.style.boxShadow = 'none';
+                if (!isReadOnly) {
+                  e.target.style.borderColor = 'rgba(59, 130, 246, 0.2)';
+                  e.target.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
+                  e.target.style.boxShadow = 'none';
+                }
               }}
             />
+
+            {/* Character Counter */}
+            <div style={{
+              marginTop: '10px',
+              fontSize: '12px',
+              color: isReadOnly ? '#6b7280' : canSave ? '#059669' : '#ef4444',
+              fontWeight: '500',
+              textAlign: 'right'
+            }}>
+              {referto.length} caratteri 
+              {isReadOnly ? ' (referto salvato)' : canSave ? ' (minimo raggiunto ✅)' : ' (minimo 10 caratteri)'}
+            </div>
           </div>
         );
 
@@ -1009,10 +1255,14 @@ export const PatientTimeline = ({ patientId, doctorId, onScheduleAppointment }) 
   const [timeline, setTimeline] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [canScheduleNext, setCanScheduleNext] = useState(false);
+  const [checkingReferto, setCheckingReferto] = useState(false);
+  const [showScheduler, setShowScheduler] = useState(false);
 
   useEffect(() => {
     if (patientId && doctorId) {
       loadTimeline();
+      checkCanScheduleNext();
     }
   }, [patientId, doctorId]);
 
@@ -1026,6 +1276,21 @@ export const PatientTimeline = ({ patientId, doctorId, onScheduleAppointment }) 
       setError(error.message);
     }
     setLoading(false);
+  };
+
+  const checkCanScheduleNext = async () => {
+    if (!patientId || !doctorId) return;
+    
+    setCheckingReferto(true);
+    try {
+      const response = await timelineAPI.checkCanScheduleNext(patientId, doctorId);
+      setCanScheduleNext(response.can_schedule_next || false);
+      console.log('✅ Can schedule next appointment:', response.can_schedule_next);
+    } catch (error) {
+      console.error('❌ Error checking referto status:', error);
+      setCanScheduleNext(false);
+    }
+    setCheckingReferto(false);
   };
 
   if (loading) {
@@ -1171,11 +1436,196 @@ export const PatientTimeline = ({ patientId, doctorId, onScheduleAppointment }) 
         patientId={patientId}
         doctorId={doctorId}
         onTimelineUpdate={loadTimeline}
+        canScheduleNext={canScheduleNext}
+        checkingReferto={checkingReferto}
+        onOpenScheduler={() => setShowScheduler(true)}
       />
 
       {/* 🔥 PROFESSIONAL TABBED SECTION */}
-      <ProfessionalTabs patientId={patientId} doctorId={doctorId} />
+      <ProfessionalTabs 
+        patientId={patientId} 
+        doctorId={doctorId}
+        onRefertoSaved={checkCanScheduleNext}
+      />
+      {/* Scheduler Iframe Modal */}
+      {showScheduler && (
+        <>
+          {/* Backdrop with fade animation */}
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            backdropFilter: 'blur(8px)',
+            zIndex: 2000,
+            animation: 'fadeIn 0.3s ease-out',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px'
+          }}>
+            {/* Modal Container */}
+            <div style={{
+              backgroundColor: 'white',
+              borderRadius: '24px',
+              width: '95%',
+              height: '90%',
+              maxWidth: '1400px',
+              maxHeight: '900px',
+              overflow: 'hidden',
+              boxShadow: '0 25px 80px rgba(0, 0, 0, 0.4)',
+              position: 'relative',
+              animation: 'modalSlideUp 0.4s ease-out',
+              border: '2px solid rgba(59, 130, 246, 0.2)'
+            }}>
+              
+              {/* Modal Header - Matching your UI style */}
+              <div style={{
+                background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                color: 'white',
+                padding: '20px 30px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                borderBottom: '1px solid rgba(255, 255, 255, 0.2)'
+              }}>
+                <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
+                  <div style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: '12px',
+                    background: 'rgba(255, 255, 255, 0.15)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '18px'
+                  }}>
+                    📅
+                  </div>
+                  <div>
+                    <h3 style={{margin: 0, fontSize: '20px', fontWeight: '700'}}>
+                      Programmazione Appuntamento
+                    </h3>
+                    <p style={{margin: '2px 0 0 0', fontSize: '14px', opacity: 0.9}}>
+                      Paziente: {patientId} • Medico: {doctorId}
+                    </p>
+                  </div>
+                </div>
 
+                {/* Close Button */}
+                <button
+                  onClick={() => setShowScheduler(false)}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.15)',
+                    border: 'none',
+                    borderRadius: '12px',
+                    width: '44px',
+                    height: '44px',
+                    color: 'white',
+                    fontSize: '20px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.3s ease',
+                    backdropFilter: 'blur(10px)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.background = 'rgba(255, 255, 255, 0.25)';
+                    e.target.style.transform = 'scale(1.1)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.background = 'rgba(255, 255, 255, 0.15)';
+                    e.target.style.transform = 'scale(1)';
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Scheduler Iframe */}
+              <iframe
+                src={`http://${window.location.hostname}:8003?patient=${patientId}&doctor=${doctorId}&lang=it`}
+                style={{
+                  width: '100%',
+                  height: 'calc(100% - 80px)', // Subtract header height
+                  border: 'none',
+                  backgroundColor: '#fafafa'
+                }}
+                title="Scheduler Professionale"
+                allow="clipboard-read; clipboard-write"
+                sandbox="allow-scripts allow-same-origin allow-forms"
+              />
+
+              {/* Loading State Overlay */}
+              <div style={{
+                position: 'absolute',
+                top: '80px', // Below header
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: 'rgba(255, 255, 255, 0.9)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#3b82f6',
+                fontSize: '18px',
+                fontWeight: '600',
+                backdropFilter: 'blur(4px)',
+                animation: 'fadeOut 2s ease-out forwards',
+                animationDelay: '1s'
+              }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '15px'
+                }}>
+                  <div style={{
+                    width: '24px',
+                    height: '24px',
+                    border: '3px solid rgba(59, 130, 246, 0.3)',
+                    borderTop: '3px solid #3b82f6',
+                    borderRadius: '50%',
+                    animation: 'spin 1s linear infinite'
+                  }}></div>
+                  📅 Caricamento Scheduler Professionale...
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Add CSS animations */}
+          <style>{`
+            @keyframes fadeIn {
+              from { opacity: 0; }
+              to { opacity: 1; }
+            }
+            
+            @keyframes modalSlideUp {
+              from { 
+                opacity: 0; 
+                transform: translateY(40px) scale(0.95); 
+              }
+              to { 
+                opacity: 1; 
+                transform: translateY(0px) scale(1); 
+              }
+            }
+            
+            @keyframes fadeOut {
+              from { opacity: 1; }
+              to { opacity: 0; pointer-events: none; }
+            }
+            
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+          `}</style>
+        </>
+      )}      
       {/* 🔥 REMOVED SCHEDULE APPOINTMENT BUTTON */}
     </div>
   );
