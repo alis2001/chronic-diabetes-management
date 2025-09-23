@@ -256,51 +256,62 @@ async def schedule_appointment(
 # DOCTOR DENSITY VISUALIZATION ENDPOINTS
 # ================================
 
+# ADD THIS TO services/scheduler-service/app/routers.py
+# Replace the truncated @density_ro line with this complete implementation:
+
 density_router = APIRouter(prefix="/density", tags=["Doctor Density Visualization"])
 
 @density_router.get("/doctor/{id_medico}", response_model=DoctorDensityResponse)
 async def get_doctor_density_visualization(
     id_medico: str = Path(..., description="ID Medico"),
-    start_date: date = Query(..., description="Data inizio periodo"),
-    end_date: date = Query(..., description="Data fine periodo"),
+    start_date: date = Query(default=None, description="Data inizio (default: oggi)"),
+    end_date: date = Query(default=None, description="Data fine (default: +30 giorni)"),
     density_service: DoctorDensityService = Depends(get_density_service)
 ):
     """
-    Get doctor's appointment density with visual color gradients
+    Get doctor appointment density with visual color gradients
     
-    Returns:
-    - Date-by-date appointment counts
-    - Color gradients (green → yellow → orange → red for busy dates)
-    - Statistical analysis (busiest/freest dates)
-    - Recommended scheduling dates
+    Returns dates with:
+    - Green: Very low density (0-1 appointments)
+    - Yellow: Low density (2-3 appointments)  
+    - Orange: Medium density (4-6 appointments)
+    - Red: High density (7+ appointments)
+    
+    Used for visual calendar in scheduler UI
     """
     try:
+        # Set default date range if not provided
+        if start_date is None:
+            start_date = date.today()
+        if end_date is None:
+            end_date = start_date + timedelta(days=30)
+        
         request = GetDoctorDensityRequest(
             id_medico=id_medico,
             start_date=start_date,
             end_date=end_date
         )
         
-        result = await density_service.get_doctor_density_visualization(request)
+        result = await density_service.get_doctor_density(request)
         
-        logger.info(f"📊 Density calculated for Dr. {id_medico}: {result.total_future_appointments} appointments")
+        logger.info(f"📊 Generated density visualization for Dr. {id_medico}: {result.total_future_appointments} appointments")
         return result
         
     except SchedulerServiceException as e:
         raise map_to_http_exception(e)
     except Exception as e:
         logger.error(f"❌ Error getting doctor density: {e}")
-        raise HTTPException(status_code=500, detail=f"Errore calcolo densità: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Errore densità medico: {str(e)}")
 
 @density_router.get("/doctor/{id_medico}/quick")
 async def get_quick_density_overview(
     id_medico: str = Path(..., description="ID Medico"),
-    days_ahead: int = Query(default=14, ge=7, le=30, description="Giorni da analizzare"),
+    days_ahead: int = Query(default=14, ge=7, le=90, description="Giorni da analizzare"),
     density_service: DoctorDensityService = Depends(get_density_service)
 ):
     """
-    Quick density overview for doctor - simplified response
-    Used for dashboard widgets or quick previews
+    Get simplified density overview for quick UI display
+    Returns summary statistics and next 7 days only
     """
     try:
         start_date = date.today()
@@ -312,19 +323,19 @@ async def get_quick_density_overview(
             end_date=end_date
         )
         
-        full_result = await density_service.get_doctor_density_visualization(request)
+        full_result = await density_service.get_doctor_density(request)
         
-        # Return simplified overview
+        # Return simplified response
         return {
             "success": True,
             "id_medico": id_medico,
             "doctor_name": full_result.doctor_name,
             "period_days": days_ahead,
             "total_appointments": full_result.total_future_appointments,
-            "average_per_day": full_result.average_appointments_per_day,
+            "average_per_day": full_result.average_per_day,
             "busiest_date": full_result.busiest_date,
-            "busiest_count": full_result.busiest_date_count,
-            "recommended_dates": full_result.recommended_dates[:5],
+            "busiest_count": getattr(full_result, 'busiest_count', 0),
+            "recommended_dates": getattr(full_result, 'recommended_dates', [])[:5],
             "density_summary": [
                 {
                     "date": dd.date,
@@ -332,7 +343,7 @@ async def get_quick_density_overview(
                     "level": dd.density_level,
                     "color": dd.background_color
                 }
-                for dd in full_result.date_densities[:7]  # Next 7 days only
+                for dd in full_result.dates[:7]  # Next 7 days only
             ]
         }
         

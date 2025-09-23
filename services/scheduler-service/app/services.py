@@ -1,6 +1,6 @@
 # services/scheduler-service/app/services.py
 """
-Scheduler Service Business Logic
+Scheduler Service Business Logic - COMPLETE FIXED VERSION
 Complete appointment scheduling with density visualization and exam integration
 """
 
@@ -9,6 +9,7 @@ from datetime import datetime, date, timedelta
 import httpx
 import logging
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from bson import ObjectId
 
 from .database import (
     AppointmentDensityCalculator, ExamRepository, 
@@ -18,7 +19,8 @@ from .models import (
     ScheduleAppointmentRequest, ScheduleAppointmentResponse,
     GetDoctorDensityRequest, DoctorDensityResponse, 
     GetExamsForSchedulingRequest, GetExamsResponse,
-    AppointmentDocument, DateDensity, ExamForScheduling
+    AppointmentDocument, DateDensity, ExamForScheduling,
+    DensityLevel, DENSITY_COLORS
 )
 from .exceptions import (
     DuplicateAppointmentException, PatientNotFoundException,
@@ -144,7 +146,7 @@ class AppointmentSchedulingService:
                 appointment_id=appointment_id,
                 appointment_date=request.appointment_date,
                 selected_exams_count=len(exam_details),
-                exam_details=exam_details
+                exam_details=[exam.dict() for exam in exam_details]
             )
             
         except (DuplicateAppointmentException, PastDateException, 
@@ -184,7 +186,7 @@ class AppointmentSchedulingService:
         return selected_exams
 
 # ================================
-# DENSITY VISUALIZATION SERVICE
+# DOCTOR DENSITY SERVICE - COMPLETELY FIXED
 # ================================
 
 class DoctorDensityService:
@@ -193,73 +195,124 @@ class DoctorDensityService:
     def __init__(self, db: AsyncIOMotorDatabase):
         self.db = db
         self.density_calculator = AppointmentDensityCalculator(db)
-        self.doctors_collection = db.doctors if hasattr(db, 'doctors') else None
+        self.doctors_collection = db.doctors
     
-    async def get_doctor_density_visualization(
+    async def get_doctor_density(
         self, 
         request: GetDoctorDensityRequest
     ) -> DoctorDensityResponse:
         """
-        Get doctor's appointment density with visual color gradients
-        Shows busy vs free dates with colors approaching red for density
+        Get doctor appointment density with visual color gradients
+        Main method called by density_router - FIXED TO MATCH MODELS
         """
         try:
+            logger.info(f"📊 Calculating density for Dr. {request.id_medico}")
+            
             # Get doctor information
             doctor_info = await self._get_doctor_info(request.id_medico)
             
-            # Calculate date-by-date density
-            date_densities = await self.density_calculator.calculate_doctor_density(
+            # Calculate density data using the calculator
+            density_data = await self.density_calculator.calculate_doctor_density(
                 request.id_medico,
                 request.start_date,
                 request.end_date
             )
             
-            # Get statistical summary
-            stats = await self.density_calculator.get_density_statistics(
-                request.id_medico,
-                request.start_date,
-                request.end_date
-            )
+            # Convert to DateDensity objects with colors
+            date_densities = []
+            current_date = request.start_date
             
-            # Find recommended dates (lowest density)
-            recommended_dates = [
-                dd.date for dd in date_densities 
-                if dd.appointment_count <= 2  # Consider dates with 2 or fewer appointments as recommended
-            ][:10]  # Top 10 recommendations
+            while current_date <= request.end_date:
+                # Get appointment count for this date
+                daily_count = density_data.get(current_date.isoformat(), 0)
+                
+                # Determine density level and colors
+                density_level, colors = self._calculate_density_level_and_colors(daily_count)
+                
+                date_density = DateDensity(
+                    date=current_date,
+                    day_name=current_date.strftime('%A'),
+                    appointment_count=daily_count,
+                    density_level=density_level,
+                    background_color=colors["bg"],
+                    text_color=colors["text"],
+                    is_available=current_date >= date.today()
+                )
+                date_densities.append(date_density)
+                current_date += timedelta(days=1)
             
-            return DoctorDensityResponse(
+            # Calculate statistics
+            total_appointments = sum(density_data.values())
+            total_days = (request.end_date - request.start_date).days + 1
+            average_per_day = total_appointments / total_days if total_days > 0 else 0
+            
+            # Find busiest and freest dates
+            busiest_date = None
+            freest_date = None
+            
+            if density_data:
+                busiest_date_str = max(density_data.keys(), key=lambda k: density_data[k])
+                freest_date_str = min(density_data.keys(), key=lambda k: density_data[k])
+                busiest_date = date.fromisoformat(busiest_date_str)
+                freest_date = date.fromisoformat(freest_date_str)
+            
+            # Build response matching the exact model structure
+            response = DoctorDensityResponse(
                 success=True,
                 id_medico=request.id_medico,
-                doctor_name=doctor_info.get("nome_completo", f"Medico {request.id_medico}"),
-                specialization=doctor_info.get("specializzazione", ""),
-                period_start=request.start_date,
-                period_end=request.end_date,
-                date_densities=date_densities,
-                total_future_appointments=stats.get("total_appointments", 0),
-                busiest_date=stats.get("busiest_date"),
-                busiest_date_count=stats.get("busiest_count", 0),
-                freest_dates=stats.get("freest_dates", []),
-                average_appointments_per_day=stats.get("average_per_day", 0.0),
-                recommended_dates=recommended_dates
+                doctor_name=doctor_info.get("nome_completo", f"Dr. {request.id_medico}"),
+                start_date=request.start_date,
+                end_date=request.end_date,
+                total_days=total_days,
+                dates=date_densities,
+                total_future_appointments=total_appointments,
+                average_per_day=round(average_per_day, 2),
+                busiest_date=busiest_date,
+                freest_date=freest_date
             )
             
+            logger.info(f"✅ Density calculated: {total_appointments} appointments over {total_days} days")
+            return response
+            
         except Exception as e:
-            logger.error(f"❌ Error getting doctor density: {e}")
+            logger.error(f"❌ Error calculating doctor density: {e}")
             raise DatabaseOperationException("calculating doctor density", str(e))
     
+    async def get_doctor_density_visualization(
+        self,
+        request: GetDoctorDensityRequest
+    ) -> DoctorDensityResponse:
+        """Alias method for compatibility with router calls"""
+        return await self.get_doctor_density(request)
+    
+    def _calculate_density_level_and_colors(
+        self, 
+        appointment_count: int
+    ) -> Tuple[DensityLevel, Dict[str, str]]:
+        """Calculate density level and corresponding colors"""
+        if appointment_count <= 1:
+            level = DensityLevel.VERY_LOW
+        elif appointment_count <= 3:
+            level = DensityLevel.LOW
+        elif appointment_count <= 6:
+            level = DensityLevel.MEDIUM
+        elif appointment_count <= 10:
+            level = DensityLevel.HIGH
+        else:
+            level = DensityLevel.VERY_HIGH
+        
+        colors = DENSITY_COLORS[level.value]
+        return level, colors
+    
     async def _get_doctor_info(self, id_medico: str) -> Dict[str, Any]:
-        """Get doctor information from database or hardcoded credentials"""
+        """Get doctor information from database or fallback"""
         try:
             # Try to get from database first
-            if self.doctors_collection:
-                doctor = await self.doctors_collection.find_one({"id_medico": id_medico})
-                if doctor:
-                    return doctor
+            doctor = await self.doctors_collection.find_one({"id_medico": id_medico})
+            if doctor:
+                return doctor
             
-            # Fallback to hardcoded credentials from timeline service
-            from .config import settings
-            
-            # For now, return basic info - this should be replaced with proper doctor management
+            # Fallback to basic info
             return {
                 "id_medico": id_medico,
                 "nome_completo": f"Dr. {id_medico}",
@@ -390,8 +443,11 @@ class SchedulerService:
         """
         Get complete data needed for scheduling interface
         Called when scheduler opens - returns validation, exams, and density
+        THIS IS THE MAIN ENDPOINT CALLED BY THE FRONTEND
         """
         try:
+            logger.info(f"📊 Getting scheduling data for {cf_paziente}, Dr. {id_medico}")
+            
             # Validate scheduling permission (most important check)
             validation_result = await self.appointment_service.validate_scheduling_permission(
                 cf_paziente, cronoscita_id
@@ -402,7 +458,8 @@ class SchedulerService:
                     "can_schedule": False,
                     "validation_result": validation_result,
                     "available_exams": [],
-                    "doctor_density": None
+                    "doctor_density": None,
+                    "message": validation_result.get("message", "Cannot schedule appointment")
                 }
             
             # Get available exams
@@ -415,15 +472,18 @@ class SchedulerService:
                 start_date=start_date,
                 end_date=end_date
             )
-            density_response = await self.density_service.get_doctor_density_visualization(density_request)
+            density_response = await self.density_service.get_doctor_density(density_request)
+            
+            logger.info(f"✅ Scheduling data compiled: {exams_response.total_exams} exams, {density_response.total_future_appointments} existing appointments")
             
             return {
                 "can_schedule": True,
                 "validation_result": validation_result,
-                "available_exams": exams_response.available_exams,
-                "doctor_density": density_response,
+                "available_exams": [exam.dict() for exam in exams_response.available_exams],
+                "doctor_density": density_response.dict(),
                 "total_exams": exams_response.total_exams,
-                "cronoscita_name": exams_response.cronoscita_name
+                "cronoscita_name": exams_response.cronoscita_name,
+                "message": "Scheduler data loaded successfully"
             }
             
         except Exception as e:
@@ -437,5 +497,6 @@ class SchedulerService:
                     "existing_appointment": None
                 },
                 "available_exams": [],
-                "doctor_density": None
+                "doctor_density": None,
+                "message": f"System error: {str(e)}"
             }
