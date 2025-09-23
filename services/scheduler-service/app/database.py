@@ -24,10 +24,28 @@ logger = logging.getLogger(__name__)
 mongodb_client: AsyncIOMotorClient = None
 database: AsyncIOMotorDatabase = None
 
+
+# ================================
+# MONGODB SERIALIZATION - CRITICAL FIX
+# ================================
+
+def serialize_for_mongodb(data: Any) -> Any:
+    """Convert Python objects to MongoDB-compatible format - SAME AS TIMELINE SERVICE"""
+    if isinstance(data, dict):
+        return {key: serialize_for_mongodb(value) for key, value in data.items()}
+    elif isinstance(data, list):
+        return [serialize_for_mongodb(item) for item in data]
+    elif isinstance(data, date) and not isinstance(data, datetime):
+        # Convert date to datetime for MongoDB compatibility
+        return datetime.combine(data, datetime.min.time())
+    elif isinstance(data, datetime):
+        return data  # datetime objects are fine
+    else:
+        return data
+    
 # ================================
 # CONNECTION MANAGEMENT
 # ================================
-
 async def connect_to_mongo():
     """Create database connection to diabetes_db"""
     global mongodb_client, database
@@ -235,6 +253,7 @@ class AppointmentRepository:
         try:
             # Convert Pydantic model to dict for MongoDB
             doc_dict = appointment_doc.dict()
+            doc_dict = serialize_for_mongodb(doc_dict)
             doc_dict['_id'] = ObjectId()
             doc_dict['appointment_id'] = str(doc_dict['_id'])
             
@@ -344,8 +363,8 @@ class ExamRepository:
             for result in results:
                 exam = ExamForScheduling(
                     mapping_id=str(result["_id"]),
-                    exam_name=result.get("nome_esame", "Esame Sconosciuto"),
-                    structure_name=result.get("struttura_nome", "Struttura Sconosciuta"),
+                    exam_name=result.get("nome_esame_wirgilio", "Esame Non Configurato"),
+                    structure_name=result.get("struttura_nome", "Struttura Sconosciuta"), 
                     is_active=result.get("is_active", True),
                     notes=result.get("notes", "")
                 )
