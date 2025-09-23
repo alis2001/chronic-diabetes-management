@@ -24,7 +24,8 @@ const SchedulerApp = () => {
   const [selectedExams, setSelectedExams] = useState([]);
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
-
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   // Initialize scheduler from URL parameters or postMessage
   useEffect(() => {
     initializeScheduler();
@@ -74,8 +75,6 @@ const SchedulerApp = () => {
     try {
       console.log('📅 Loading scheduling data from backend...');
       
-      // Use the dynamic API from api.js
-      // Use the dynamic API from api.js
       const data = await schedulerAPI.getSchedulingData(
         patientInfo.cf_paziente,
         patientInfo.cronoscita_id, 
@@ -84,17 +83,15 @@ const SchedulerApp = () => {
       );
 
 
-      if (!response.ok) {
-        if (response.status === 409 && data.validation_result) {
-          // Patient already has future appointment
-          setError(data.validation_result.message);
-          setSchedulingData(null);
-        } else {
-          setError(data.message || 'Errore caricamento dati');
-        }
+      if (!data.can_schedule) {
+        setError(data.validation_result?.message || 'Impossibile programmare appuntamento');
+        setSchedulingData(null);
         setLoading(false);
         return;
       }
+
+      setSchedulingData(data);
+      console.log('✅ Scheduling data loaded:', data);
 
       if (!data.can_schedule) {
         setError(data.validation_result.message);
@@ -154,10 +151,7 @@ const SchedulerApp = () => {
         patientData.id_medico
       );
 
-      if (!response.ok) {
-        setError(result.message || 'Errore durante programmazione appuntamento');
-        return;
-      }
+      console.log('✅ Appointment scheduled successfully:', result);
 
       console.log('✅ Appointment scheduled successfully:', result);
 
@@ -194,35 +188,34 @@ const SchedulerApp = () => {
     }
   };
 
-  // Generate date options for next 30 days
+  // Generate date options for selected month/year
   const getDateOptions = () => {
     const dates = [];
+    const firstDay = new Date(selectedYear, selectedMonth, 1);
+    const lastDay = new Date(selectedYear, selectedMonth + 1, 0);
     const today = new Date();
     
-    for (let i = 1; i <= 30; i++) {
-      const date = new Date(today);
-      date.setDate(today.getDate() + i);
-      
-      const dateStr = date.toISOString().split('T')[0];
-      const displayStr = date.toLocaleDateString('it-IT', {
-        weekday: 'long',
-        day: '2-digit',
-        month: 'long'
-      });
-      
-      // Get density info for this date if available
-      let density = null;
-      if (schedulingData?.doctor_density?.date_densities) {
-        density = schedulingData.doctor_density.date_densities.find(
-          d => d.date === dateStr
+    for (let day = 1; day <= lastDay.getDate(); day++) {
+        const date = new Date(selectedYear, selectedMonth, day);
+        
+        // Skip past dates
+        if (date <= today) continue;
+        
+        const dateStr = date.toISOString().split('T')[0];
+        
+        // Get density info for this date if available
+        let density = null;
+        if (schedulingData?.doctor_density?.dates) {
+        density = schedulingData.doctor_density.dates.find(
+            d => d.appointment_date === dateStr
         );
-      }
-      
-      dates.push({
+        }
+        
+        dates.push({
         value: dateStr,
-        label: displayStr,
+        date: date,
         density: density
-      });
+        });
     }
     
     return dates;
@@ -231,43 +224,31 @@ const SchedulerApp = () => {
   // Render loading state
   if (loading) {
     return (
-      <div className="scheduler-container">
-        <div className="scheduler-header">
-          <h2>📅 Programmazione Appuntamento</h2>
-        </div>
+        <div className="scheduler-container">
         <div className="loading-state">
-          <div className="loading-spinner"></div>
-          <p>Caricamento dati programmazione...</p>
+            <div className="loading-spinner"></div>
+            <p>Caricamento dati programmazione...</p>
         </div>
-      </div>
+        </div>
     );
   }
 
   // Render error state
   if (error && !schedulingData) {
     return (
-      <div className="scheduler-container">
-        <div className="scheduler-header">
-          <h2>📅 Programmazione Appuntamento</h2>
-        </div>
+        <div className="scheduler-container">
         <div className="error-state">
-          <div className="error-icon">⚠️</div>
-          <h3>Impossibile programmare appuntamento</h3>
-          <p className="error-message">{error}</p>
-          {patientData && (
-            <div className="error-details">
-              <p><strong>Paziente:</strong> {patientData.patient_name} ({patientData.cf_paziente})</p>
-              <p><strong>Patologia:</strong> {patientData.cronoscita_name}</p>
-            </div>
-          )}
-          <button 
+            <div className="error-icon">⚠️</div>
+            <h3>Impossibile programmare appuntamento</h3>
+            <p className="error-message">{error}</p>
+            <button 
             onClick={() => window.parent?.postMessage({ type: 'CLOSE_SCHEDULER' }, '*')}
             className="close-button"
-          >
+            >
             Chiudi
-          </button>
+            </button>
         </div>
-      </div>
+        </div>
     );
   }
 
@@ -275,16 +256,6 @@ const SchedulerApp = () => {
 
   return (
     <div className="scheduler-container">
-      {/* Header */}
-      <div className="scheduler-header">
-        <h2>📅 Programmazione Appuntamento</h2>
-        {patientData && (
-          <div className="patient-info">
-            <p><strong>{patientData.patient_name}</strong> ({patientData.cf_paziente})</p>
-            <p className="cronoscita-name">{patientData.cronoscita_name}</p>
-          </div>
-        )}
-      </div>
 
       {error && (
         <div className="error-banner">
@@ -293,30 +264,66 @@ const SchedulerApp = () => {
         </div>
       )}
 
-      {/* Date Selection */}
+      {/* Professional Month/Date Selection */}
       <div className="date-selection-section">
-        <h3>📆 Seleziona Data Appuntamento</h3>
-        <div className="date-grid">
-          {dateOptions.map(dateOption => (
-            <div 
-              key={dateOption.value}
-              className={`date-card ${selectedDate === dateOption.value ? 'selected' : ''}`}
-              onClick={() => setSelectedDate(dateOption.value)}
-              style={{
-                backgroundColor: dateOption.density?.background_color || '#f8f9fa',
-                color: dateOption.density?.text_color || '#333',
-                cursor: 'pointer'
-              }}
+        {/* Month/Year Picker */}
+        <div className="month-year-selector">
+            <div className="month-year-controls">
+            <select 
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+                className="month-select"
             >
-              <div className="date-label">{dateOption.label}</div>
-              {dateOption.density && (
-                <div className="density-info">
-                  <small>{dateOption.density.appointment_count} appuntamenti</small>
-                  <div className="density-level">{dateOption.density.density_description}</div>
-                </div>
-              )}
+                {Array.from({length: 12}, (_, i) => (
+                <option key={i} value={i}>
+                    {new Date(2024, i, 1).toLocaleDateString('it-IT', { month: 'long' })}
+                </option>
+                ))}
+            </select>
+            <select 
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+                className="year-select"
+            >
+                {Array.from({length: 2}, (_, i) => (
+                <option key={i} value={new Date().getFullYear() + i}>
+                    {new Date().getFullYear() + i}
+                </option>
+                ))}
+            </select>
             </div>
-          ))}
+        </div>
+        
+        {/* Date Grid */}
+        <div className="professional-date-picker">
+            {getDateOptions().map(dateOption => {
+            const dayNum = dateOption.date.getDate();
+            const dayName = dateOption.date.toLocaleDateString('it-IT', { weekday: 'short' });
+            
+            return (
+                <div 
+                key={dateOption.value}
+                className={`date-option ${selectedDate === dateOption.value ? 'selected' : ''}`}
+                onClick={() => setSelectedDate(dateOption.value)}
+                style={{
+                    backgroundColor: dateOption.density?.background_color || '#f8fafc',
+                    borderColor: selectedDate === dateOption.value ? '#2563eb' : '#e2e8f0'
+                }}
+                >
+                <div className="date-day">{dayName}</div>
+                <div className="date-number">{dayNum}</div>
+                {dateOption.density && (
+                    <div className="density-indicator">
+                    <span className="density-dot" style={{
+                        backgroundColor: dateOption.density.appointment_count > 5 ? '#ef4444' : 
+                                    dateOption.density.appointment_count > 2 ? '#f59e0b' : '#10b981'
+                    }}></span>
+                    <span className="density-count">{dateOption.density.appointment_count}</span>
+                    </div>
+                )}
+                </div>
+            );
+            })}
         </div>
       </div>
 

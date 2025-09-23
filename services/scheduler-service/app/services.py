@@ -230,7 +230,7 @@ class DoctorDensityService:
                 density_level, colors = self._calculate_density_level_and_colors(daily_count)
                 
                 date_density = DateDensity(
-                    date=current_date,
+                    appointment_date=current_date,
                     day_name=current_date.strftime('%A'),
                     appointment_count=daily_count,
                     density_level=density_level,
@@ -264,7 +264,7 @@ class DoctorDensityService:
                 start_date=request.start_date,
                 end_date=request.end_date,
                 total_days=total_days,
-                dates=date_densities,
+                dates=[density.dict() for density in date_densities],
                 total_future_appointments=total_appointments,
                 average_per_day=round(average_per_day, 2),
                 busiest_date=busiest_date,
@@ -366,7 +366,7 @@ class ExamSelectionService:
                 success=True,
                 cronoscita_id=request.cronoscita_id,
                 cronoscita_name=cronoscita_name,
-                available_exams=available_exams,
+                available_exams=[exam.dict() for exam in available_exams],
                 total_exams=len(available_exams)
             )
             
@@ -479,8 +479,14 @@ class SchedulerService:
             return {
                 "can_schedule": True,
                 "validation_result": validation_result,
-                "available_exams": [exam.dict() for exam in exams_response.available_exams],
-                "doctor_density": density_response.dict(),
+                "available_exams": exams_response.available_exams,  # Already List[Dict]
+                "doctor_density": {
+                    "success": density_response.success,
+                    "id_medico": density_response.id_medico,
+                    "doctor_name": density_response.doctor_name,
+                    "dates": density_response.dates,  # Already List[Dict]
+                    "total_future_appointments": density_response.total_future_appointments
+                },
                 "total_exams": exams_response.total_exams,
                 "cronoscita_name": exams_response.cronoscita_name,
                 "message": "Scheduler data loaded successfully"

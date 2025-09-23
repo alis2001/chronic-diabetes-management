@@ -42,7 +42,7 @@ class ExamForScheduling(BaseModel):
 
 class DateDensity(BaseModel):
     """Single date with appointment density visualization"""
-    date: date = Field(..., description="Data")
+    appointment_date: date = Field(..., description="Data")
     day_name: str = Field(..., description="Nome giorno")
     appointment_count: int = Field(default=0, description="Numero appuntamenti")
     density_level: DensityLevel = Field(default=DensityLevel.VERY_LOW)

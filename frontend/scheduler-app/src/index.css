@@ -149,79 +149,152 @@ body {
 }
 
 /* ================================
-   DATE SELECTION - VISUAL DENSITY
+   PROFESSIONAL MONTH/DATE PICKER
    ================================ */
 
 .date-selection-section {
-  padding: 30px;
+  padding: 24px 30px;
   border-bottom: 1px solid #e2e8f0;
 }
 
-.date-selection-section h3 {
+.month-year-selector {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.month-year-selector h3 {
   color: #1e40af;
   font-size: 16px;
   font-weight: 600;
-  margin-bottom: 20px;
+  margin: 0;
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.date-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+.month-year-controls {
+  display: flex;
   gap: 12px;
 }
 
-.date-card {
-  padding: 16px;
-  border: 2px solid transparent;
-  border-radius: 12px;
+.month-select, .year-select {
+  padding: 8px 12px;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  background: white;
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
   cursor: pointer;
-  transition: all 0.2s ease;
-  text-align: center;
-  min-height: 80px;
+  transition: border-color 0.2s ease;
+}
+
+.month-select:focus, .year-select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.month-select {
+  min-width: 140px;
+  text-transform: capitalize;
+}
+
+.year-select {
+  min-width: 80px;
+}
+
+.professional-date-picker {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+  max-width: 100%;
+}
+
+.date-option {
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  align-items: center;
+  padding: 12px 8px;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: white;
   position: relative;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  min-height: 75px;
+  justify-content: center;
+  aspect-ratio: 1;
 }
 
-/* Density Color Gradients - Approaching Red for Busy Dates */
-.date-card {
-  /* Default: Very Light (Free) */
-  background-color: #E8F5E8 !important;
-  color: #2D5A2D !important;
-}
-
-.date-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+.date-option:hover {
   border-color: #3b82f6;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.15);
 }
 
-.date-card.selected {
-  border-color: #1d4ed8 !important;
-  box-shadow: 0 0 0 3px rgba(29, 78, 216, 0.2);
-  transform: translateY(-2px);
+.date-option.selected {
+  border-color: #2563eb;
+  background: #eff6ff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
-.date-label {
-  font-weight: 600;
-  font-size: 14px;
-  text-transform: capitalize;
-  margin-bottom: 8px;
-}
-
-.density-info {
-  font-size: 11px;
-  opacity: 0.8;
-}
-
-.density-level {
+.date-day {
+  font-size: 10px;
+  color: #6b7280;
   font-weight: 500;
-  margin-top: 2px;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.date-number {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.density-indicator {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 9px;
+}
+
+.density-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+}
+
+.density-count {
+  color: #6b7280;
+  font-weight: 600;
+  font-size: 8px;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .month-year-selector {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  
+  .professional-date-picker {
+    grid-template-columns: repeat(7, 1fr);
+    gap: 6px;
+  }
+  
+  .date-option {
+    min-height: 60px;
+    padding: 8px 4px;
+  }
 }
 
 /* ================================

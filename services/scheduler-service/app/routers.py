@@ -338,7 +338,7 @@ async def get_quick_density_overview(
             "recommended_dates": getattr(full_result, 'recommended_dates', [])[:5],
             "density_summary": [
                 {
-                    "date": dd.date,
+                    "date": dd["appointment_date"],
                     "count": dd.appointment_count,
                     "level": dd.density_level,
                     "color": dd.background_color
