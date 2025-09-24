@@ -858,6 +858,59 @@ class RefertoService:
             logger.error(f"Errore ricerca referto oggi: {e}")
             return None
 
+    async def get_todays_referto_with_cronoscita(self, cf_paziente: str, id_medico: str, patologia: str) -> Optional[Dict[str, Any]]:
+        """Ottieni referto di oggi per paziente, medico E cronoscita specifica"""
+        
+        # Validazione medico
+        if not DoctorService.validate_doctor(id_medico):
+            raise DoctorValidationException("Credenziali medico non valide")
+        
+        # ✅ CRITICAL: Validate cronoscita parameter
+        if not patologia or not patologia.strip():
+            raise ValueError("Cronoscita parameter required per ricerca referto oggi")
+        
+        # ✅ CRONOSCITA-SPECIFIC: Validate patient exists in THIS specific cronoscita
+        patient = await self.patient_repo.find_by_cf_and_patologia(cf_paziente, patologia)
+        if not patient:
+            raise PatientNotFoundException(
+                f"Paziente {cf_paziente} non registrato per cronoscita '{patologia}'"
+            )
+        
+        # Cerca referto di oggi per questa cronoscita specifica
+        from datetime import date, datetime
+        today = date.today()
+        
+        # Create datetime range for today
+        start_of_day = datetime.combine(today, datetime.min.time())
+        end_of_day = datetime.combine(today, datetime.max.time())
+        
+        try:
+            # ✅ CRONOSCITA-ISOLATED QUERY: Filter by CF, doctor, cronoscita AND today's date
+            referto = await self.referto_repo.collection.find_one({
+                "cf_paziente": cf_paziente.upper(),
+                "id_medico": id_medico,
+                "patologia": patologia,  # ✅ CRITICAL: Cronoscita isolation
+                "data_compilazione": {
+                    "$gte": start_of_day,
+                    "$lte": end_of_day
+                }
+            })
+            
+            if referto:
+                logger.info(f"✅ Found today's referto for cronoscita '{patologia}': {referto.get('referto_id')}")
+                # Convert ObjectId to string for JSON serialization
+                if '_id' in referto:
+                    referto["id"] = str(referto["_id"])
+                    del referto["_id"]
+                return referto
+            else:
+                logger.info(f"ℹ️ No referto found today for cronoscita '{patologia}'")
+                return None
+                
+        except Exception as e:
+            logger.error(f"❌ Error getting today's referto for cronoscita: {e}")
+            raise DatabaseException(f"Errore ricerca referto oggi: {str(e)}")
+
     async def get_patient_referti(self, cf_paziente: str, id_medico: str, patologia: str) -> List[Dict[str, Any]]:
         """Ottieni referti di un paziente per cronoscita specifica - CRONOSCITA ISOLATED"""
         

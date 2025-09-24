@@ -625,24 +625,52 @@ async def create_voice_workflow_url(
 async def get_todays_referto(
     cf_paziente: str,
     id_medico: str = Query(..., description="ID Medico per autorizzazione"),
+    patologia: str = Query(..., description="Cronoscita specifica (OBBLIGATORIO)"),  # ✅ ADD THIS
     referto_service: RefertoService = Depends(get_referto_service)
 ):
     """
-    Ottieni referto di oggi per paziente e medico
+    Ottieni referto di oggi per paziente, medico E cronoscita specifica
     
-    - Restituisce referto esistente se già salvato oggi
-    - Usato dal frontend per mostrare referto salvato e disabilitare editing
+    ✅ ENHANCED: Now requires cronoscita parameter for proper isolation
+    - Returns referto only if saved today for this specific cronoscita
+    - Used by frontend to load existing referto and disable editing
     """
     try:
-        referto = await referto_service.get_todays_referto(cf_paziente, id_medico)
+        # ✅ VALIDATION: Ensure cronoscita parameter is provided
+        if not patologia or not patologia.strip():
+            logger.error(f"🚨 Today's referto endpoint called without cronoscita: CF={cf_paziente}, Doctor={id_medico}")
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "CRONOSCITA_PARAMETER_REQUIRED",
+                    "message": "❌ PARAMETRO CRONOSCITA OBBLIGATORIO per referto oggi.\nI referti sono isolati per cronoscita per sicurezza.",
+                    "cf_paziente": cf_paziente,
+                    "required_parameter": "patologia"
+                }
+            )
+        
+        logger.info(f"✅ Today's referto API called for cronoscita: {cf_paziente} → '{patologia}' by Dr.{id_medico}")
+        
+        # ✅ FIXED: Call cronoscita-aware method
+        referto = await referto_service.get_todays_referto_with_cronoscita(cf_paziente, id_medico, patologia)
+        
         return {
             "success": True,
             "cf_paziente": cf_paziente,
+            "cronoscita": patologia,
             "has_referto_today": referto is not None,
-            "referto": referto
+            "referto": referto,
+            "isolation_verified": True  # Indicates cronoscita isolation is active
         }
+        
     except TimelineServiceException as e:
         raise map_to_http_exception(e)
+    except ValueError as e:
+        logger.error(f"❌ Today's referto cronoscita validation error: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"❌ Unexpected today's referto error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Errore referto oggi: {str(e)}")
 
 # ================================
 # RACCOLTA TUTTI I ROUTER

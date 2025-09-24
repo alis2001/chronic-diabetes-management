@@ -244,12 +244,19 @@ export const timelineAPI = {
     apiRequest(`/api/timeline/appointments/available-types/${cf_paziente}?id_medico=${id_medico}`),
 
   saveReferto: async (refertoData) => {
-    const response = await apiRequest('/referti/save', {
+    console.log('📤 API: Saving referto with data:', {
+      cf_paziente: refertoData.cf_paziente,
+      patologia: refertoData.patologia,
+      has_text: !!refertoData.testo_referto
+    });
+    
+    const response = await apiRequest('/api/timeline/referti/save', {
       method: 'POST',
       body: JSON.stringify({
         cf_paziente: refertoData.cf_paziente,
         id_medico: refertoData.id_medico,
         appointment_id: refertoData.appointment_id || null,
+        patologia: refertoData.patologia,  // ✅ CRITICAL: Include cronoscita
         testo_referto: refertoData.testo_referto,
         diagnosi: refertoData.diagnosi || null,
         terapia_prescritta: refertoData.terapia_prescritta || null,
@@ -257,24 +264,60 @@ export const timelineAPI = {
         data_visita: refertoData.data_visita || new Date().toISOString().split('T')[0]
       })
     });
+    
+    console.log('✅ API: Referto save response:', response);
     return response;
   },
 
   checkCanScheduleNext: async (cf_paziente, id_medico) => {
+    console.log('📤 API: Checking can schedule next:', { cf_paziente, id_medico });
+    
     const params = new URLSearchParams({ id_medico });
-    const response = await apiRequest(`/referti/can-schedule/${cf_paziente}?${params}`);
+    const response = await apiRequest(`/api/timeline/referti/can-schedule/${cf_paziente}?${params}`);
+    
+    console.log('✅ API: Can schedule response:', response);
     return response;
   },
 
-  getPatientReferti: async (cf_paziente, id_medico) => {
-    const params = new URLSearchParams({ id_medico });
-    const response = await apiRequest(`/referti/patient/${cf_paziente}?${params}`);
+  getPatientReferti: async (cf_paziente, id_medico, patologia) => {
+    if (!patologia) {
+      throw new APIError('Patologia parameter required for referti lookup', 400);
+    }
+    
+    console.log('📤 API: Getting patient referti:', {
+      cf_paziente,
+      id_medico,
+      patologia
+    });
+    
+    const params = new URLSearchParams({ 
+      id_medico,
+      patologia  // ✅ CRITICAL: Include cronoscita parameter
+    });
+    
+    const response = await apiRequest(`/api/timeline/referti/patient/${cf_paziente}?${params}`);
+    console.log('✅ API: Patient referti response:', response);
     return response;
   },
 
-  getTodaysReferto: async (cf_paziente, id_medico) => {
-    const params = new URLSearchParams({ id_medico });
-    const response = await apiRequest(`/referti/today/${cf_paziente}?${params}`);
+  getTodaysReferto: async (cf_paziente, id_medico, patologia) => {
+    if (!patologia) {
+      throw new APIError('Patologia parameter required for referto lookup', 400);
+    }
+    
+    console.log('📤 API: Getting today\'s referto:', {
+      cf_paziente,
+      id_medico, 
+      patologia
+    });
+    
+    const params = new URLSearchParams({ 
+      id_medico,
+      patologia  // ✅ CRITICAL: Include cronoscita parameter
+    });
+    
+    const response = await apiRequest(`/api/timeline/referti/today/${cf_paziente}?${params}`);
+    console.log('✅ API: Today\'s referto response:', response);
     return response;
   }
 };

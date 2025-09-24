@@ -766,7 +766,7 @@ export const InnovativeTimeline = ({ appointments, patientId, doctorId, onTimeli
 // 🔥 STEP 2: PROFESSIONAL TABBED SECTION
 // ================================
 
-const ProfessionalTabs = ({ patientId, doctorId, onRefertoSaved }) => {
+const ProfessionalTabs = ({ patientId, doctorId, patologia, onRefertoSaved }) => {
   const [activeTab, setActiveTab] = useState('refertazione');
   const [referto, setReferto] = useState('');
   const [diario, setDiario] = useState('');
@@ -836,8 +836,12 @@ const ProfessionalTabs = ({ patientId, doctorId, onRefertoSaved }) => {
   };
 
   useEffect(() => {
-    loadExistingReferto();
-  }, [patientId, doctorId]);
+    if (patientId && doctorId && patologia) {
+      loadExistingReferto();
+    } else {
+      console.warn('⚠️ ProfessionalTabs: Missing required props for loadExistingReferto');
+    }
+  }, [patientId, doctorId, patologia]);
 
   const handleVoiceRecording = async () => {
     try {
@@ -903,32 +907,55 @@ const ProfessionalTabs = ({ patientId, doctorId, onRefertoSaved }) => {
   };
 
   const loadExistingReferto = async () => {
-    if (!patientId || !doctorId) return;
+    if (!patientId || !doctorId || !patologia) {
+      console.warn('⚠️ Missing data for referto loading:', {
+        patientId: !!patientId,
+        doctorId: !!doctorId,
+        patologia: !!patologia
+      });
+      return;
+    }
 
     setLoadingExistingReferto(true);
     try {
-      const response = await timelineAPI.getTodaysReferto(patientId, doctorId);
+      console.log('🔍 Loading existing referto with cronoscita context:', {
+        cf_paziente: patientId,
+        id_medico: doctorId,
+        patologia: patologia
+      });
+
+      // ✅ FIXED: Pass patologia parameter to get cronoscita-specific referto
+      const response = await timelineAPI.getTodaysReferto(patientId, doctorId, patologia);
       
       if (response.success && response.has_referto_today && response.referto) {
-        // Found existing referto for today
+        // Found existing referto for today in this cronoscita
         setHasExistingReferto(true);
         setExistingRefertoData(response.referto);
         setReferto(response.referto.testo_referto || '');
         setRefertoSaved(true);
-        setSaveMessage('Referto già salvato oggi ✅');
-        console.log('✅ Loaded existing referto:', response.referto);
+        setSaveMessage('Referto già salvato oggi per questa cronoscita ✅');
+        console.log('✅ Loaded existing referto for cronoscita:', {
+          cronoscita: patologia,
+          referto_id: response.referto.referto_id
+        });
       } else {
-        // No existing referto for today
+        // No existing referto for today in this cronoscita
         setHasExistingReferto(false);
         setExistingRefertoData(null);
         setReferto('');
         setRefertoSaved(false);
         setSaveMessage('');
+        console.log('ℹ️ No existing referto found for today in cronoscita:', patologia);
       }
     } catch (error) {
       console.error('❌ Error loading existing referto:', error);
       setHasExistingReferto(false);
       setExistingRefertoData(null);
+      
+      // Don't show error to user for missing referto - this is expected behavior
+      if (!error.message?.includes('404') && !error.message?.includes('not found')) {
+        console.warn('⚠️ Unexpected error loading referto:', error.message);
+      }
     }
     setLoadingExistingReferto(false);
   };
@@ -955,12 +982,22 @@ const ProfessionalTabs = ({ patientId, doctorId, onRefertoSaved }) => {
           setSaveMessage('');
 
           try {
+            // ✅ CRITICAL FIX: Include patologia (cronoscita) in referto data
             const refertoData = {
               cf_paziente: patientId,
               id_medico: doctorId,
               testo_referto: referto,
-              data_visita: new Date().toISOString().split('T')[0]
+              data_visita: new Date().toISOString().split('T')[0],
+              
+              // ✅ THIS WAS MISSING - CAUSES 422 ERROR!
+              patologia: patologia  // Add cronoscita context from workspace
             };
+
+            console.log('💾 Saving referto with cronoscita context:', {
+              cf_paziente: patientId,
+              cronoscita: patologia,
+              text_length: referto.length
+            });
 
             const response = await timelineAPI.saveReferto(refertoData);
             
@@ -968,16 +1005,25 @@ const ProfessionalTabs = ({ patientId, doctorId, onRefertoSaved }) => {
               setRefertoSaved(true);
               setHasExistingReferto(true);
               setSaveMessage('Referto salvato con successo! ✅');
-              console.log('✅ Referto saved successfully:', response);
+              console.log('✅ Referto saved successfully with cronoscita:', response);
+              
               if (onRefertoSaved) {
                 onRefertoSaved();
               }
             } else {
-              setSaveMessage('Errore nel salvataggio del referto');
+              setSaveMessage(`Errore: ${response.message || 'Salvataggio fallito'}`);
             }
           } catch (error) {
             console.error('❌ Error saving referto:', error);
-            setSaveMessage('Errore di connessione durante il salvataggio');
+            
+            // Better error messaging based on error type
+            if (error.message?.includes('422') || error.message?.includes('Unprocessable')) {
+              setSaveMessage('❌ Errore validazione dati. Verificare cronoscita selezionata.');
+            } else if (error.message?.includes('cronoscita') || error.message?.includes('Cronoscita')) {
+              setSaveMessage('❌ Errore cronoscita. Riselezionare cronoscita corretta.');
+            } else {
+              setSaveMessage('❌ Errore di connessione durante il salvataggio');
+            }
           }
 
           setSaving(false);
@@ -1807,10 +1853,10 @@ Ricaricare la pagina e selezionare la cronoscita corretta.`;
         onOpenScheduler={handleOpenScheduler} // UPDATED - Use new handler
       />
 
-      {/* 🔥 PROFESSIONAL TABBED SECTION */}
       <ProfessionalTabs 
         patientId={patientId} 
         doctorId={doctorId}
+        patologia={patologia}
         onRefertoSaved={checkCanScheduleNext}
       />
 
