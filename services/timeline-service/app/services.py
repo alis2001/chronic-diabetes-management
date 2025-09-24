@@ -617,7 +617,9 @@ class TimelineService:
         if patient.get("cronoscita_id") or patient.get("patologia"):
             # Filter appointments by Cronoscita to avoid showing wrong data
             cronoscita_filter = patient.get("cronoscita_id") or patient.get("patologia")
-            all_appointments = await self.appointment_repo.get_appointments_by_patient(cf_paziente)
+            
+            # ✅ FIXED METHOD CALL - Use the correct repository method name
+            all_appointments = await self.appointment_repo.get_patient_appointments(cf_paziente)
             
             # Filter to only appointments for this Cronoscita
             appointments = [
@@ -629,7 +631,8 @@ class TimelineService:
             logger.info(f"📋 Filtered {len(appointments)} appointments for Cronoscita {patient.get('patologia')}")
         else:
             # Fallback: get all appointments
-            appointments = await self.appointment_repo.get_appointments_by_patient(cf_paziente)
+            # ✅ FIXED METHOD CALL - Use the correct repository method name  
+            appointments = await self.appointment_repo.get_patient_appointments(cf_paziente)
         
         # Categorizza appuntamenti per data
         today = date.today()
@@ -638,7 +641,6 @@ class TimelineService:
         successivo = []
         
         for apt in appointments:
-
             appointment_datetime = (
                 apt.get("appointment_date") or 
                 apt.get("scheduled_date") or 
@@ -682,49 +684,17 @@ class TimelineService:
             demographics = patient["demographics"]
             nome = demographics.get('nome', '').strip()
             cognome = demographics.get('cognome', '').strip()
-            if nome or cognome:
-                patient_name = f"{nome} {cognome}".strip()
+            if nome and cognome:
+                patient_name = f"{nome} {cognome}"
+            elif nome:
+                patient_name = nome
         
-        # CRITICAL: Get cronoscita_id from patient data
-        cronoscita_id = None
-        patologia_name = patient.get("patologia", "")
+        # Format pathology name and cronoscita_id
+        patologia_name = patient.get("patologia", patologia or "Sconosciuta")
+        cronoscita_id = patient.get("cronoscita_id") or patient.get("patologia")
         
-        # Try to extract cronoscita_id from patient data
-        if patient.get("cronoscita_id"):
-            cronoscita_id = patient["cronoscita_id"]
-        elif patient.get("pathology_id"):
-            cronoscita_id = patient["pathology_id"]
-        elif patient.get("patologia_id"):
-            cronoscita_id = patient["patologia_id"]
-        else:
-            # Try to lookup cronoscita_id by patologia name
-            try:
-                from .cronoscita_repository import CronoscitaRepository
-                cronoscita_repo = CronoscitaRepository(self.patient_repo.db)
-                cronoscita_id = await cronoscita_repo.find_cronoscita_id_by_name(patologia_name)
-                logger.info(f"📋 Found cronoscita_id by name lookup: {cronoscita_id}")
-            except Exception as e:
-                logger.warning(f"⚠️ Could not lookup cronoscita_id by name: {e}")
+        logger.info(f"✅ Timeline loaded for {cf_paziente} in Cronoscita {patologia_name}: {len(precedenti)} precedenti, {len(oggi)} oggi, {len(successivo)} futuri")
         
-        if not cronoscita_id:
-            logger.warning(f"⚠️ Missing cronoscita_id for patient {cf_paziente} - scheduler integration may fail")
-        
-        def _normalize_appointment_date(appointment_datetime):
-            """Normalize appointment datetime to date object for comparison"""
-            if appointment_datetime is None:
-                return today  # Default to today if no date
-            elif isinstance(appointment_datetime, datetime):
-                return appointment_datetime.date()
-            elif isinstance(appointment_datetime, date):
-                return appointment_datetime
-            elif isinstance(appointment_datetime, str):
-                try:
-                    return datetime.fromisoformat(appointment_datetime.replace('Z', '+00:00')).date()
-                except:
-                    return datetime.strptime(appointment_datetime[:10], "%Y-%m-%d").date()
-            else:
-                return today
-
         return TimelineResponse(
             patient_id=cf_paziente,
             patient_name=patient_name,
