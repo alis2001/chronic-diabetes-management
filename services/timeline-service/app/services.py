@@ -582,12 +582,15 @@ class TimelineService:
         self.patient_repo = patient_repo
     
     async def get_patient_timeline(self, cf_paziente: str, id_medico: str, patologia: str = None) -> TimelineResponse:
-        """Ottieni timeline completa paziente per Cronoscita specifica"""
+        """Ottieni timeline completa paziente per Cronoscita specifica - FIXED VERSION"""
         # Validazioni
         if not DoctorService.validate_doctor(id_medico):
             raise DoctorValidationException("Credenziali medico non valide")
         
-        # ✅ CRITICAL: If patologia specified, get timeline for specific Cronoscita
+        # ✅ CRITICAL FIX: Initialize patient variable
+        patient = None
+        
+        # ✅ STEP 1: If patologia specified, get timeline for specific Cronoscita
         if patologia:
             patient = await self.patient_repo.find_by_cf_and_patologia(cf_paziente, patologia)
             if not patient:
@@ -607,10 +610,11 @@ class TimelineService:
                 raise PatientNotFoundException(f"Paziente {cf_paziente} non trovato")
             patologia = patient.get("patologia", "")
         
-        # Trova paziente
-        patient = await self.patient_repo.find_by_cf(cf_paziente)
-        if not patient:
-            raise PatientNotFoundException(f"Paziente {cf_paziente} non trovato")
+        # ✅ CRITICAL FIX: REMOVED THE DUPLICATE LOOKUP THAT WAS CAUSING THE BUG
+        # OLD BUGGY CODE (REMOVED):
+        # patient = await self.patient_repo.find_by_cf(cf_paziente)  # This was overwriting correct Cronoscita!
+        
+        # ✅ Now patient variable contains the CORRECT Cronoscita-specific data
         
         # ✅ Get appointments for this specific Cronoscita only
         appointments = []
@@ -618,7 +622,7 @@ class TimelineService:
             # Filter appointments by Cronoscita to avoid showing wrong data
             cronoscita_filter = patient.get("cronoscita_id") or patient.get("patologia")
             
-            # ✅ FIXED METHOD CALL - Use the correct repository method name
+            # Get all appointments for patient
             all_appointments = await self.appointment_repo.get_patient_appointments(cf_paziente)
             
             # Filter to only appointments for this Cronoscita
@@ -630,8 +634,7 @@ class TimelineService:
             ]
             logger.info(f"📋 Filtered {len(appointments)} appointments for Cronoscita {patient.get('patologia')}")
         else:
-            # Fallback: get all appointments
-            # ✅ FIXED METHOD CALL - Use the correct repository method name  
+            # Fallback: get all appointments  
             appointments = await self.appointment_repo.get_patient_appointments(cf_paziente)
         
         # Categorizza appuntamenti per data
@@ -644,61 +647,42 @@ class TimelineService:
             appointment_datetime = (
                 apt.get("appointment_date") or 
                 apt.get("scheduled_date") or 
-                apt.get("appointment_datetime")
+                apt.get("data_appuntamento")
             )
             
-            # Convert to datetime if needed
-            if isinstance(appointment_datetime, str):
-                try:
-                    appointment_datetime = datetime.fromisoformat(appointment_datetime.replace('Z', '+00:00'))
-                except:
-                    appointment_datetime = datetime.strptime(appointment_datetime[:10], "%Y-%m-%d")
-            elif isinstance(appointment_datetime, date) and not isinstance(appointment_datetime, datetime):
-                appointment_datetime = datetime.combine(appointment_datetime, datetime.min.time().replace(hour=9))
-            
-            # Extract date for comparison
-            appointment_date = appointment_datetime.date() if appointment_datetime else today
-            
-            # Create AppointmentSummary with CORRECT field mapping
-            apt_summary = AppointmentSummary(
-                appointment_id=apt.get("appointment_id", str(apt.get("_id", ""))),
-                date=appointment_date.strftime("%Y-%m-%d"),  # FIXED: "date" not "appointment_date"
-                time=appointment_datetime.strftime("%H:%M") if appointment_datetime else "09:00",  # FIXED: Added missing "time"
-                type=apt.get("appointment_type", "VISITA_SPECIALISTICA"),  # FIXED: "type" not "appointment_type"
-                status=apt.get("status", "SCHEDULED"),
-                priority=apt.get("priority", "NORMAL"),
-                location=apt.get("location", "ASL Roma 1"),
-                notes=apt.get("doctor_notes") or apt.get("notes")
-            )
-            
-            if appointment_date < today:
-                precedenti.append(apt_summary)
-            elif appointment_date == today:
-                oggi.append(apt_summary)
-            else:
-                successivo.append(apt_summary)
+            if appointment_datetime:
+                appointment_date = _normalize_appointment_date(appointment_datetime)
+                
+                if appointment_date < today:
+                    precedenti.append(_format_appointment_for_timeline(apt))
+                elif appointment_date == today:
+                    oggi.append(_format_appointment_for_timeline(apt))
+                else:
+                    successivo.append(_format_appointment_for_timeline(apt))
         
-        # Ottieni nome paziente
-        patient_name = None
-        if patient.get("demographics"):
-            demographics = patient["demographics"]
-            nome = demographics.get('nome', '').strip()
-            cognome = demographics.get('cognome', '').strip()
-            if nome and cognome:
-                patient_name = f"{nome} {cognome}"
-            elif nome:
-                patient_name = nome
+        # Sort appointments
+        precedenti.sort(key=lambda x: x["date"], reverse=True)
+        oggi.sort(key=lambda x: x.get("scheduled_time", ""))
+        successivo.sort(key=lambda x: x["date"])
         
-        # Format pathology name and cronoscita_id
+        # Extract patient name
+        demographics = patient.get("demographics", {})
+        nome = demographics.get("nome", "")
+        cognome = demographics.get("cognome", "")
+        patient_name = f"{nome} {cognome}".strip()
+        if not patient_name:
+            patient_name = nome
+        
+        # ✅ CRITICAL: Use the SPECIFIC Cronoscita data, not generic fallback
         patologia_name = patient.get("patologia", patologia or "Sconosciuta")
         cronoscita_id = patient.get("cronoscita_id") or patient.get("patologia")
         
-        logger.info(f"✅ Timeline loaded for {cf_paziente} in Cronoscita {patologia_name}: {len(precedenti)} precedenti, {len(oggi)} oggi, {len(successivo)} futuri")
+        logger.info(f"✅ Timeline loaded for {cf_paziente} in SPECIFIC Cronoscita {patologia_name}: {len(precedenti)} precedenti, {len(oggi)} oggi, {len(successivo)} futuri")
         
         return TimelineResponse(
             patient_id=cf_paziente,
             patient_name=patient_name,
-            patologia=patient.get("patologia", patologia_name),  # Use specific Cronoscita
+            patologia=patologia_name,  # ✅ This will now be the CORRECT Cronoscita
             cronoscita_id=cronoscita_id,  # CRITICAL for scheduler
             patologia_id=cronoscita_id,   # Alias for compatibility
             enrollment_date=patient["enrollment_date"].strftime("%d/%m/%Y"),
