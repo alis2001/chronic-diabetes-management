@@ -132,12 +132,23 @@ class AppointmentRepository:
             raise DatabaseException(f"Failed to create appointment: {str(e)}")
     
     async def find_by_patient(self, cf_paziente: str) -> List[Dict[str, Any]]:
-        """Find all appointments for a patient"""
+        """Find all appointments for a patient - FIXED for Scheduler Service compatibility"""
         try:
             cursor = self.collection.find(
                 {"cf_paziente": cf_paziente.upper()}
-            ).sort("scheduled_date", 1)
-            return await cursor.to_list(length=None)
+            ).sort([
+                ("scheduled_date", 1),     # Timeline Service appointments
+                ("appointment_date", 1)    # Scheduler Service appointments  
+            ])
+            
+            appointments = await cursor.to_list(length=None)
+            
+            logger.info(f"📅 Found {len(appointments)} appointments for patient {cf_paziente}")
+            if appointments:
+                logger.debug(f"📋 Sample appointment fields: {list(appointments[0].keys())}")
+                
+            return appointments
+            
         except Exception as e:
             logger.error(f"Error finding appointments for patient {cf_paziente}: {e}")
             raise DatabaseException(f"Failed to find appointments: {str(e)}")

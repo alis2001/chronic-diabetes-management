@@ -567,20 +567,35 @@ class TimelineService:
         successivo = []
         
         for apt in appointments:
-            appointment_date = apt.get("appointment_date")
-            if isinstance(appointment_date, datetime):
-                appointment_date = appointment_date.date()
-            elif isinstance(appointment_date, str):
-                appointment_date = datetime.strptime(appointment_date, "%Y-%m-%d").date()
+
+            appointment_datetime = (
+                apt.get("appointment_date") or 
+                apt.get("scheduled_date") or 
+                apt.get("appointment_datetime")
+            )
             
+            # Convert to datetime if needed
+            if isinstance(appointment_datetime, str):
+                try:
+                    appointment_datetime = datetime.fromisoformat(appointment_datetime.replace('Z', '+00:00'))
+                except:
+                    appointment_datetime = datetime.strptime(appointment_datetime[:10], "%Y-%m-%d")
+            elif isinstance(appointment_datetime, date) and not isinstance(appointment_datetime, datetime):
+                appointment_datetime = datetime.combine(appointment_datetime, datetime.min.time().replace(hour=9))
+            
+            # Extract date for comparison
+            appointment_date = appointment_datetime.date() if appointment_datetime else today
+            
+            # Create AppointmentSummary with CORRECT field mapping
             apt_summary = AppointmentSummary(
-                appointment_id=apt.get("appointment_id"),
-                appointment_date=appointment_date.strftime("%Y-%m-%d"),
-                appointment_type=apt.get("appointment_type", "visita_diabetologica"),
-                status=apt.get("status", "scheduled"),
-                priority=apt.get("priority", "normal"),
-                location=apt.get("location"),
-                notes=apt.get("doctor_notes")
+                appointment_id=apt.get("appointment_id", str(apt.get("_id", ""))),
+                date=appointment_date.strftime("%Y-%m-%d"),  # FIXED: "date" not "appointment_date"
+                time=appointment_datetime.strftime("%H:%M") if appointment_datetime else "09:00",  # FIXED: Added missing "time"
+                type=apt.get("appointment_type", "VISITA_SPECIALISTICA"),  # FIXED: "type" not "appointment_type"
+                status=apt.get("status", "SCHEDULED"),
+                priority=apt.get("priority", "NORMAL"),
+                location=apt.get("location", "ASL Roma 1"),
+                notes=apt.get("doctor_notes") or apt.get("notes")
             )
             
             if appointment_date < today:
@@ -623,6 +638,22 @@ class TimelineService:
         if not cronoscita_id:
             logger.warning(f"⚠️ Missing cronoscita_id for patient {cf_paziente} - scheduler integration may fail")
         
+        def _normalize_appointment_date(appointment_datetime):
+            """Normalize appointment datetime to date object for comparison"""
+            if appointment_datetime is None:
+                return today  # Default to today if no date
+            elif isinstance(appointment_datetime, datetime):
+                return appointment_datetime.date()
+            elif isinstance(appointment_datetime, date):
+                return appointment_datetime
+            elif isinstance(appointment_datetime, str):
+                try:
+                    return datetime.fromisoformat(appointment_datetime.replace('Z', '+00:00')).date()
+                except:
+                    return datetime.strptime(appointment_datetime[:10], "%Y-%m-%d").date()
+            else:
+                return today
+
         return TimelineResponse(
             patient_id=cf_paziente,
             patient_name=patient_name,
@@ -634,7 +665,12 @@ class TimelineService:
             oggi=oggi,
             successivo=successivo,
             total_appointments=len(appointments),
-            can_schedule_next=None,  # Will be set by separate endpoint
+            can_schedule_next=len([
+                apt for apt in appointments 
+                if apt.get("cronoscita_id") == cronoscita_id and 
+                _normalize_appointment_date(apt.get("appointment_date") or apt.get("scheduled_date")) >= today and  # FIXED: >= instead of >
+                apt.get("status") != "CANCELLED"
+            ]) == 0,
             last_referto_date=None   # Could be enhanced later
         )
 

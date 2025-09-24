@@ -218,6 +218,53 @@ async def get_patient_timeline(
 appointment_router = APIRouter(prefix="/appointments", tags=["Gestione Appuntamenti"])
 referto_router = APIRouter(prefix="/referti", tags=["Gestione Referti"])
 
+@appointment_router.post("/external-notification")
+async def handle_external_appointment_notification(
+    notification_data: Dict[str, Any],
+    appointment_repo: AppointmentRepository = Depends(get_appointment_repository)
+):
+    """
+    Handle external appointment notifications from Scheduler Service
+    Called when Scheduler Service creates a new appointment
+    """
+    try:
+        event_type = notification_data.get("event_type")
+        appointment_data = notification_data.get("appointment_data", {})
+        source = notification_data.get("source", "unknown")
+        
+        logger.info(f"📨 Received external notification: {event_type} from {source}")
+        
+        if event_type == "appointment_scheduled":
+            # Log the appointment creation for timeline refresh
+            appointment_id = appointment_data.get("appointment_id")
+            cf_paziente = appointment_data.get("cf_paziente")
+            
+            logger.info(f"✅ Appointment {appointment_id} scheduled for patient {cf_paziente}")
+            
+            # Timeline will automatically pick up this appointment from database
+            # No additional processing needed - just acknowledge receipt
+            
+            return {
+                "success": True,
+                "message": "Notification received successfully",
+                "event_type": event_type,
+                "appointment_id": appointment_id
+            }
+        
+        else:
+            logger.warning(f"⚠️ Unknown event type: {event_type}")
+            return {
+                "success": False,
+                "message": f"Unknown event type: {event_type}"
+            }
+            
+    except Exception as e:
+        logger.error(f"❌ Error processing external notification: {e}")
+        return {
+            "success": False,
+            "message": f"Error processing notification: {str(e)}"
+        }
+    
 @appointment_router.post("/schedule", response_model=AppointmentSchedulingResponse)
 async def schedule_appointment(
     decision: DoctorAppointmentDecision,

@@ -132,6 +132,7 @@ class AppointmentSchedulingService:
                 required_exam_mappings=request.selected_exam_mappings,
                 exam_details=[exam.dict() for exam in exam_details],
                 notes=request.notes,
+                appointment_type="VISITA_SPECIALISTICA",
                 created_by=created_by_doctor
             )
             
