@@ -13,7 +13,7 @@ from .session import (
     session_manager, SessionCookie, require_valid_session, get_current_session
 )
 from .config import HARDCODED_DOCTOR_CREDENTIALS, settings
-
+from datetime import datetime
 logger = logging.getLogger(__name__)
 
 # Create API router for session management
@@ -30,7 +30,7 @@ async def login(
     id_medico: str = Form(...),
     patologia: str = Form(...)
 ):
-    """Doctor login with patient context"""
+    """Doctor login with patient context and STRICT cronoscita validation"""
     
     try:
         # Validate doctor exists
@@ -54,7 +54,7 @@ async def login(
                 }
             )
         
-        # Validate pathology against database
+        # ✅ CRITICAL: Validate cronoscita exists and is active BEFORE session creation
         try:
             from .database import get_database
             from .cronoscita_repository import CronoscitaRepository
@@ -64,64 +64,62 @@ async def login(
             
             is_valid_pathology = await cronoscita_repo.validate_pathologie(patologia)
             if not is_valid_pathology:
+                logger.warning(f"🚨 Invalid cronoscita login attempt: '{patologia}' by Dr.{id_medico}")
                 return JSONResponse(
                     status_code=400,
                     content={
                         "success": False,
-                        "error": "Patologia non valida"
+                        "error": f"❌ Cronoscita '{patologia}' non valida o non attiva.\n\n🔧 Contattare amministratore per verificare configurazione Cronoscita."
                     }
                 )
+            
+            logger.info(f"✅ Cronoscita validated for session: '{patologia}'")
+                
         except Exception as e:
-            logger.error(f"Error validating pathology: {str(e)}")
+            logger.error(f"❌ Error validating pathology during login: {str(e)}")
             return JSONResponse(
-                status_code=400,
+                status_code=500,
                 content={
                     "success": False,
-                    "error": "Patologia non valida"
+                    "error": f"Errore validazione Cronoscita: {str(e)}"
                 }
             )
         
-        # Create doctor session
+        # ✅ Create session with VALIDATED cronoscita context
         session_id = await session_manager.create_session(
-            id_medico, 
+            id_medico,
             {
-                "current_patient": cf_paziente,
-                "current_pathology": patologia,
-                "login_timestamp": True,
-                "workspace_active": True
+                "cf_paziente": cf_paziente,
+                "patologia": patologia,
+                "cronoscita_validated": True,
+                "cronoscita_validation_time": datetime.now().isoformat(),
+                "patient_context": True,
+                "context_created": datetime.now().isoformat(),
+                "session_type": "validated_cronoscita"
             }
         )
         
-        # Get doctor info
-        doctor_info = HARDCODED_DOCTOR_CREDENTIALS[id_medico]
-        
-        # Return success with session cookie
+        # Set secure session cookie
         response = JSONResponse(content={
             "success": True,
-            "message": "Login effettuato con successo",
-            "data": {
-                "doctor_id": id_medico,
-                "doctor_name": doctor_info.nome_completo,
-                "doctor_specialization": doctor_info.specializzazione,
-                "current_patient": cf_paziente,
-                "current_pathology": patologia,
-                "session_expires_hours": 10
-            }
+            "message": "Sessione creata con cronoscita validata",
+            "doctor_id": id_medico,
+            "cronoscita": patologia,
+            "session_context": "cronoscita_validated"
         })
         
-        # Set session cookie
         SessionCookie.set_session_cookie(response, id_medico, session_id)
         
-        logger.info(f"Doctor {id_medico} logged in successfully for patient {cf_paziente}")
+        logger.info(f"✅ VALIDATED SESSION: Dr.{id_medico} → CF:{cf_paziente} → Cronoscita:'{patologia}'")
         return response
         
     except Exception as e:
-        logger.error(f"Login error: {str(e)}")
+        logger.error(f"❌ Session creation error: {str(e)}")
         return JSONResponse(
             status_code=500,
             content={
                 "success": False,
-                "error": f"Errore interno del server: {str(e)}"
+                "error": f"Errore creazione sessione: {str(e)}"
             }
         )
 

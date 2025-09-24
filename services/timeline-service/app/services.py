@@ -591,33 +591,60 @@ class TimelineService:
         # ✅ CRITICAL FIX: Initialize patient variable
         patient = None
         
-        # ✅ STEP 1: If patologia specified, get timeline for specific Cronoscita
-        if patologia:
-            patient = await self.patient_repo.find_by_cf_and_patologia(cf_paziente, patologia)
-            if not patient:
-                # Patient not registered in this Cronoscita - check if they exist elsewhere
-                any_patient = await self.patient_repo.find_any_enrollment_by_cf(cf_paziente)
-                if any_patient:
-                    raise PatientNotFoundException(
-                        f"Paziente {cf_paziente} non registrato per {patologia}. "
-                        f"Registrato per: {any_patient['patologia']}"
-                    )
-                else:
-                    raise PatientNotFoundException(f"Paziente {cf_paziente} non trovato nel sistema")
-        else:
-            # ✅ Fallback: Get any enrollment (for backwards compatibility)
-            patient = await self.patient_repo.find_by_cf(cf_paziente)
-            if not patient:
-                raise PatientNotFoundException(f"Paziente {cf_paziente} non trovato")
-            patologia = patient.get("patologia", "")
+        # ✅ CRITICAL: REQUIRE cronoscita parameter - NO FALLBACKS ALLOWED
+        if not patologia or not patologia.strip():
+            raise ValueError(
+                "❌ CRONOSCITA PARAMETER REQUIRED:\n\n"
+                "Il parametro cronoscita è obbligatorio per evitare mismatches.\n"
+                "Ricaricare la pagina e selezionare la cronoscita corretta."
+            )
         
-        # ✅ CRITICAL FIX: REMOVED THE DUPLICATE LOOKUP THAT WAS CAUSING THE BUG
-        # OLD BUGGY CODE (REMOVED):
-        # patient = await self.patient_repo.find_by_cf(cf_paziente)  # This was overwriting correct Cronoscita!
+        logger.info(f"🔍 STRICT cronoscita timeline request: {cf_paziente} → '{patologia}'")
         
-        # ✅ Now patient variable contains the CORRECT Cronoscita-specific data
+        # ✅ STRICT: Get patient ONLY for specified cronoscita
+        patient = await self.patient_repo.find_by_cf_and_patologia(cf_paziente, patologia)
         
-        # ✅ Get appointments for this specific Cronoscita only
+        if not patient:
+            # Check if patient exists in OTHER cronoscita for better error message
+            any_patient = await self.patient_repo.find_any_enrollment_by_cf(cf_paziente)
+            if any_patient:
+                existing_cronoscita = any_patient.get("patologia", "Sconosciuta")
+                raise PatientNotFoundException(
+                    f"❌ PAZIENTE NON REGISTRATO PER QUESTA CRONOSCITA:\n\n"
+                    f"Paziente: {cf_paziente}\n"
+                    f"Cronoscita richiesta: '{patologia}'\n"
+                    f"Cronoscita registrata: '{existing_cronoscita}'\n\n"
+                    f"🔄 Selezionare '{existing_cronoscita}' per visualizzare la timeline corretta."
+                )
+            else:
+                raise PatientNotFoundException(
+                    f"❌ PAZIENTE NON TROVATO:\n\n"
+                    f"Paziente {cf_paziente} non risulta registrato nel sistema.\n"
+                    f"Verificare il codice fiscale o registrare il paziente."
+                )
+        
+        # ✅ CRITICAL FIX: Validate cronoscita consistency BEFORE proceeding
+        if not patient:
+            raise PatientNotFoundException(f"CRITICAL: Patient variable is None after cronoscita lookup")
+
+        # ✅ VALIDATE: Patient data matches requested cronoscita
+        stored_patologia = patient.get("patologia", "").strip()
+        if stored_patologia.upper() != patologia.upper():
+            logger.error(f"🚨 CRONOSCITA MISMATCH DETECTED:")
+            logger.error(f"   Requested: '{patologia}'")
+            logger.error(f"   Found in DB: '{stored_patologia}'")
+            logger.error(f"   Patient CF: {cf_paziente}")
+            
+            raise ValueError(
+                f"❌ CRONOSCITA MISMATCH:\n"
+                f"Richiesta: '{patologia}'\n"
+                f"Database: '{stored_patologia}'\n"
+                f"🔄 Selezionare cronoscita corretta"
+            )
+
+        logger.info(f"✅ CRONOSCITA VALIDATION PASSED: '{stored_patologia}' for {cf_paziente}")
+        
+        # ✅ Get appointments for this VALIDATED specific Cronoscita only
         appointments = []
         if patient.get("cronoscita_id") or patient.get("patologia"):
             # Filter appointments by Cronoscita to avoid showing wrong data
@@ -626,14 +653,14 @@ class TimelineService:
             # Get all appointments for patient
             all_appointments = await self.appointment_repo.get_patient_appointments(cf_paziente)
             
-            # Filter to only appointments for this Cronoscita
+            # Filter to only appointments for this VALIDATED Cronoscita
             appointments = [
                 apt for apt in all_appointments 
                 if (apt.get("cronoscita_id") == cronoscita_filter or 
                     apt.get("patologia") == cronoscita_filter or
-                    apt.get("patologia") == patient.get("patologia"))
+                    apt.get("patologia") == stored_patologia)  # Use validated patologia
             ]
-            logger.info(f"📋 Filtered {len(appointments)} appointments for Cronoscita {patient.get('patologia')}")
+            logger.info(f"📋 Filtered {len(appointments)} appointments for VALIDATED Cronoscita {stored_patologia}")
         else:
             # Fallback: get all appointments  
             appointments = await self.appointment_repo.get_patient_appointments(cf_paziente)
@@ -719,22 +746,38 @@ class RefertoService:
         self.appointment_repo = appointment_repo
     
     async def save_referto(self, request) -> Dict[str, Any]:  # RefertoSaveRequest -> RefertoSaveResponse
-        """Salva referto medico con validazioni complete"""
+        """Salva referto medico con validazioni complete e isolamento Cronoscita"""
         
         # Validazione medico
         if not DoctorService.validate_doctor(request.id_medico):
             raise DoctorValidationException("Credenziali medico non valide")
         
-        # Validazione paziente esiste
-        patient = await self.patient_repo.find_by_cf(request.cf_paziente)
+        # ✅ CRITICAL: Validate cronoscita parameter
+        if not request.patologia or not request.patologia.strip():
+            raise ValueError("❌ Cronoscita parameter required per salvare referto")
+        
+        # ✅ CRONOSCITA-SPECIFIC: Validate patient exists in THIS specific cronoscita
+        patient = await self.patient_repo.find_by_cf_and_patologia(request.cf_paziente, request.patologia)
         if not patient:
-            raise PatientNotFoundException(f"Paziente {request.cf_paziente} non trovato")
+            raise PatientNotFoundException(
+                f"❌ REFERTO SAVE ERROR:\n\n"
+                f"Paziente {request.cf_paziente} non registrato per cronoscita '{request.patologia}'.\n"
+                f"Il referto può essere salvato solo per la cronoscita corretta."
+            )
         
         # Validazione testo referto
         if len(request.testo_referto.strip()) < 10:
             raise ValueError("Il referto deve contenere almeno 10 caratteri")
         
-        # Crea oggetto referto dal modello
+        # ✅ Get cronoscita_id if available
+        from .database import get_database
+        from .cronoscita_repository import CronoscitaRepository
+        
+        db = await get_database()
+        cronoscita_repo = CronoscitaRepository(db)
+        cronoscita_id = await cronoscita_repo.find_cronoscita_id_by_name(request.patologia)
+        
+        # Crea oggetto referto dal modello con cronoscita context
         from .models import Referto, RefertoStatus
         
         now = datetime.now()
@@ -742,6 +785,11 @@ class RefertoService:
             cf_paziente=request.cf_paziente.upper(),
             id_medico=request.id_medico,
             appointment_id=request.appointment_id,
+            
+            # ✅ CRONOSCITA FIELDS - CRITICAL FOR ISOLATION
+            patologia=request.patologia,
+            cronoscita_id=cronoscita_id,
+            
             testo_referto=request.testo_referto.strip(),
             diagnosi=request.diagnosi.strip() if request.diagnosi else None,
             terapia_prescritta=request.terapia_prescritta.strip() if request.terapia_prescritta else None,
@@ -756,13 +804,13 @@ class RefertoService:
         # Salva nel database
         referto_id = await self.referto_repo.save_referto(referto_data)
         
-        logger.info(f"Referto salvato: {referto_id} per paziente {request.cf_paziente} dal medico {request.id_medico}")
+        logger.info(f"✅ Referto salvato: {referto_id} per paziente {request.cf_paziente} in cronoscita '{request.patologia}' dal medico {request.id_medico}")
         
         # Restituisci risposta
         from .models import RefertoSaveResponse
         return RefertoSaveResponse(
             success=True,
-            message=f"Referto salvato con successo per paziente {request.cf_paziente}",
+            message=f"Referto salvato con successo per cronoscita {request.patologia}",
             referto_id=referto_id,
             status="completato",
             can_schedule_next=True,  # Ora può programmare prossimo appuntamento
@@ -810,21 +858,30 @@ class RefertoService:
             logger.error(f"Errore ricerca referto oggi: {e}")
             return None
 
-    async def get_patient_referti(self, cf_paziente: str, id_medico: str) -> List[Dict[str, Any]]:
-        """Ottieni tutti i referti di un paziente"""
+    async def get_patient_referti(self, cf_paziente: str, id_medico: str, patologia: str) -> List[Dict[str, Any]]:
+        """Ottieni referti di un paziente per cronoscita specifica - CRONOSCITA ISOLATED"""
         
         # Validazione medico
         if not DoctorService.validate_doctor(id_medico):
             raise DoctorValidationException("Credenziali medico non valide")
         
-        # Validazione paziente esiste
-        patient = await self.patient_repo.find_by_cf(cf_paziente)
+        # ✅ CRONOSCITA VALIDATION
+        if not patologia or not patologia.strip():
+            raise ValueError("❌ Cronoscita parameter required per recuperare referti")
+        
+        # ✅ CRONOSCITA-SPECIFIC: Validate patient exists in THIS specific cronoscita
+        patient = await self.patient_repo.find_by_cf_and_patologia(cf_paziente, patologia)
         if not patient:
-            raise PatientNotFoundException(f"Paziente {cf_paziente} non trovato")
+            raise PatientNotFoundException(
+                f"❌ REFERTI ACCESS DENIED:\n\n"
+                f"Paziente {cf_paziente} non registrato per cronoscita '{patologia}'.\n"
+                f"Accesso ai referti consentito solo per la cronoscita corretta."
+            )
         
-        # Ottieni referti
-        referti = await self.referto_repo.find_by_patient(cf_paziente)
+        # ✅ Get cronoscita-specific referti only
+        referti = await self.referto_repo.find_by_patient_and_cronoscita(cf_paziente, patologia)
         
+        logger.info(f"✅ Retrieved {len(referti)} referti for CF:{cf_paziente} in cronoscita:'{patologia}'")
         return referti
     
     async def check_can_schedule_next_appointment(self, cf_paziente: str, id_medico: str) -> bool:

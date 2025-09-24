@@ -45,15 +45,40 @@ class PatientRepository:
             raise DatabaseException(f"Failed to find patient: {str(e)}")
 
     async def find_by_cf_and_patologia(self, cf_paziente: str, patologia: str) -> Optional[Dict[str, Any]]:
-        """Find patient enrollment in specific Cronoscita"""
+        """Find patient enrollment in specific Cronoscita with EXACT matching"""
         try:
-            return await self.collection.find_one({
-                "cf_paziente": cf_paziente.upper(),
-                "patologia": patologia
-            })
+            # Normalize inputs for exact matching
+            cf_normalized = cf_paziente.upper().strip()
+            patologia_normalized = patologia.strip()
+            
+            logger.info(f"🔍 Exact cronoscita lookup: CF={cf_normalized}, Cronoscita='{patologia_normalized}'")
+            
+            # ✅ EXACT MATCH ONLY - no regex, no fuzzy matching
+            query = {
+                "cf_paziente": cf_normalized,
+                "patologia": patologia_normalized,
+                "status": {"$ne": "inactive"}  # Exclude inactive enrollments
+            }
+            
+            patient = await self.collection.find_one(query)
+            
+            if patient:
+                logger.info(f"✅ Found exact match in cronoscita: '{patologia_normalized}'")
+                # ✅ DOUBLE-CHECK: Verify the returned data matches exactly
+                returned_patologia = patient.get("patologia", "").strip()
+                if returned_patologia.upper() != patologia_normalized.upper():
+                    logger.error(f"🚨 DATABASE CONSISTENCY ERROR:")
+                    logger.error(f"   Query: '{patologia_normalized}'")
+                    logger.error(f"   Returned: '{returned_patologia}'")
+                    return None
+            else:
+                logger.info(f"❌ No exact match found in cronoscita: '{patologia_normalized}'")
+            
+            return patient
+            
         except Exception as e:
-            logger.error(f"Error finding patient by CF {cf_paziente} and patologia {patologia}: {e}")
-            raise DatabaseException(f"Failed to find patient in Cronoscita: {str(e)}")
+            logger.error(f"❌ Error in exact cronoscita lookup: {e}")
+            raise DatabaseException(f"Failed to find patient in cronoscita: {str(e)}")
 
     async def find_any_enrollment_by_cf(self, cf_paziente: str) -> Optional[Dict[str, Any]]:
         """Find any enrollment for demographics reuse"""
@@ -355,7 +380,7 @@ class RefertoRepository:
             raise DatabaseException(f"Errore nel salvataggio referto: {str(e)}")
     
     async def find_by_patient(self, cf_paziente: str) -> List[Dict[str, Any]]:
-        """Trova tutti i referti di un paziente"""
+        """Trova tutti i referti di un paziente - DEPRECATED: usa find_by_patient_and_cronoscita"""
         try:
             cursor = self.collection.find(
                 {"cf_paziente": cf_paziente.upper()}
@@ -366,6 +391,38 @@ class RefertoRepository:
         except Exception as e:
             logger.error(f"Errore ricerca referti paziente {cf_paziente}: {e}")
             raise DatabaseException(f"Errore ricerca referti: {str(e)}")
+    
+    async def find_by_patient_and_cronoscita(self, cf_paziente: str, patologia: str) -> List[Dict[str, Any]]:
+        """Trova referti di un paziente per cronoscita specifica - CRONOSCITA ISOLATED"""
+        try:
+            logger.info(f"🔍 Getting referti for CF:{cf_paziente} in cronoscita:'{patologia}'")
+            
+            # ✅ CRONOSCITA-SPECIFIC QUERY
+            query = {
+                "cf_paziente": cf_paziente.upper(),
+                "patologia": patologia  # Only referti for this cronoscita
+            }
+            
+            cursor = self.collection.find(query).sort("data_visita", -1)  # Più recenti prima
+            referti = await cursor.to_list(length=None)
+            
+            logger.info(f"✅ Found {len(referti)} referti for cronoscita '{patologia}'")
+            
+            # ✅ DOUBLE-CHECK: Ensure all returned referti match the cronoscita
+            filtered_referti = []
+            for referto in referti:
+                referto_cronoscita = referto.get("patologia", "").strip()
+                if referto_cronoscita.upper() == patologia.upper():
+                    filtered_referti.append(referto)
+                else:
+                    logger.warning(f"🔄 Filtered out referto with wrong cronoscita: {referto_cronoscita}")
+            
+            logger.info(f"📋 Returning {len(filtered_referti)} validated referti for '{patologia}'")
+            return filtered_referti
+            
+        except Exception as e:
+            logger.error(f"❌ Error finding referti for cronoscita {patologia}: {e}")
+            raise DatabaseException(f"Errore ricerca referti cronoscita: {str(e)}")
     
     async def find_by_id(self, referto_id: str) -> Optional[Dict[str, Any]]:
         """Trova referto per ID"""

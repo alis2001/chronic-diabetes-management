@@ -127,7 +127,7 @@ export const PatientLookup = ({ onPatientFound, onPatientNotFound, onError }) =>
       await createBackendSession(formData);
       console.log('✅ Backend session created via Gateway for doctor:', formData.id_medico);
       
-      // 2. Multi-Cronoscita patient lookup
+      // 2. Multi-Cronoscita patient lookup with STRICT validation
       console.log('📋 Multi-Cronoscita patient lookup request:', formData);
       const response = await timelineAPI.lookupPatient(
         formData.cf_paziente,
@@ -138,8 +138,31 @@ export const PatientLookup = ({ onPatientFound, onPatientNotFound, onError }) =>
       console.log('📊 Multi-Cronoscita patient lookup response:', response);
       
       if (response.exists) {
-        // ✅ Patient found in THIS Cronoscita - show timeline
-        console.log('✅ Patient registered in selected Cronoscita:', formData.patologia);
+        // ✅ CRITICAL: Validate cronoscita matches EXACTLY
+        const selectedCronoscita = formData.patologia.trim();
+        const foundCronoscita = response.patient_data?.patologia?.trim() || '';
+        
+        if (selectedCronoscita.toUpperCase() !== foundCronoscita.toUpperCase()) {
+          console.error('🚨 FRONTEND CRONOSCITA MISMATCH PREVENTION:', {
+            selected: selectedCronoscita,
+            found: foundCronoscita,
+            cf: formData.cf_paziente
+          });
+          
+          alert(`❌ CRONOSCITA MISMATCH RILEVATO:
+
+Cronoscita selezionata: "${selectedCronoscita}"
+Cronoscita nel sistema: "${foundCronoscita}"
+
+🔄 Il paziente risulta registrato per "${foundCronoscita}".
+Selezionare la cronoscita corretta e riprovare.`);
+          
+          setLoading(false);
+          return;
+        }
+        
+        // Patient found in correct Cronoscita - show timeline
+        console.log('✅ Patient registered in CORRECT Cronoscita:', formData.patologia);
         onPatientFound(response, formData);
         
       } else if (response.patient_data?.can_reuse_contacts) {
@@ -170,45 +193,44 @@ export const PatientLookup = ({ onPatientFound, onPatientNotFound, onError }) =>
             
             console.log('✅ Auto-registration successful:', registrationResponse);
             
-            // Now lookup the newly registered patient
+            // Now lookup the newly registered patient with validation
             const newLookupResponse = await timelineAPI.lookupPatient(
               formData.cf_paziente,
               formData.id_medico,
               formData.patologia
             );
             
+            // ✅ VALIDATE newly registered patient cronoscita
+            const newFoundCronoscita = newLookupResponse.patient_data?.patologia?.trim() || '';
+            if (formData.patologia.trim().toUpperCase() !== newFoundCronoscita.toUpperCase()) {
+              throw new Error(`Registrazione fallita: cronoscita mismatch dopo registrazione`);
+            }
+            
             alert('✅ Paziente registrato con successo nella nuova Cronoscita!');
             onPatientFound(newLookupResponse, formData);
             
-          } catch (registrationError) {
-            console.error('❌ Auto-registration failed:', registrationError);
-            alert(`❌ Errore durante registrazione automatica: ${registrationError.message}`);
+          } catch (autoRegError) {
+            console.error('❌ Auto-registration failed:', autoRegError);
+            alert(`❌ Errore registrazione automatica: ${autoRegError.message || 'Errore sconosciuto'}\n\nProcedere con registrazione manuale.`);
+            onPatientNotFound(response, formData);
           }
+        } else {
+          // User canceled - still show registration form
+          onPatientNotFound(response, formData);
         }
         
       } else {
-        // ✅ Completely new patient - full registration required
-        console.log('📝 New patient - full registration required');
+        // ✅ Completely new patient or patient found in Wirgilio but not registered
+        console.log('📋 Patient not registered in any Cronoscita - new registration needed');
         onPatientNotFound(response, formData);
       }
       
     } catch (error) {
-      console.error('❌ Multi-Cronoscita patient lookup error:', error);
-      
-      if (error.status === 404) {
-        alert(`❌ Paziente non registrato per ${PATOLOGIE[formData.patologia] || formData.patologia}.
-        
-  🔧 Soluzioni:
-  - Verificare Cronoscita selezionata
-  - Registrare paziente per questa Cronoscita
-  - Contattare amministratore se necessario`);
-      } else if (error.message.includes('non valida')) {
-        alert('❌ Cronoscita selezionata non valida. Contattare l\'amministratore.');
-      } else {
-        onError({ error: error.message, status: error.status });
-      }
+      console.error('❌ Patient lookup error:', error);
+      onError(error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
@@ -1422,24 +1444,53 @@ export const PatientTimeline = ({ patientId, doctorId, patologia, onScheduleAppo
       setError(null);
       console.log('📋 Loading timeline for Cronoscita...', { patientId, doctorId, patologia });
       
-      // ✅ Pass patologia to getTimeline for Cronoscita-specific data
+      if (!patologia) {
+        throw new Error('❌ Cronoscita parameter missing - cannot load timeline');
+      }
+      
       const timelineData = await timelineAPI.getTimeline(patientId, doctorId, patologia);
+      console.log('📊 Timeline response received:', timelineData);
+      
+      const returnedCronoscita = timelineData.patologia?.trim() || '';
+      const requestedCronoscita = patologia?.trim() || '';
+      
+      if (returnedCronoscita.toUpperCase() !== requestedCronoscita.toUpperCase()) {
+        console.error('🚨 FRONTEND TIMELINE CRONOSCITA MISMATCH:', {
+          requested: requestedCronoscita,
+          returned: returnedCronoscita,
+          patient: patientId
+        });
+        
+        const errorMessage = `❌ CRONOSCITA MISMATCH NELLA TIMELINE:
+
+Cronoscita richiesta: "${requestedCronoscita}"
+Cronoscita nei dati: "${returnedCronoscita}"
+
+🔄 Il paziente risulta registrato per "${returnedCronoscita}".
+Ricaricare la pagina e selezionare la cronoscita corretta.`;
+        
+        setError(errorMessage);
+        alert(errorMessage);
+        return;
+      }
+      
+      console.log('✅ Timeline cronoscita validation PASSED:', returnedCronoscita);
       setTimeline(timelineData);
-      console.log('📊 Timeline loaded for Cronoscita:', timelineData);
       
       // Validate timeline has Cronoscita context
       if (!timelineData.cronoscita_id && !timelineData.patologia_id) {
         console.warn('⚠️ Timeline missing cronoscita context - scheduler may be limited');
       }
       
-      if (timelineData.patologia !== patologia && patologia) {
-        console.warn('⚠️ Timeline patologia mismatch:', {
-          expected: patologia,
-          received: timelineData.patologia
-        });
-      }
     } catch (error) {
-      setError(error.message);
+      console.error('❌ Timeline loading error:', error);
+      
+      if (error.message?.includes('CRONOSCITA MISMATCH') || error.message?.includes('cronoscita') || error.message?.includes('Cronoscita')) {
+        setError(`❌ ERRORE CRONOSCITA: ${error.message}`);
+        alert(`❌ ERRORE CRONOSCITA:\n\n${error.message}\n\n🔄 Selezionare la cronoscita corretta e riprovare.`);
+      } else {
+        setError(error.message || 'Errore caricamento timeline');
+      }
     }
     setLoading(false);
   };

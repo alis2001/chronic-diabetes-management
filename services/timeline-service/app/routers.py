@@ -255,21 +255,44 @@ timeline_router = APIRouter(prefix="/timeline", tags=["Gestione Timeline"])
 async def get_patient_timeline(
     cf_paziente: str,
     id_medico: str = Query(..., description="ID Medico per autorizzazione"),
-    patologia: str = Query(None, description="Cronoscita specifica (opzionale per compatibilità)"),
+    patologia: str = Query(..., description="Cronoscita specifica (OBBLIGATORIO)"),  # ✅ NOW REQUIRED
     timeline_service: TimelineService = Depends(get_timeline_service)
 ):
     """
-    Fase 3: Medico visualizza timeline completa paziente per Cronoscita specifica
+    Fase 3: Timeline completa paziente per Cronoscita specifica - CRONOSCITA OBBLIGATORIA
     
-    - Mostra appuntamenti passati, presenti e futuri per Cronoscita selezionata
-    - Integra con servizio scheduler per programmazione
-    - Autorizzazione medico richiesta
-    - Se patologia non specificata, usa prima registrazione trovata (compatibilità)
+    ✅ ENHANCED: Cronoscita parameter è ora OBBLIGATORIO per prevenire mismatches
+    - Mostra SOLO appuntamenti per la Cronoscita specificata
+    - Valida che paziente sia registrato per questa Cronoscita
+    - Categorizza appuntamenti per data (precedenti, oggi, futuri)  
+    - Integra con servizio scheduler per programmazione autorizzata
     """
     try:
+        # ✅ FINAL VALIDATION: Ensure cronoscita parameter is provided and not empty
+        if not patologia or not patologia.strip():
+            logger.error(f"🚨 Timeline endpoint called without cronoscita: CF={cf_paziente}, Doctor={id_medico}")
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "CRONOSCITA_PARAMETER_REQUIRED",
+                    "message": "❌ PARAMETRO CRONOSCITA OBBLIGATORIO:\n\nIl parametro 'patologia' è richiesto per prevenire cronoscita mismatches.\nRicaricare la pagina e selezionare la cronoscita corretta.",
+                    "cf_paziente": cf_paziente,
+                    "required_parameter": "patologia"
+                }
+            )
+        
+        logger.info(f"✅ Timeline API with cronoscita: {cf_paziente} → '{patologia}' by Dr.{id_medico}")
+        
         return await timeline_service.get_patient_timeline(cf_paziente, id_medico, patologia)
+        
     except TimelineServiceException as e:
         raise map_to_http_exception(e)
+    except ValueError as e:
+        logger.error(f"❌ Timeline cronoscita validation error: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"❌ Unexpected timeline error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Errore timeline: {str(e)}")
 
 # ================================
 # ROUTES GESTIONE APPUNTAMENTI
@@ -402,24 +425,52 @@ async def save_referto(
 async def get_patient_referti(
     cf_paziente: str,
     id_medico: str = Query(..., description="ID Medico per autorizzazione"),
+    patologia: str = Query(..., description="Cronoscita specifica (OBBLIGATORIO)"),  # ✅ NOW REQUIRED
     referto_service: RefertoService = Depends(get_referto_service)
 ):
     """
-    Ottieni tutti i referti di un paziente
+    Ottieni referti di un paziente per cronoscita specifica
     
-    - Lista referti ordinati per data (più recenti prima)
-    - Solo medici autorizzati possono accedere
+    ✅ ENHANCED: Cronoscita parameter è ora OBBLIGATORIO per isolamento referti
+    - Lista SOLO referti per la cronoscita specificata  
+    - Ordinati per data (più recenti prima)
+    - Solo medici autorizzati per quella cronoscita possono accedere
     """
     try:
-        referti = await referto_service.get_patient_referti(cf_paziente, id_medico)
+        # ✅ VALIDATION: Ensure cronoscita parameter is provided
+        if not patologia or not patologia.strip():
+            logger.error(f"🚨 Referti endpoint called without cronoscita: CF={cf_paziente}, Doctor={id_medico}")
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": "CRONOSCITA_PARAMETER_REQUIRED",
+                    "message": "❌ PARAMETRO CRONOSCITA OBBLIGATORIO per accedere ai referti.\nI referti sono isolati per cronoscita per sicurezza.",
+                    "cf_paziente": cf_paziente,
+                    "required_parameter": "patologia"
+                }
+            )
+        
+        logger.info(f"✅ Referti API called for cronoscita: {cf_paziente} → '{patologia}' by Dr.{id_medico}")
+        
+        referti = await referto_service.get_patient_referti(cf_paziente, id_medico, patologia)
+        
         return {
             "success": True,
             "cf_paziente": cf_paziente,
+            "cronoscita": patologia,
             "referti": referti,
-            "total_count": len(referti)
+            "total_count": len(referti),
+            "isolation_verified": True  # Indicates cronoscita isolation is active
         }
+        
     except TimelineServiceException as e:
         raise map_to_http_exception(e)
+    except ValueError as e:
+        logger.error(f"❌ Referti cronoscita validation error: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"❌ Unexpected referti error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Errore referti: {str(e)}")
 
 @referto_router.get("/can-schedule/{cf_paziente}")
 async def check_can_schedule_next(

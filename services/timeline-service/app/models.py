@@ -50,13 +50,16 @@ class RefertoStatus(str, Enum):
     REVIEWED = "revisionato" 
     ARCHIVED = "archiviato"
 
-# Referto data model
 class Referto(BaseModel):
-    """Modello referto medico per storage database"""
+    """Modello referto medico per storage database con isolamento Cronoscita"""
     referto_id: Optional[str] = None
     cf_paziente: str = Field(..., description="Codice fiscale paziente")
     id_medico: str = Field(..., description="ID medico")
     appointment_id: Optional[str] = Field(None, description="ID appuntamento associato")
+    
+    # ✅ CRONOSCITA ISOLATION - CRITICAL ADDITION
+    patologia: str = Field(..., description="Cronoscita di appartenenza del referto")
+    cronoscita_id: Optional[str] = Field(None, description="ID Cronoscita (opzionale)")
     
     # Contenuto referto
     testo_referto: str = Field(..., min_length=10, description="Testo refertazione medica")
@@ -80,12 +83,15 @@ class Referto(BaseModel):
             date: lambda v: v.isoformat()
         }
 
-# Request models for Referto
 class RefertoSaveRequest(BaseModel):
-    """Richiesta salvataggio referto"""
+    """Richiesta salvataggio referto con contesto Cronoscita"""
     cf_paziente: str = Field(..., min_length=16, max_length=16)
     id_medico: str = Field(...)
     appointment_id: Optional[str] = None
+    
+    # ✅ CRONOSCITA CONTEXT - REQUIRED FOR ISOLATION
+    patologia: str = Field(..., description="Cronoscita di appartenenza (OBBLIGATORIO)")
+    
     testo_referto: str = Field(..., min_length=10, description="Minimo 10 caratteri")
     diagnosi: Optional[str] = None
     terapia_prescritta: Optional[str] = None
