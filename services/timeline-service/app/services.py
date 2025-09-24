@@ -20,6 +20,7 @@ from .models import (
     AppointmentCompletionRequest, TimelineResponse, AppointmentSummary,
     Patient, Appointment, PatientDemographics, PatientStatus, AppointmentStatus
 )
+from .cronoscita_repository import CronoscitaRepository
 from .repositories import PatientRepository, AppointmentRepository
 from .config import (
     settings, HARDCODED_DOCTOR_CREDENTIALS,
@@ -673,9 +674,12 @@ class TimelineService:
         if not patient_name:
             patient_name = nome
         
-        # ✅ CRITICAL: Use the SPECIFIC Cronoscita data, not generic fallback
         patologia_name = patient.get("patologia", patologia or "Sconosciuta")
-        cronoscita_id = patient.get("cronoscita_id") or patient.get("patologia")
+        from .database import get_database
+        db = await get_database()
+        cronoscita_repo = CronoscitaRepository(db)
+        patient = await cronoscita_repo.ensure_patient_has_cronoscita_id(patient)
+        cronoscita_id = patient.get("cronoscita_id")
         
         logger.info(f"✅ Timeline loaded for {cf_paziente} in SPECIFIC Cronoscita {patologia_name}: {len(precedenti)} precedenti, {len(oggi)} oggi, {len(successivo)} futuri")
         
