@@ -37,12 +37,41 @@ class PatientRepository:
         self.collection = db.patients
     
     async def find_by_cf(self, cf_paziente: str) -> Optional[Dict[str, Any]]:
-        """Find patient by fiscal code"""
+        """Find patient by fiscal code - DEPRECATED: Use find_by_cf_and_patologia instead"""
         try:
             return await self.collection.find_one({"cf_paziente": cf_paziente.upper()})
         except Exception as e:
             logger.error(f"Error finding patient by CF {cf_paziente}: {e}")
             raise DatabaseException(f"Failed to find patient: {str(e)}")
+
+    async def find_by_cf_and_patologia(self, cf_paziente: str, patologia: str) -> Optional[Dict[str, Any]]:
+        """Find patient enrollment in specific Cronoscita"""
+        try:
+            return await self.collection.find_one({
+                "cf_paziente": cf_paziente.upper(),
+                "patologia": patologia
+            })
+        except Exception as e:
+            logger.error(f"Error finding patient by CF {cf_paziente} and patologia {patologia}: {e}")
+            raise DatabaseException(f"Failed to find patient in Cronoscita: {str(e)}")
+
+    async def find_any_enrollment_by_cf(self, cf_paziente: str) -> Optional[Dict[str, Any]]:
+        """Find any enrollment for demographics reuse"""
+        try:
+            return await self.collection.find_one({"cf_paziente": cf_paziente.upper()})
+        except Exception as e:
+            logger.error(f"Error finding any enrollment for CF {cf_paziente}: {e}")
+            raise DatabaseException(f"Failed to find any patient enrollment: {str(e)}")
+
+    async def get_all_enrollments_by_cf(self, cf_paziente: str) -> List[Dict[str, Any]]:
+        """Get all Cronoscita enrollments for a patient"""
+        try:
+            cursor = self.collection.find({"cf_paziente": cf_paziente.upper()})
+            enrollments = await cursor.to_list(length=None)
+            return enrollments or []
+        except Exception as e:
+            logger.error(f"Error finding all enrollments for CF {cf_paziente}: {e}")
+            raise DatabaseException(f"Failed to find patient enrollments: {str(e)}")
     
     async def create_patient(self, patient: Patient) -> str:
         """Create new patient with proper date serialization"""

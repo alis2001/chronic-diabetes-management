@@ -87,14 +87,22 @@ export const timelineAPI = {
   // ================================
   
   /**
-   * Ricerca paziente per codice fiscale
-   * ✅ UPDATED: /api/timeline/patients/lookup
-   */
-  lookupPatient: (cf_paziente, id_medico, patologia) => 
-    apiRequest('/api/timeline/patients/lookup', {
+ * Ricerca paziente per codice fiscale in Cronoscita specifica
+ * ✅ UPDATED: /api/timeline/patients/lookup
+ * 
+ * Responses:
+ * - exists=true: Patient registered in this Cronoscita
+ * - exists=false + can_reuse_contacts=true: Patient in other Cronoscita  
+ * - exists=false + can_reuse_contacts=false: New patient
+ */
+  lookupPatient: (cf_paziente, id_medico, patologia) => {
+    console.log('🔍 Looking up patient in Cronoscita:', { cf_paziente, id_medico, patologia });
+    
+    return apiRequest('/api/timeline/patients/lookup', {
       method: 'POST',
       body: JSON.stringify({ cf_paziente, id_medico, patologia })
-    }),
+    });
+  },
   
   /**
    * Registrazione paziente standard
@@ -143,86 +151,67 @@ export const timelineAPI = {
    * Ottieni timeline completa paziente
    * ✅ UPDATED: /api/timeline/timeline/{cf_paziente}
    */
-  getTimeline: async (cf_paziente, id_medico) => {
+  /**
+ * Ottieni timeline completa paziente per Cronoscita specifica
+ * ✅ UPDATED: /api/timeline/timeline/{cf_paziente}?patologia={patologia}
+ */
+  getTimeline: async (cf_paziente, id_medico, patologia = null) => {
     try {
-      console.log('📋 Loading timeline with cronoscita data...', { cf_paziente, id_medico });
+      console.log('📋 Loading timeline for specific Cronoscita...', { cf_paziente, id_medico, patologia });
       
-      // Get timeline data from backend
-      const timeline = await apiRequest(`/api/timeline/timeline/${cf_paziente}?id_medico=${id_medico}`);
-      
-      console.log('📊 Timeline response:', timeline);
-      
-      // Check if cronoscita_id is present
-      if (!timeline.cronoscita_id && !timeline.patologia_id) {
-        console.warn('⚠️ Timeline missing cronoscita_id, attempting fallback lookup...');
-        
-        try {
-          // Fallback: Try to get cronoscita_id from patient lookup
-          // Use the patologia from timeline or try common ones
-          const patologiaToTry = timeline.patologia || 'DIABETES_T2';
-          
-          const patientLookup = await apiRequest('/api/timeline/patients/lookup', {
-            method: 'POST',
-            body: JSON.stringify({ 
-              cf_paziente, 
-              id_medico, 
-              patologia: patologiaToTry 
-            })
-          });
-          
-          if (patientLookup.success && patientLookup.patient_data?.cronoscita_id) {
-            timeline.cronoscita_id = patientLookup.patient_data.cronoscita_id;
-            timeline.patologia_id = patientLookup.patient_data.cronoscita_id;
-            console.log('✅ Cronoscita ID added from patient lookup:', timeline.cronoscita_id);
-          } else if (patientLookup.success && patientLookup.patient_data?.patologia_id) {
-            timeline.cronoscita_id = patientLookup.patient_data.patologia_id;
-            timeline.patologia_id = patientLookup.patient_data.patologia_id;
-            console.log('✅ Cronoscita ID added from patologia_id:', timeline.cronoscita_id);
-          }
-          
-        } catch (fallbackError) {
-          console.warn('⚠️ Fallback cronoscita lookup failed:', fallbackError.message);
-          
-          // Final fallback: Try to extract from available pathologies
-          try {
-            const pathologies = getPatologieOptions();
-            if (pathologies.length > 0) {
-              // Find matching pathology by name
-              const matchingPathology = pathologies.find(p => 
-                p.label.toLowerCase().includes(timeline.patologia?.toLowerCase() || '') ||
-                timeline.patologia?.toLowerCase().includes(p.label.toLowerCase() || '')
-              );
-              
-              if (matchingPathology) {
-                timeline.cronoscita_id = matchingPathology.value;
-                timeline.patologia_id = matchingPathology.value;
-                console.log('✅ Cronoscita ID matched from pathologies list:', timeline.cronoscita_id);
-              }
-            }
-          } catch (pathologyError) {
-            console.warn('⚠️ Pathology matching failed:', pathologyError.message);
-          }
-        }
+      // Build URL with patologia parameter if provided
+      let url = `/api/timeline/timeline/${cf_paziente}?id_medico=${id_medico}`;
+      if (patologia) {
+        url += `&patologia=${encodeURIComponent(patologia)}`;
       }
       
-      // Final validation
+      // Get timeline data from backend
+      const timeline = await apiRequest(url);
+      
+      console.log('📊 Timeline response for Cronoscita:', timeline);
+      
+      // Validate timeline has cronoscita context
       if (!timeline.cronoscita_id && !timeline.patologia_id) {
-        console.error('❌ Could not determine cronoscita_id - scheduler integration will fail');
-        timeline.scheduler_available = false;
-        timeline.scheduler_error = 'Cronoscita non configurata per questo paziente';
-      } else {
-        timeline.scheduler_available = true;
-        console.log('✅ Timeline ready for scheduler integration:', {
-          cronoscita_id: timeline.cronoscita_id,
-          patient_name: timeline.patient_name,
-          patologia: timeline.patologia
-        });
+        console.warn('⚠️ Timeline missing cronoscita_id - may be legacy data');
+        
+        // Add patologia info if available
+        if (patologia && timeline.patologia) {
+          console.log('✅ Timeline loaded for patologia:', timeline.patologia);
+        }
       }
       
       return timeline;
       
     } catch (error) {
-      console.error('❌ Error getting timeline:', error);
+      console.error('❌ Timeline loading error:', error);
+      
+      if (error.status === 404 && patologia) {
+        // Patient not found in this specific Cronoscita
+        throw new APIError(
+          `Paziente non registrato per ${patologia}. Verificare registrazione o selezionare Cronoscita corretta.`,
+          404
+        );
+      }
+      
+      throw error;
+    }
+  },
+
+  /**
+ * Ottieni tutte le registrazioni Cronoscita di un paziente
+ * ✅ NEW: /api/timeline/patients/enrollments/{cf_paziente}
+ */
+  getPatientEnrollments: async (cf_paziente, id_medico) => {
+    try {
+      console.log('📋 Getting all patient enrollments:', { cf_paziente, id_medico });
+      
+      const response = await apiRequest(`/api/timeline/patients/enrollments/${cf_paziente}?id_medico=${id_medico}`);
+      
+      console.log('📊 Patient enrollments:', response);
+      return response;
+      
+    } catch (error) {
+      console.error('❌ Error getting patient enrollments:', error);
       throw error;
     }
   },

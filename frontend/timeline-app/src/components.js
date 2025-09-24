@@ -115,6 +115,11 @@ export const PatientLookup = ({ onPatientFound, onPatientNotFound, onError }) =>
       return;
     }
     
+    if (!formData.patologia) {
+      alert('Selezionare una Cronoscita');
+      return;
+    }
+    
     setLoading(true);
     
     try {
@@ -122,21 +127,86 @@ export const PatientLookup = ({ onPatientFound, onPatientNotFound, onError }) =>
       await createBackendSession(formData);
       console.log('✅ Backend session created via Gateway for doctor:', formData.id_medico);
       
-      // 2. Then do the existing patient lookup (also via Gateway)
+      // 2. Multi-Cronoscita patient lookup
+      console.log('📋 Multi-Cronoscita patient lookup request:', formData);
       const response = await timelineAPI.lookupPatient(
         formData.cf_paziente,
         formData.id_medico,
         formData.patologia
       );
       
+      console.log('📊 Multi-Cronoscita patient lookup response:', response);
+      
       if (response.exists) {
+        // ✅ Patient found in THIS Cronoscita - show timeline
+        console.log('✅ Patient registered in selected Cronoscita:', formData.patologia);
         onPatientFound(response, formData);
+        
+      } else if (response.patient_data?.can_reuse_contacts) {
+        // ✅ Patient exists in OTHER Cronoscita - simplified registration
+        console.log('📋 Patient exists in other Cronoscita - enabling simplified registration');
+        console.log('🔄 Existing enrollments:', response.patient_data.existing_enrollments);
+        
+        const confirmMessage = `🏥 PAZIENTE TROVATO IN ALTRA CRONOSCITA
+
+  Paziente: ${formData.cf_paziente}
+  Cronoscita esistente: ${response.patient_data.existing_enrollments?.[0] || 'Sconosciuta'}
+  Cronoscita richiesta: ${PATOLOGIE[formData.patologia] || formData.patologia}
+
+  📞 I contatti salvati verranno riutilizzati automaticamente.
+
+  ✅ Procedere con registrazione semplificata?`;
+        
+        if (window.confirm(confirmMessage)) {
+          try {
+            // Show registration progress
+            alert('⏳ Registrazione automatica in corso...');
+            
+            const registrationResponse = await timelineAPI.registerPatient(
+              formData.cf_paziente,
+              formData.id_medico,
+              formData.patologia
+            );
+            
+            console.log('✅ Auto-registration successful:', registrationResponse);
+            
+            // Now lookup the newly registered patient
+            const newLookupResponse = await timelineAPI.lookupPatient(
+              formData.cf_paziente,
+              formData.id_medico,
+              formData.patologia
+            );
+            
+            alert('✅ Paziente registrato con successo nella nuova Cronoscita!');
+            onPatientFound(newLookupResponse, formData);
+            
+          } catch (registrationError) {
+            console.error('❌ Auto-registration failed:', registrationError);
+            alert(`❌ Errore durante registrazione automatica: ${registrationError.message}`);
+          }
+        }
+        
       } else {
+        // ✅ Completely new patient - full registration required
+        console.log('📝 New patient - full registration required');
         onPatientNotFound(response, formData);
       }
+      
     } catch (error) {
-      console.error('❌ Error in patient lookup with session:', error);
-      onError({ error: error.message, status: error.status });
+      console.error('❌ Multi-Cronoscita patient lookup error:', error);
+      
+      if (error.status === 404) {
+        alert(`❌ Paziente non registrato per ${PATOLOGIE[formData.patologia] || formData.patologia}.
+        
+  🔧 Soluzioni:
+  - Verificare Cronoscita selezionata
+  - Registrare paziente per questa Cronoscita
+  - Contattare amministratore se necessario`);
+      } else if (error.message.includes('non valida')) {
+        alert('❌ Cronoscita selezionata non valida. Contattare l\'amministratore.');
+      } else {
+        onError({ error: error.message, status: error.status });
+      }
     }
     setLoading(false);
   };
@@ -218,7 +288,28 @@ export const PatientLookup = ({ onPatientFound, onPatientNotFound, onError }) =>
             </select>
           )}
         </div>
-        
+        {/* Multi-Cronoscita Selected Info */}
+        {formData.patologia && (
+          <div style={{
+            background: '#e8f4fd',
+            border: '1px solid #b8daff',
+            borderRadius: '8px',
+            padding: '15px',
+            marginBottom: '20px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+              <span style={{ fontSize: '18px' }}>🏥</span>
+              <strong style={{ color: '#0066cc', fontSize: '16px' }}>Cronoscita Selezionata</strong>
+            </div>
+            <div style={{ fontSize: '14px', color: '#333', fontWeight: '600' }}>
+              {PATOLOGIE[formData.patologia] || formData.patologia}
+            </div>
+            <div style={{ fontSize: '12px', color: '#666', marginTop: '8px' }}>
+              💡 Il paziente verrà cercato/registrato specificamente per questa Cronoscita
+            </div>
+          </div>
+        )}
+
         <button type="submit" disabled={loading} style={styles.primaryButton}>
           {loading ? 'Ricerca...' : 'Cerca Paziente'}
         </button>
@@ -1251,7 +1342,7 @@ const EmbeddedAnalyticsWindow = ({
 // 🔥 STEP 2: UPDATED PATIENT TIMELINE - COMPRESSED INFO + TABS
 // ================================
 
-export const PatientTimeline = ({ patientId, doctorId, onScheduleAppointment }) => {
+export const PatientTimeline = ({ patientId, doctorId, patologia, onScheduleAppointment }) => {
   const [timeline, setTimeline] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -1261,10 +1352,11 @@ export const PatientTimeline = ({ patientId, doctorId, onScheduleAppointment }) 
 
   useEffect(() => {
     if (patientId && doctorId) {
-      loadTimeline();
+      console.log('🏥 Timeline loading for specific Cronoscita:', { patientId, doctorId, patologia });
+      loadTimelineForCronoscita();
       checkCanScheduleNext();
     }
-  }, [patientId, doctorId]);
+  }, [patientId, doctorId, patologia]);
 
   // ================================
   // SCHEDULER POSTMESSAGE HANDLING - NEW
@@ -1292,7 +1384,7 @@ export const PatientTimeline = ({ patientId, doctorId, onScheduleAppointment }) 
                 `Esami selezionati: ${event.data.data.exam_count}`);
           
           // Refresh timeline to show new appointment
-          loadTimeline();
+          loadTimelineForCronoscita()
           
           // Re-check referto status
           checkCanScheduleNext();
@@ -1324,13 +1416,28 @@ export const PatientTimeline = ({ patientId, doctorId, onScheduleAppointment }) 
     };
   }, [showScheduler]);
 
-  const loadTimeline = async () => {
-    setLoading(true);
-    setError(null);
+  const loadTimelineForCronoscita = async () => {
     try {
-      const response = await timelineAPI.getTimeline(patientId, doctorId);
-      setTimeline(response);
-      console.log('📋 Timeline loaded:', response); // Debug timeline data
+      setLoading(true);
+      setError(null);
+      console.log('📋 Loading timeline for Cronoscita...', { patientId, doctorId, patologia });
+      
+      // ✅ Pass patologia to getTimeline for Cronoscita-specific data
+      const timelineData = await timelineAPI.getTimeline(patientId, doctorId, patologia);
+      setTimeline(timelineData);
+      console.log('📊 Timeline loaded for Cronoscita:', timelineData);
+      
+      // Validate timeline has Cronoscita context
+      if (!timelineData.cronoscita_id && !timelineData.patologia_id) {
+        console.warn('⚠️ Timeline missing cronoscita context - scheduler may be limited');
+      }
+      
+      if (timelineData.patologia !== patologia && patologia) {
+        console.warn('⚠️ Timeline patologia mismatch:', {
+          expected: patologia,
+          received: timelineData.patologia
+        });
+      }
     } catch (error) {
       setError(error.message);
     }
@@ -1402,15 +1509,27 @@ export const PatientTimeline = ({ patientId, doctorId, onScheduleAppointment }) 
       return;
     }
     
-    // Enhanced validation with detailed error messages
-    console.log('🔍 Validating scheduler prerequisites:', {
+    console.log('🔍 Validating scheduler prerequisites for Cronoscita:', {
       timeline_loaded: !!timeline,
       cronoscita_id: timeline.cronoscita_id,
       patologia_id: timeline.patologia_id,
       patologia_name: timeline.patologia,
+      selected_patologia: patologia, // ✅ Current selection
+      cronoscita_match: timeline.patologia === patologia,
       scheduler_available: timeline.scheduler_available,
       patient_name: timeline.patient_name
     });
+
+    // ✅ Validate Cronoscita context match
+    if (patologia && timeline.patologia !== patologia) {
+      alert(`❌ Cronoscita Context Mismatch:
+
+    Timeline mostra: ${PATOLOGIE[timeline.patologia] || timeline.patologia}
+    Cronoscita selezionata: ${PATOLOGIE[patologia] || patologia}
+
+    🔄 Ricaricare la pagina e selezionare la Cronoscita corretta.`);
+      return;
+    }
     
     // Check if scheduler is explicitly disabled
     if (timeline.scheduler_available === false) {
@@ -1480,7 +1599,7 @@ export const PatientTimeline = ({ patientId, doctorId, onScheduleAppointment }) 
       <div style={styles.card}>
         <div style={styles.errorState}>
           <p>Errore: {error}</p>
-          <button onClick={loadTimeline} style={styles.secondaryButton}>
+          <button onClick={loadTimelineForCronoscita} style={styles.secondaryButton}>
             Riprova
           </button>
         </div>
@@ -1577,8 +1696,22 @@ export const PatientTimeline = ({ patientId, doctorId, onScheduleAppointment }) 
                   borderRadius: '12px',
                   fontWeight: '500'
                 }}>
-                  📋 {timeline.patologia}
+                  🏥 {PATOLOGIE[timeline.patologia] || timeline.patologia}
                 </span>
+
+                {/* ✅ Multi-Cronoscita Status Indicator */}
+                {patologia && timeline.patologia !== patologia && (
+                  <span style={{
+                    fontSize: '12px',
+                    color: '#f59e0b',
+                    background: 'rgba(245, 158, 11, 0.1)',
+                    padding: '3px 8px',
+                    borderRadius: '8px',
+                    fontWeight: '500'
+                  }}>
+                    ⚠️ Cronoscita Mismatch
+                  </span>
+                )}
                 
                 <span style={{
                   fontSize: '12px',

@@ -140,11 +140,13 @@ async def lookup_patient(
     patient_service: PatientService = Depends(get_patient_service)
 ):
     """
-    Fase 1: Medico cerca paziente per codice fiscale
+    Fase 1: Medico cerca paziente per codice fiscale in Cronoscita specifica
     
-    - Controlla se paziente esiste nel sistema
-    - Se non presente, cerca demografici in Wirgilio
-    - Restituisce informazioni paziente e stato registrazione
+    - Controlla se paziente esiste in Cronoscita selezionata
+    - Se non presente in questa Cronoscita, verifica altre registrazioni
+    - Se trovato altrove, abilita riutilizzo demografici
+    - Se completamente nuovo, cerca demografici in Wirgilio
+    - Restituisce informazioni paziente e stato registrazione per Cronoscita
     """
     try:
         return await patient_service.lookup_patient(request)
@@ -187,6 +189,62 @@ async def register_patient_with_contacts(
     except TimelineServiceException as e:
         raise map_to_http_exception(e)
 
+@patient_router.get("/enrollments/{cf_paziente}")
+async def get_patient_enrollments(
+    cf_paziente: str,
+    id_medico: str = Query(..., description="ID Medico per autorizzazione"),
+    patient_service: PatientService = Depends(get_patient_service)
+):
+    """
+    Ottieni tutte le registrazioni Cronoscita di un paziente
+    
+    - Mostra tutte le Cronoscita in cui il paziente è registrato
+    - Utile per switching tra Cronoscita nel frontend
+    - Autorizzazione medico richiesta
+    """
+    try:
+        # Validate doctor
+        from ..services import DoctorService
+        if not DoctorService.validate_doctor(id_medico):
+            raise HTTPException(status_code=401, detail="Credenziali medico non valide")
+        
+        # Get patient repository
+        from ..database import get_database
+        from ..repositories import PatientRepository
+        
+        db = await get_database()
+        patient_repo = PatientRepository(db)
+        
+        # Get all enrollments
+        enrollments = await patient_repo.get_all_enrollments_by_cf(cf_paziente)
+        
+        if not enrollments:
+            raise HTTPException(status_code=404, detail=f"Nessuna registrazione trovata per {cf_paziente}")
+        
+        # Format response
+        formatted_enrollments = []
+        for enrollment in enrollments:
+            formatted_enrollments.append({
+                "cronoscita_id": enrollment.get("cronoscita_id"),
+                "patologia": enrollment.get("patologia"),
+                "id_medico": enrollment.get("id_medico"),
+                "enrollment_date": enrollment.get("enrollment_date").strftime("%d/%m/%Y") if enrollment.get("enrollment_date") else "",
+                "status": enrollment.get("status", "active")
+            })
+        
+        return {
+            "success": True,
+            "cf_paziente": cf_paziente,
+            "total_enrollments": len(formatted_enrollments),
+            "enrollments": formatted_enrollments
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting patient enrollments: {str(e)}")
+        raise HTTPException(status_code=500, detail="Errore interno del server")
+    
 # ================================
 # ROUTES GESTIONE TIMELINE
 # ================================
@@ -197,17 +255,19 @@ timeline_router = APIRouter(prefix="/timeline", tags=["Gestione Timeline"])
 async def get_patient_timeline(
     cf_paziente: str,
     id_medico: str = Query(..., description="ID Medico per autorizzazione"),
+    patologia: str = Query(None, description="Cronoscita specifica (opzionale per compatibilità)"),
     timeline_service: TimelineService = Depends(get_timeline_service)
 ):
     """
-    Fase 3: Medico visualizza timeline completa paziente
+    Fase 3: Medico visualizza timeline completa paziente per Cronoscita specifica
     
-    - Mostra appuntamenti passati, presenti e futuri
-    - Categorizza per data (precedenti, oggi, successivo)
-    - Include dettagli appuntamento e stato
+    - Mostra appuntamenti passati, presenti e futuri per Cronoscita selezionata
+    - Integra con servizio scheduler per programmazione
+    - Autorizzazione medico richiesta
+    - Se patologia non specificata, usa prima registrazione trovata (compatibilità)
     """
     try:
-        return await timeline_service.get_patient_timeline(cf_paziente, id_medico)
+        return await timeline_service.get_patient_timeline(cf_paziente, id_medico, patologia)
     except TimelineServiceException as e:
         raise map_to_http_exception(e)
 

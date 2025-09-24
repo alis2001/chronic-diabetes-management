@@ -51,13 +51,17 @@ class Database:
             logger.info("MongoDB connection closed")
     
     async def create_indexes(self):
-        """Create database indexes for optimal query performance"""
+        """Create database indexes for optimal query performance - MULTI-CRONOSCITA FIXED"""
         try:
-            # Patient collection indexes
+            # ✅ MULTI-CRONOSCITA PATIENT INDEXES - FIXED
+            await self.database.patients.create_index(
+                [("cf_paziente", 1), ("patologia", 1)], 
+                unique=True, 
+                name="idx_cf_paziente_patologia_unique"
+            )
             await self.database.patients.create_index(
                 "cf_paziente", 
-                unique=True, 
-                name="idx_cf_paziente_unique"
+                name="idx_cf_paziente_lookup"  # Non-unique for fast lookups
             )
             await self.database.patients.create_index(
                 "id_medico", 
@@ -67,8 +71,13 @@ class Database:
                 [("patologia", 1), ("status", 1)], 
                 name="idx_patologia_status"
             )
+            # ✅ NEW: Enhanced index for multi-Cronoscita support
+            await self.database.patients.create_index(
+                [("cf_paziente", 1), ("id_medico", 1)], 
+                name="idx_patient_doctor"
+            )
             
-            # Appointment collection indexes
+            # Appointment collection indexes (unchanged)
             await self.database.appointments.create_index(
                 [("cf_paziente", 1), ("scheduled_date", 1)], 
                 name="idx_patient_date"
@@ -82,7 +91,7 @@ class Database:
                 name="idx_status_date"
             )
             
-            logger.info("Database indexes created successfully")
+            logger.info("Database indexes created successfully - Multi-Cronoscita support enabled")
             
         except Exception as e:
             logger.error(f"Failed to create indexes: {e}")

@@ -225,28 +225,52 @@ class PatientService:
         self.wirgilio_service = wirgilio_service
     
     async def lookup_patient(self, request: PatientLookupRequest) -> PatientLookupResponse:
-        """Ricerca paziente per codice fiscale"""
+        """Ricerca paziente per codice fiscale in Cronoscita specifica"""
         # Valida medico
         if not DoctorService.validate_doctor(request.id_medico):
             raise DoctorValidationException("Credenziali medico non valide")
         if not await self._validate_pathology(request.patologia):
             raise ValueError("Patologia non valida")
-        # Verifica se il paziente esiste nel nostro sistema
-        existing_patient = await self.patient_repo.find_by_cf(request.cf_paziente)
         
-        if existing_patient:
+        # ✅ STEP 1: Check if patient exists in THIS specific Cronoscita
+        existing_in_cronoscita = await self.patient_repo.find_by_cf_and_patologia(
+            request.cf_paziente, 
+            request.patologia
+        )
+        
+        if existing_in_cronoscita:
+            logger.info(f"📋 Patient {request.cf_paziente} found in Cronoscita {request.patologia}")
             return PatientLookupResponse(
                 exists=True,
-                message="Paziente già registrato nel sistema",
+                message=f"Paziente già registrato per {request.patologia}",
                 patient_data={
-                    "cf_paziente": existing_patient["cf_paziente"],
-                    "patologia": existing_patient["patologia"],
-                    "enrollment_date": existing_patient["enrollment_date"].isoformat(),
-                    "status": existing_patient["status"]
+                    "cf_paziente": existing_in_cronoscita["cf_paziente"],
+                    "patologia": existing_in_cronoscita["patologia"],
+                    "enrollment_date": existing_in_cronoscita["enrollment_date"].isoformat(),
+                    "status": existing_in_cronoscita["status"],
+                    "cronoscita_id": existing_in_cronoscita.get("cronoscita_id"),
+                    "patologia_id": existing_in_cronoscita.get("cronoscita_id")  # Alias
                 }
             )
         
-        # Paziente non nel sistema - ricerca demografici
+        # ✅ STEP 2: Check if patient exists in ANY other Cronoscita (for demographics reuse)
+        any_existing = await self.patient_repo.find_any_enrollment_by_cf(request.cf_paziente)
+        
+        if any_existing:
+            logger.info(f"📋 Patient {request.cf_paziente} exists in other Cronoscita, enabling demographics reuse")
+            return PatientLookupResponse(
+                exists=False,
+                message=f"Paziente trovato in altra Cronoscita ({any_existing['patologia']}) - registrazione semplificata disponibile",
+                patient_data={
+                    "cf_paziente": request.cf_paziente,
+                    "demographics": any_existing.get("demographics"),
+                    "suggested_pathology": request.patologia,
+                    "can_reuse_contacts": True,
+                    "existing_enrollments": [any_existing["patologia"]]
+                }
+            )
+        
+        # ✅ STEP 3: Completely new patient - lookup demographics from Wirgilio
         demographics = await self.wirgilio_service.lookup_patient_demographics(request.cf_paziente)
         
         if not demographics:
@@ -259,8 +283,10 @@ class PatientService:
             exists=False,
             message="Paziente trovato nel registro demografico ma non ancora registrato",
             patient_data={
+                "cf_paziente": request.cf_paziente,
                 "demographics": demographics.dict(),
-                "suggested_pathology": request.patologia
+                "suggested_pathology": request.patologia,
+                "can_reuse_contacts": False
             }
         )
     
@@ -284,26 +310,39 @@ class PatientService:
             return False
 
     async def register_patient(self, request: PatientRegistrationRequest) -> PatientRegistrationResponse:
-        """Registra nuovo paziente per gestione timeline"""
+        """Registra nuovo paziente per gestione timeline in Cronoscita specifica"""
         # Valida medico
         if not DoctorService.validate_doctor(request.id_medico):
             raise DoctorValidationException("Credenziali medico non valide")
         if not await self._validate_pathology(request.patologia):
             raise ValueError("Patologia non valida")
-        # Verifica se il paziente esiste già
-        existing_patient = await self.patient_repo.find_by_cf(request.cf_paziente)
-        if existing_patient:
-            raise PatientAlreadyExistsException("Paziente già registrato")
         
-        # Ottieni demografici da Wirgilio
-        demographics = await self.wirgilio_service.lookup_patient_demographics(request.cf_paziente)
+        # ✅ CRITICAL: Check if patient exists in THIS specific Cronoscita only
+        existing_in_cronoscita = await self.patient_repo.find_by_cf_and_patologia(
+            request.cf_paziente, 
+            request.patologia
+        )
+        if existing_in_cronoscita:
+            raise PatientAlreadyExistsException(f"Paziente già registrato per {request.patologia}")
         
-        # Crea record paziente
+        # ✅ Try to reuse demographics from any existing enrollment
+        demographics = None
+        existing_any = await self.patient_repo.find_any_enrollment_by_cf(request.cf_paziente)
+        
+        if existing_any and existing_any.get("demographics"):
+            logger.info(f"📋 Reusing demographics from existing enrollment for {request.cf_paziente}")
+            demographics = existing_any["demographics"]
+        else:
+            # Ottieni demografici da Wirgilio per paziente completamente nuovo
+            logger.info(f"📋 Fetching new demographics from Wirgilio for {request.cf_paziente}")
+            demographics = await self.wirgilio_service.lookup_patient_demographics(request.cf_paziente)
+        
+        # Crea record paziente per questa specifica Cronoscita
         now = datetime.now()
         patient_data = Patient(
             cf_paziente=request.cf_paziente,
             id_medico=request.id_medico,
-            patologia=request.patologia,
+            patologia=request.patologia,  # This IS the Cronoscita
             demographics=demographics,
             status=PatientStatus.ACTIVE,
             enrollment_date=now,
@@ -311,17 +350,14 @@ class PatientService:
             updated_at=now
         )
         
-        # Converti per MongoDB (gestisce serializzazione date)
-        patient_dict = patient_data.dict()
-        
         # Salva nel database
         await self.patient_repo.create_patient(patient_data)
         
-        logger.info(f"Paziente registrato: {request.cf_paziente} dal medico {request.id_medico}")
+        logger.info(f"✅ Patient registered: {request.cf_paziente} in Cronoscita {request.patologia} by doctor {request.id_medico}")
         
         return PatientRegistrationResponse(
             success=True,
-            message=f"Paziente {request.cf_paziente} registrato con successo",
+            message=f"Paziente {request.cf_paziente} registrato con successo per {request.patologia}",
             patient_id=request.cf_paziente,
             enrollment_date=now
         )
@@ -332,10 +368,13 @@ class PatientService:
         if not DoctorService.validate_doctor(request.id_medico):
             raise DoctorValidationException("Credenziali medico non valide")
         
-        # Verifica paziente non esista già
-        existing_patient = await self.patient_repo.find_by_cf(request.cf_paziente)
-        if existing_patient:
-            raise PatientAlreadyExistsException("Paziente già registrato")
+        # ✅ CRITICAL: Check if patient exists in THIS specific Cronoscita only
+        existing_in_cronoscita = await self.patient_repo.find_by_cf_and_patologia(
+            request.cf_paziente, 
+            request.patologia
+        )
+        if existing_in_cronoscita:
+            raise PatientAlreadyExistsException(f"Paziente già registrato per {request.patologia}")
         
         # Ottieni demografici da Wirgilio
         demographics = await self.wirgilio_service.lookup_patient_demographics(request.cf_paziente)
@@ -542,23 +581,55 @@ class TimelineService:
         self.appointment_repo = appointment_repo
         self.patient_repo = patient_repo
     
-    async def get_patient_timeline(self, cf_paziente: str, id_medico: str) -> TimelineResponse:
-        """
-        Ottieni timeline completa paziente con cronoscita_id per scheduler
-        UPDATED: Include cronoscita_id for scheduler integration
-        """
-        
-        # Validazione medico
+    async def get_patient_timeline(self, cf_paziente: str, id_medico: str, patologia: str = None) -> TimelineResponse:
+        """Ottieni timeline completa paziente per Cronoscita specifica"""
+        # Validazioni
         if not DoctorService.validate_doctor(id_medico):
             raise DoctorValidationException("Credenziali medico non valide")
+        
+        # ✅ CRITICAL: If patologia specified, get timeline for specific Cronoscita
+        if patologia:
+            patient = await self.patient_repo.find_by_cf_and_patologia(cf_paziente, patologia)
+            if not patient:
+                # Patient not registered in this Cronoscita - check if they exist elsewhere
+                any_patient = await self.patient_repo.find_any_enrollment_by_cf(cf_paziente)
+                if any_patient:
+                    raise PatientNotFoundException(
+                        f"Paziente {cf_paziente} non registrato per {patologia}. "
+                        f"Registrato per: {any_patient['patologia']}"
+                    )
+                else:
+                    raise PatientNotFoundException(f"Paziente {cf_paziente} non trovato nel sistema")
+        else:
+            # ✅ Fallback: Get any enrollment (for backwards compatibility)
+            patient = await self.patient_repo.find_by_cf(cf_paziente)
+            if not patient:
+                raise PatientNotFoundException(f"Paziente {cf_paziente} non trovato")
+            patologia = patient.get("patologia", "")
         
         # Trova paziente
         patient = await self.patient_repo.find_by_cf(cf_paziente)
         if not patient:
             raise PatientNotFoundException(f"Paziente {cf_paziente} non trovato")
         
-        # Ottieni appuntamenti
-        appointments = await self.appointment_repo.get_patient_appointments(cf_paziente)
+        # ✅ Get appointments for this specific Cronoscita only
+        appointments = []
+        if patient.get("cronoscita_id") or patient.get("patologia"):
+            # Filter appointments by Cronoscita to avoid showing wrong data
+            cronoscita_filter = patient.get("cronoscita_id") or patient.get("patologia")
+            all_appointments = await self.appointment_repo.get_appointments_by_patient(cf_paziente)
+            
+            # Filter to only appointments for this Cronoscita
+            appointments = [
+                apt for apt in all_appointments 
+                if (apt.get("cronoscita_id") == cronoscita_filter or 
+                    apt.get("patologia") == cronoscita_filter or
+                    apt.get("patologia") == patient.get("patologia"))
+            ]
+            logger.info(f"📋 Filtered {len(appointments)} appointments for Cronoscita {patient.get('patologia')}")
+        else:
+            # Fallback: get all appointments
+            appointments = await self.appointment_repo.get_appointments_by_patient(cf_paziente)
         
         # Categorizza appuntamenti per data
         today = date.today()
@@ -657,7 +728,7 @@ class TimelineService:
         return TimelineResponse(
             patient_id=cf_paziente,
             patient_name=patient_name,
-            patologia=patologia_name,
+            patologia=patient.get("patologia", patologia_name),  # Use specific Cronoscita
             cronoscita_id=cronoscita_id,  # CRITICAL for scheduler
             patologia_id=cronoscita_id,   # Alias for compatibility
             enrollment_date=patient["enrollment_date"].strftime("%d/%m/%Y"),
@@ -668,10 +739,12 @@ class TimelineService:
             can_schedule_next=len([
                 apt for apt in appointments 
                 if apt.get("cronoscita_id") == cronoscita_id and 
-                _normalize_appointment_date(apt.get("appointment_date") or apt.get("scheduled_date")) >= today and  # FIXED: >= instead of >
+                _normalize_appointment_date(apt.get("appointment_date") or apt.get("scheduled_date")) >= today and
                 apt.get("status") != "CANCELLED"
             ]) == 0,
-            last_referto_date=None   # Could be enhanced later
+            last_referto_date=None,
+            scheduler_available=True if cronoscita_id else False,
+            scheduler_error=None if cronoscita_id else "Cronoscita non configurata"
         )
 
 class RefertoService:

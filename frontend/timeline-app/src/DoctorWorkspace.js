@@ -206,6 +206,7 @@ export const DoctorWorkspace = () => {
   };
 
   const handleScheduleAppointment = (patientId, doctorId) => {
+    console.log('🏥 Schedule appointment for Cronoscita:', sessionData.patientData?.patologia);
     navigate(`/doctor/${doctorId}/schedule/${patientId}`);
     console.log(`📅 ${doctorInfo} - Starting appointment scheduling for:`, patientId);
   };
@@ -466,6 +467,7 @@ export const DoctorWorkspace = () => {
               <PatientTimeline
                 patientId={sessionData.patientData.cf_paziente}
                 doctorId={doctorId}
+                patologia={sessionData.patientData.patologia} // ✅ Pass Cronoscita context
                 onScheduleAppointment={handleScheduleAppointment}
               />
               <ActionButtons />
@@ -495,6 +497,7 @@ export const DoctorWorkspace = () => {
             <PatientTimeline
               patientId={sessionData.patientData.cf_paziente}
               doctorId={doctorId}
+              patologia={sessionData.patientData.patologia} // ✅ Pass Cronoscita context
               onScheduleAppointment={handleScheduleAppointment}
             />
           ) : (
