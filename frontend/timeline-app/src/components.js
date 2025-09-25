@@ -1454,7 +1454,7 @@ export const PatientTimeline = ({ patientId, doctorId, patologia, onScheduleAppo
   const [canScheduleNext, setCanScheduleNext] = useState(false);
   const [checkingReferto, setCheckingReferto] = useState(false);
   const [showScheduler, setShowScheduler] = useState(false);
-
+  
   useEffect(() => {
     if (patientId && doctorId) {
       console.log('🏥 Timeline loading for specific Cronoscita:', { patientId, doctorId, patologia });
@@ -1488,11 +1488,27 @@ export const PatientTimeline = ({ patientId, doctorId, patologia, onScheduleAppo
           alert(`✅ Appuntamento programmato con successo per ${appointmentDate}!\n` +
                 `Esami selezionati: ${event.data.data.exam_count}`);
           
-          // Refresh timeline to show new appointment
-          loadTimelineForCronoscita()
+          // ✅ CRITICAL FIX: Ensure timeline refresh completes before state updates
+          const refreshAndUpdate = async () => {
+            try {
+              console.log('🔄 Refreshing timeline after appointment scheduling...');
+              
+              // Refresh timeline data from server
+              await loadTimelineForCronoscita();
+              
+              // Wait a bit for state to settle
+              setTimeout(() => {
+                // Re-check referto status
+                checkCanScheduleNext();
+                console.log('✅ Timeline refresh and state update completed');
+              }, 500);
+              
+            } catch (error) {
+              console.error('❌ Error refreshing timeline:', error);
+            }
+          };
           
-          // Re-check referto status
-          checkCanScheduleNext();
+          refreshAndUpdate();
           
           // Close scheduler
           setShowScheduler(false);
@@ -1792,11 +1808,57 @@ Ricaricare la pagina e selezionare la cronoscita corretta.`;
   
   if (!timeline) return null;
 
-  const allAppointments = [
-    ...timeline.precedenti,
-    ...timeline.oggi,
-    ...timeline.successivo
-  ];
+  const allAppointments = (() => {
+    if (!timeline) return [];
+    
+    const appointments = [];
+    
+    // Add past appointments (precedenti)
+    if (timeline.precedenti && Array.isArray(timeline.precedenti)) {
+      timeline.precedenti.forEach(apt => {
+        appointments.push({
+          ...apt,
+          date: apt.date || apt.appointment_date || apt.scheduled_date,
+          type: apt.type || apt.appointment_type || 'Visita',
+          status: apt.status || 'completed'
+        });
+      });
+    }
+    
+    // Add today's appointments (oggi)
+    if (timeline.oggi && Array.isArray(timeline.oggi)) {
+      timeline.oggi.forEach(apt => {
+        appointments.push({
+          ...apt,
+          date: apt.date || apt.appointment_date || apt.scheduled_date,
+          type: apt.type || apt.appointment_type || 'Visita',
+          status: apt.status || 'scheduled'
+        });
+      });
+    }
+    
+    // Add future appointments (successivo) - CRITICAL FOR GREEN BUTTON
+    if (timeline.successivo && Array.isArray(timeline.successivo)) {
+      timeline.successivo.forEach(apt => {
+        appointments.push({
+          ...apt,
+          date: apt.date || apt.appointment_date || apt.scheduled_date,
+          type: apt.type || apt.appointment_type || 'Visita',
+          status: apt.status || 'scheduled'
+        });
+      });
+    }
+    
+    console.log('🔍 DEBUG: Processed appointments for timeline:', {
+      total_appointments: appointments.length,
+      precedenti_count: timeline.precedenti?.length || 0,
+      oggi_count: timeline.oggi?.length || 0,
+      successivo_count: timeline.successivo?.length || 0,
+      sample_future_appointment: timeline.successivo?.[0] || null
+    });
+    
+    return appointments;
+  })();
 
   return (
     <div style={styles.card}>
