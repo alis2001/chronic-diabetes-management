@@ -73,7 +73,7 @@ def _format_appointment_for_timeline(apt: Dict[str, Any]) -> AppointmentSummary:
         )
         
         normalized_date = _normalize_appointment_date(appointment_datetime)
-        formatted_date = normalized_date.strftime("%d/%m/%Y")
+        formatted_date = normalized_date.strftime("%Y-%m-%d")
         
         scheduled_time = apt.get("scheduled_time", "09:00")
         appointment_type = apt.get("appointment_type", apt.get("type", "Visita"))
@@ -720,79 +720,70 @@ class TimelineService:
         cronoscita_id = patient.get("cronoscita_id")
 
         appointments = []
-        if patient.get("cronoscita_id") or patient.get("patologia"):
-            # Filter appointments by Cronoscita to avoid showing wrong data
-            cronoscita_filter = patient.get("cronoscita_id") or patient.get("patologia")
-            
-            # Get all appointments for patient
-            all_appointments = await self.appointment_repo.get_patient_appointments(cf_paziente)
-            
-            cronoscita_id = patient.get("cronoscita_id")  # Get the actual cronoscita_id
-            logger.info(f"🔍 Filtering appointments: cronoscita_id={cronoscita_id}, stored_patologia={stored_patologia}")
-
-            filtered_appointments = []
-            logger.info(f"🔍 RAW APPOINTMENT DEBUG - Processing {len(appointments)} appointments")
-            for i, apt in enumerate(appointments):
-                logger.info(f"🔍 APPOINTMENT #{i+1} - ALL FIELDS: {apt}")
-
-            # Simple filtering with full logging
-            filtered_appointments = []
-            for apt in appointments:
-                # Log exactly what we're looking for vs what we found
-                logger.info(f"🔍 MATCHING - Looking for cronoscita_id: '{cronoscita_id}'")
-                logger.info(f"🔍 MATCHING - Appointment has cronoscita_id: '{apt.get('cronoscita_id')}'")
-                logger.info(f"🔍 MATCHING - Appointment has patologia: '{apt.get('patologia')}'")
-                
-                # Simple string comparison
-                if (str(apt.get("cronoscita_id", "")) == str(cronoscita_id) or
-                    str(apt.get("patologia", "")) == str(stored_patologia)):
-                    filtered_appointments.append(apt)
-                    logger.info(f"✅ APPOINTMENT MATCHED!")
-                else:
-                    logger.info(f"❌ APPOINTMENT NOT MATCHED")
-
-            appointments = filtered_appointments
-            logger.info(f"📋 Filtered {len(appointments)} appointments for VALIDATED Cronoscita {stored_patologia}")
-        else:
-            # Fallback: get all appointments  
-            appointments = await self.appointment_repo.get_patient_appointments(cf_paziente)
+        all_appointments = await self.appointment_repo.get_patient_appointments(cf_paziente)
+        target_cronoscita_id = patient.get("cronoscita_id")
+        stored_patologia = patient.get("patologia", "").strip()
         
-        # Categorizza appuntamenti per data
+        logger.info(f"🔍 RAW APPOINTMENTS: {len(all_appointments)}, cronoscita_id: '{target_cronoscita_id}'")
+        
+        filtered_appointments = []
+        for i, apt in enumerate(all_appointments):
+            apt_cronoscita = apt.get("cronoscita_id")
+            apt_patologia = apt.get("patologia", "").strip()
+            
+            # ✅ FIXED: ObjectId string comparison
+            cronoscita_match = str(apt_cronoscita) == str(target_cronoscita_id) if apt_cronoscita and target_cronoscita_id else False
+            patologia_match = apt_patologia.upper() == stored_patologia.upper() if apt_patologia and stored_patologia else False
+            
+            logger.info(f"🔍 APT#{i+1}: {apt.get('appointment_id')} - {apt.get('appointment_date')} - cronoscita_match:{cronoscita_match} patologia_match:{patologia_match}")
+            
+            if cronoscita_match or patologia_match:
+                filtered_appointments.append(apt)
+                logger.info(f"   ✅ MATCHED")
+            else:
+                logger.info(f"   ❌ EXCLUDED")
+        
+        appointments = filtered_appointments
+        logger.info(f"📋 FILTERED RESULT: {len(appointments)} appointments")
+
+        
         today = date.today()
         precedenti = []
         oggi = []
         successivo = []
 
-        logger.info(f"🔍 Processing {len(appointments)} appointments for categorization")
+        logger.info(f"🔍 CATEGORIZING {len(appointments)} appointments (today: {today})")
 
-        for apt in appointments:
-            appointment_datetime = (
-                apt.get("appointment_date") or 
-                apt.get("scheduled_date") or 
-                apt.get("data_appuntamento")
-            )
+        for i, apt in enumerate(appointments):
+            appointment_datetime = apt.get("appointment_date")
+            logger.info(f"🔍 APT#{i+1}: {apt.get('appointment_id')} - raw_date: {appointment_datetime} ({type(appointment_datetime)})")
             
             if appointment_datetime:
                 appointment_date = _normalize_appointment_date(appointment_datetime)
-                
-                logger.debug(f"📅 Appointment date: {appointment_date}, Today: {today}, Future: {appointment_date > today}")
+                logger.info(f"   normalized_date: {appointment_date}, is_future: {appointment_date > today}")
                 
                 if appointment_date < today:
                     precedenti.append(_format_appointment_for_timeline(apt))
+                    logger.info(f"   ✅ Added to PRECEDENTI")
                 elif appointment_date == today:
                     oggi.append(_format_appointment_for_timeline(apt))
+                    logger.info(f"   ✅ Added to OGGI")
                 else:
                     successivo.append(_format_appointment_for_timeline(apt))
-                    logger.info(f"✅ Added future appointment to successivo: {appointment_date}")
+                    logger.info(f"   ✅ Added to SUCCESSIVO: {appointment_date}")
             else:
-                logger.warning(f"⚠️ Appointment missing date fields: {apt.get('appointment_id', 'unknown')}")
+                logger.warning(f"   ❌ Missing appointment_date")
 
-        logger.info(f"📊 Final categorization: {len(precedenti)} precedenti, {len(oggi)} oggi, {len(successivo)} successivo")
+        logger.info(f"📊 FINAL: precedenti:{len(precedenti)}, oggi:{len(oggi)}, successivo:{len(successivo)}")
+        if successivo:
+            for i, s in enumerate(successivo):
+                logger.info(f"   successivo[{i}]: {s.date} - {s.type}")
+
         
-        # Sort appointments
-        precedenti.sort(key=lambda x: x["date"], reverse=True)
-        oggi.sort(key=lambda x: x.get("scheduled_time", ""))
-        successivo.sort(key=lambda x: x["date"])
+        # Sort appointments - FIXED: Use attribute access, not dictionary access
+        precedenti.sort(key=lambda x: x.date, reverse=True)
+        oggi.sort(key=lambda x: x.time, reverse=False)
+        successivo.sort(key=lambda x: x.date)
         
         # Extract patient name
         demographics = patient.get("demographics", {})
