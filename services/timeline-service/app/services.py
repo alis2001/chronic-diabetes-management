@@ -5,12 +5,13 @@ Separazione pulita della logica di business da routing e accesso dati
 Aggiornato: Connessione database Wirgilio reale, registrazione con contatti modificabili
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime, date
 import uuid
 import httpx
 import logging
 import motor.motor_asyncio
+from bson import ObjectId
 
 from .models import (
     PatientLookupRequest, PatientLookupResponse,
@@ -24,7 +25,7 @@ from .cronoscita_repository import CronoscitaRepository
 from .repositories import PatientRepository, AppointmentRepository
 from .config import (
     settings, HARDCODED_DOCTOR_CREDENTIALS,
-    APPOINTMENT_TYPE_DESCRIPTIONS
+    APPOINTMENT_TYPE_DESCRIPTIONS, APPOINTMENT_LOCATIONS
 )
 from .exceptions import (
     DoctorValidationException, PatientNotFoundException, PatientAlreadyExistsException,
@@ -32,6 +33,74 @@ from .exceptions import (
 )
 
 logger = logging.getLogger(__name__)
+
+# ================================
+# MISSING HELPER FUNCTIONS - CRITICAL FIX
+# ================================
+
+def _normalize_appointment_date(appointment_datetime: Any) -> date:
+    """
+    Convert various date formats to Python date object
+    CRITICAL FIX: This function was missing and causing categorization failure
+    """
+    try:
+        if isinstance(appointment_datetime, date) and not isinstance(appointment_datetime, datetime):
+            return appointment_datetime
+        elif isinstance(appointment_datetime, datetime):
+            return appointment_datetime.date()
+        elif isinstance(appointment_datetime, str):
+            if 'T' in appointment_datetime:
+                return datetime.fromisoformat(appointment_datetime.replace('Z', '+00:00')).date()
+            else:
+                return datetime.strptime(appointment_datetime, '%Y-%m-%d').date()
+        else:
+            logger.warning(f"⚠️ Unknown date format: {appointment_datetime}")
+            return date.today()
+    except Exception as e:
+        logger.error(f"❌ Error normalizing appointment date {appointment_datetime}: {e}")
+        return date.today()
+
+def _format_appointment_for_timeline(apt: Dict[str, Any]) -> AppointmentSummary:
+    """
+    Format appointment data for timeline display
+    CRITICAL FIX: This function was missing and causing display issues
+    """
+    try:
+        appointment_datetime = (
+            apt.get("appointment_date") or 
+            apt.get("scheduled_date") or 
+            apt.get("data_appuntamento")
+        )
+        
+        normalized_date = _normalize_appointment_date(appointment_datetime)
+        formatted_date = normalized_date.strftime("%d/%m/%Y")
+        
+        scheduled_time = apt.get("scheduled_time", "09:00")
+        appointment_type = apt.get("appointment_type", apt.get("type", "Visita"))
+        status = apt.get("status", "scheduled")
+        priority = apt.get("priority", "normal")
+        
+        return AppointmentSummary(
+            appointment_id=str(apt.get("appointment_id", apt.get("_id", ""))),
+            date=formatted_date,
+            time=scheduled_time,
+            type=appointment_type,
+            status=status,
+            priority=priority,
+            location=apt.get("location"),
+            notes=apt.get("notes", apt.get("doctor_notes"))
+        )
+        
+    except Exception as e:
+        logger.error(f"❌ Error formatting appointment for timeline: {e}")
+        return AppointmentSummary(
+            appointment_id="error",
+            date=date.today().strftime("%d/%m/%Y"),
+            time="09:00",
+            type="Visita",
+            status="error",
+            priority="normal"
+        )
 
 class DoctorService:
     """Servizio per operazioni relative ai medici"""
@@ -643,8 +712,13 @@ class TimelineService:
             )
 
         logger.info(f"✅ CRONOSCITA VALIDATION PASSED: '{stored_patologia}' for {cf_paziente}")
-        
-        # ✅ Get appointments for this VALIDATED specific Cronoscita only
+
+        from .database import get_database
+        db = await get_database()
+        cronoscita_repo = CronoscitaRepository(db)
+        patient = await cronoscita_repo.ensure_patient_has_cronoscita_id(patient)
+        cronoscita_id = patient.get("cronoscita_id")
+
         appointments = []
         if patient.get("cronoscita_id") or patient.get("patologia"):
             # Filter appointments by Cronoscita to avoid showing wrong data
@@ -653,13 +727,31 @@ class TimelineService:
             # Get all appointments for patient
             all_appointments = await self.appointment_repo.get_patient_appointments(cf_paziente)
             
-            # Filter to only appointments for this VALIDATED Cronoscita
-            appointments = [
-                apt for apt in all_appointments 
-                if (apt.get("cronoscita_id") == cronoscita_filter or 
-                    apt.get("patologia") == cronoscita_filter or
-                    apt.get("patologia") == stored_patologia)  # Use validated patologia
-            ]
+            cronoscita_id = patient.get("cronoscita_id")  # Get the actual cronoscita_id
+            logger.info(f"🔍 Filtering appointments: cronoscita_id={cronoscita_id}, stored_patologia={stored_patologia}")
+
+            filtered_appointments = []
+            logger.info(f"🔍 RAW APPOINTMENT DEBUG - Processing {len(appointments)} appointments")
+            for i, apt in enumerate(appointments):
+                logger.info(f"🔍 APPOINTMENT #{i+1} - ALL FIELDS: {apt}")
+
+            # Simple filtering with full logging
+            filtered_appointments = []
+            for apt in appointments:
+                # Log exactly what we're looking for vs what we found
+                logger.info(f"🔍 MATCHING - Looking for cronoscita_id: '{cronoscita_id}'")
+                logger.info(f"🔍 MATCHING - Appointment has cronoscita_id: '{apt.get('cronoscita_id')}'")
+                logger.info(f"🔍 MATCHING - Appointment has patologia: '{apt.get('patologia')}'")
+                
+                # Simple string comparison
+                if (str(apt.get("cronoscita_id", "")) == str(cronoscita_id) or
+                    str(apt.get("patologia", "")) == str(stored_patologia)):
+                    filtered_appointments.append(apt)
+                    logger.info(f"✅ APPOINTMENT MATCHED!")
+                else:
+                    logger.info(f"❌ APPOINTMENT NOT MATCHED")
+
+            appointments = filtered_appointments
             logger.info(f"📋 Filtered {len(appointments)} appointments for VALIDATED Cronoscita {stored_patologia}")
         else:
             # Fallback: get all appointments  
@@ -670,7 +762,9 @@ class TimelineService:
         precedenti = []
         oggi = []
         successivo = []
-        
+
+        logger.info(f"🔍 Processing {len(appointments)} appointments for categorization")
+
         for apt in appointments:
             appointment_datetime = (
                 apt.get("appointment_date") or 
@@ -681,12 +775,19 @@ class TimelineService:
             if appointment_datetime:
                 appointment_date = _normalize_appointment_date(appointment_datetime)
                 
+                logger.debug(f"📅 Appointment date: {appointment_date}, Today: {today}, Future: {appointment_date > today}")
+                
                 if appointment_date < today:
                     precedenti.append(_format_appointment_for_timeline(apt))
                 elif appointment_date == today:
                     oggi.append(_format_appointment_for_timeline(apt))
                 else:
                     successivo.append(_format_appointment_for_timeline(apt))
+                    logger.info(f"✅ Added future appointment to successivo: {appointment_date}")
+            else:
+                logger.warning(f"⚠️ Appointment missing date fields: {apt.get('appointment_id', 'unknown')}")
+
+        logger.info(f"📊 Final categorization: {len(precedenti)} precedenti, {len(oggi)} oggi, {len(successivo)} successivo")
         
         # Sort appointments
         precedenti.sort(key=lambda x: x["date"], reverse=True)
@@ -702,11 +803,6 @@ class TimelineService:
             patient_name = nome
         
         patologia_name = patient.get("patologia", patologia or "Sconosciuta")
-        from .database import get_database
-        db = await get_database()
-        cronoscita_repo = CronoscitaRepository(db)
-        patient = await cronoscita_repo.ensure_patient_has_cronoscita_id(patient)
-        cronoscita_id = patient.get("cronoscita_id")
         
         logger.info(f"✅ Timeline loaded for {cf_paziente} in SPECIFIC Cronoscita {patologia_name}: {len(precedenti)} precedenti, {len(oggi)} oggi, {len(successivo)} futuri")
         
