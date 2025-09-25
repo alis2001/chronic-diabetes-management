@@ -1544,13 +1544,56 @@ Ricaricare la pagina e selezionare la cronoscita corretta.`;
   const checkCanScheduleNext = async () => {
     if (!patientId || !doctorId) return;
     
+    // ✅ CRONOSCITA VALIDATION: Ensure we have cronoscita context
+    if (!patologia && !timeline?.patologia) {
+      console.warn('⚠️ Missing cronoscita context for scheduling check');
+      setCanScheduleNext(false);
+      return;
+    }
+    
+    // Use patologia from props or timeline context
+    const cronoscitaName = patologia || timeline?.patologia;
+    const cronoscitaId = timeline?.cronoscita_id || null;
+    
     setCheckingReferto(true);
     try {
-      const response = await timelineAPI.checkCanScheduleNext(patientId, doctorId);
+      console.log('🔍 Checking can schedule next with cronoscita:', {
+        patientId,
+        doctorId,
+        cronoscita: cronoscitaName,
+        cronoscita_id: cronoscitaId
+      });
+      
+      // ✅ COMPLETE API CALL: Include cronoscita parameters
+      const response = await timelineAPI.checkCanScheduleNext(
+        patientId, 
+        doctorId, 
+        cronoscitaName, 
+        cronoscitaId
+      );
+      
       setCanScheduleNext(response.can_schedule_next || false);
-      console.log('✅ Can schedule next appointment:', response.can_schedule_next);
+      
+      console.log('✅ Can schedule next result:', {
+        can_schedule: response.can_schedule_next,
+        message: response.message,
+        cronoscita: response.cronoscita,
+        validation_details: response.validation_details
+      });
+      
+      // ✅ ENHANCED LOGGING: Show why scheduling is blocked/allowed
+      if (!response.can_schedule_next && response.message) {
+        console.log('🚫 Scheduling blocked:', response.message);
+      }
+      
     } catch (error) {
-      console.error('❌ Error checking referto status:', error);
+      console.error('❌ Error checking referto status with cronoscita:', error);
+      
+      // Enhanced error handling
+      if (error.message?.includes('patologia') || error.message?.includes('cronoscita')) {
+        console.error('🚨 Cronoscita validation error - timeline context may be incomplete');
+      }
+      
       setCanScheduleNext(false);
     }
     setCheckingReferto(false);

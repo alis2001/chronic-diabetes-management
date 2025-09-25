@@ -865,18 +865,15 @@ class RefertoService:
         if not DoctorService.validate_doctor(id_medico):
             raise DoctorValidationException("Credenziali medico non valide")
         
-        # ✅ CRITICAL: Validate cronoscita parameter
         if not patologia or not patologia.strip():
             raise ValueError("Cronoscita parameter required per ricerca referto oggi")
         
-        # ✅ CRONOSCITA-SPECIFIC: Validate patient exists in THIS specific cronoscita
         patient = await self.patient_repo.find_by_cf_and_patologia(cf_paziente, patologia)
         if not patient:
             raise PatientNotFoundException(
                 f"Paziente {cf_paziente} non registrato per cronoscita '{patologia}'"
             )
         
-        # Cerca referto di oggi per questa cronoscita specifica
         from datetime import date, datetime
         today = date.today()
         
@@ -937,8 +934,70 @@ class RefertoService:
         logger.info(f"✅ Retrieved {len(referti)} referti for CF:{cf_paziente} in cronoscita:'{patologia}'")
         return referti
     
-    async def check_can_schedule_next_appointment(self, cf_paziente: str, id_medico: str) -> bool:
-        """Controlla se medico può programmare prossimo appuntamento"""
+    async def check_can_schedule_next_appointment(
+        self, 
+        cf_paziente: str, 
+        id_medico: str, 
+        patologia: str = None,
+        cronoscita_id: str = None
+    ) -> bool:
+        """
+        Check if doctor can schedule next appointment - COMPLETE VALIDATION
         
-        # Per ora, controlla solo se esiste almeno un referto per il paziente oggi
-        return await self.referto_repo.check_referto_exists_for_patient_today(cf_paziente, id_medico)
+        Must satisfy BOTH conditions:
+        1. ✅ Referto completed for today  
+        2. ✅ NO future appointments exist for this cronoscita
+        
+        Args:
+            cf_paziente: Patient fiscal code
+            id_medico: Doctor ID
+            patologia: Cronoscita name (optional)
+            cronoscita_id: Cronoscita ID (optional)
+            
+        Returns:
+            bool: True if can schedule next appointment
+        """
+        try:
+            logger.info(f"🔍 Checking scheduling permission: {cf_paziente} + cronoscita:{patologia}")
+            
+            has_referto_today = await self.referto_repo.check_referto_exists_for_patient_today_cronoscita(
+                cf_paziente, id_medico, patologia
+            )
+            
+            if not has_referto_today:
+                logger.info(f"🚫 Cannot schedule: No referto completed today for {cf_paziente}")
+                return False
+            
+            # ✅ CRITICAL FIX: Convert patologia name to cronoscita_id if needed
+            target_cronoscita_id = cronoscita_id
+            
+            if not target_cronoscita_id and patologia:
+                # Convert patologia name to cronoscita_id for proper matching
+                from .database import get_database
+                from .cronoscita_repository import CronoscitaRepository
+                
+                db = await get_database()
+                cronoscita_repo = CronoscitaRepository(db)
+                target_cronoscita_id = await cronoscita_repo.find_cronoscita_id_by_name(patologia)
+                
+                if target_cronoscita_id:
+                    logger.info(f"🔄 Converted patologia '{patologia}' to cronoscita_id: {target_cronoscita_id}")
+                else:
+                    logger.warning(f"⚠️ Could not find cronoscita_id for patologia: {patologia}")
+            
+            # ✅ CONDITION 2: Check if future appointments exist for this cronoscita
+            has_future_appointment = await self.appointment_repo.has_future_appointment_for_cronoscita(
+                cf_paziente, target_cronoscita_id, None  # Use cronoscita_id, not patologia
+            )
+            
+            if has_future_appointment:
+                logger.info(f"🚫 Cannot schedule: Future appointment already exists for {cf_paziente} in cronoscita_id '{target_cronoscita_id}'")
+                return False
+            
+            # ✅ BOTH CONDITIONS SATISFIED
+            logger.info(f"✅ Can schedule next: Referto completed + No future appointments for {cf_paziente}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Error checking schedule permission: {e}")
+            return False  # Conservative: block scheduling on error

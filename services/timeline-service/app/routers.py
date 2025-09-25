@@ -476,23 +476,68 @@ async def get_patient_referti(
 async def check_can_schedule_next(
     cf_paziente: str,
     id_medico: str = Query(..., description="ID Medico per autorizzazione"),
+    patologia: str = Query(..., description="Cronoscita per isolamento controllo"),
+    cronoscita_id: str = Query(None, description="ID Cronoscita (opzionale)"),
     referto_service: RefertoService = Depends(get_referto_service)
 ):
     """
-    Controlla se medico può programmare prossimo appuntamento
+    Controlla se medico può programmare prossimo appuntamento - CRONOSCITA ISOLATED
     
-    - Restituisce true se referto è stato salvato per oggi
+    Verifica ENTRAMBE le condizioni:
+    1. ✅ Referto completato per oggi 
+    2. ✅ NESSUN appuntamento futuro esistente per questa cronoscita
+    
     - Utilizzato dal frontend per abilitare/disabilitare bottone 'Successivo'
+    - Richiede parametro cronoscita per isolamento corretto
     """
     try:
-        can_schedule = await referto_service.check_can_schedule_next_appointment(cf_paziente, id_medico)
+        # ✅ CRONOSCITA VALIDATION
+        if not patologia or not patologia.strip():
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "success": False,
+                    "error": "MISSING_CRONOSCITA_PARAMETER",
+                    "message": "Parametro 'patologia' obbligatorio per controllo programmazione",
+                    "cf_paziente": cf_paziente,
+                    "required_parameter": "patologia"
+                }
+            )
+        
+        logger.info(f"✅ Can-schedule API with cronoscita: {cf_paziente} → '{patologia}' by Dr.{id_medico}")
+        
+        # ✅ COMPLETE VALIDATION: Both referto + future appointment check
+        can_schedule = await referto_service.check_can_schedule_next_appointment(
+            cf_paziente, id_medico, patologia, cronoscita_id
+        )
+        
         return {
             "success": True,
             "can_schedule_next": can_schedule,
-            "message": "Referto completato, prossimo appuntamento disponibile" if can_schedule else "Completare referto prima di programmare prossimo appuntamento"
+            "cf_paziente": cf_paziente,
+            "cronoscita": patologia,
+            "cronoscita_id": cronoscita_id,
+            "message": (
+                "✅ Referto completato + Nessun appuntamento futuro: prossimo appuntamento disponibile" 
+                if can_schedule 
+                else "🚫 Completare referto o attendere completamento appuntamento futuro esistente"
+            ),
+            "validation_details": {
+                "referto_required": True,
+                "future_appointment_check": True,
+                "cronoscita_isolation": True
+            }
         }
+        
     except TimelineServiceException as e:
         raise map_to_http_exception(e)
+    except ValueError as e:
+        logger.error(f"❌ Can-schedule cronoscita validation error: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"❌ Unexpected can-schedule error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Errore controllo programmazione: {str(e)}")
+    
 # ================================
 # ROUTES COMPATIBILITÀ LEGACY
 # ================================

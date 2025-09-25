@@ -343,8 +343,106 @@ class AppointmentRepository:
             logger.error(f"Error getting appointment statistics: {e}")
             raise DatabaseException(f"Failed to get statistics: {str(e)}")
         
-# Add this class at the END of your existing repositories.py file
-# Insert after the AppointmentRepository class
+    async def find_future_appointments_for_patient_cronoscita(
+        self, 
+        cf_paziente: str, 
+        cronoscita_id: str = None,
+        patologia: str = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Find future appointments for patient in specific cronoscita
+        Used by Timeline service to check if scheduling should be blocked
+        FIXED: Proper MongoDB date serialization
+        """
+        try:
+            from datetime import date, datetime
+            
+            # ✅ FIX: Convert date to datetime for MongoDB compatibility
+            today_date = date.today()
+            today_datetime = datetime.combine(today_date, datetime.min.time())
+            
+            # Build query - support both cronoscita_id and patologia matching
+            query = {
+                "cf_paziente": cf_paziente.upper(),
+                "appointment_date": {"$gte": today_datetime},  # ✅ Use datetime, not date
+                "status": {"$in": ["scheduled", "confirmed"]}
+            }
+            
+            # Add cronoscita filter - flexible matching
+            if cronoscita_id:
+                query["cronoscita_id"] = cronoscita_id
+            elif patologia:
+                # Alternative: match by patologia field
+                query["patologia"] = patologia
+            
+            cursor = self.collection.find(query).sort("appointment_date", 1)
+            appointments = await cursor.to_list(length=None)
+            
+            logger.info(f"📅 Timeline check: Found {len(appointments)} future appointments for {cf_paziente} in cronoscita")
+            return appointments
+            
+        except Exception as e:
+            logger.error(f"❌ Error finding future appointments in timeline: {e}")
+            return []
+
+    async def has_future_appointment_for_cronoscita(
+        self, 
+        cf_paziente: str, 
+        cronoscita_id: str = None,
+        patologia: str = None
+    ) -> bool:
+        """
+        Check if patient has any future appointments for specific cronoscita
+        Returns True if future appointments exist (should block new scheduling)
+        FIXED: Proper error handling and logging
+        """
+        try:
+            appointments = await self.find_future_appointments_for_patient_cronoscita(
+                cf_paziente, cronoscita_id, patologia
+            )
+            
+            has_future = len(appointments) > 0
+            
+            if has_future:
+                next_appointment = appointments[0]
+                logger.info(f"🚫 Timeline blocking: Patient {cf_paziente} has future appointment on {next_appointment.get('appointment_date')}")
+            else:
+                logger.info(f"✅ Timeline allowing: No future appointments found for {cf_paziente}")
+                
+            return has_future
+            
+        except Exception as e:
+            logger.error(f"❌ Error checking future appointments: {e}")
+            return True  # ✅ Conservative: block scheduling on error
+
+    async def has_future_appointment_for_cronoscita(
+        self, 
+        cf_paziente: str, 
+        cronoscita_id: str = None,
+        patologia: str = None
+    ) -> bool:
+        """
+        Check if patient has any future appointments for specific cronoscita
+        Returns True if future appointments exist (should block new scheduling)
+        """
+        try:
+            appointments = await self.find_future_appointments_for_patient_cronoscita(
+                cf_paziente, cronoscita_id, patologia
+            )
+            
+            has_future = len(appointments) > 0
+            
+            if has_future:
+                next_appointment = appointments[0]
+                logger.info(f"🚫 Timeline blocking: Patient {cf_paziente} has future appointment on {next_appointment.get('appointment_date')}")
+            else:
+                logger.info(f"✅ Timeline allowing: No future appointments found for {cf_paziente}")
+                
+            return has_future
+            
+        except Exception as e:
+            logger.error(f"❌ Error checking future appointments: {e}")
+            return True  # Conservative: block scheduling on error    
 
 class RefertoRepository:
     """Repository per operazioni referto medico"""
@@ -481,4 +579,40 @@ class RefertoRepository:
             
         except Exception as e:
             logger.error(f"Errore controllo referto esistente: {e}")
+            return False
+    
+    async def check_referto_exists_for_patient_today_cronoscita(
+        self, 
+        cf_paziente: str, 
+        id_medico: str, 
+        patologia: str
+    ) -> bool:
+        """
+        Check if referto exists today for patient + doctor + SPECIFIC cronoscita
+        CRONOSCITA-ISOLATED: Only checks for referto in THIS cronoscita today
+        """
+        try:
+            from datetime import date, datetime
+            today = date.today()
+            
+            # Create datetime range for today (start and end of day)
+            start_of_day = datetime.combine(today, datetime.min.time())
+            end_of_day = datetime.combine(today, datetime.max.time())
+            
+            # ✅ CRONOSCITA-SPECIFIC QUERY: Include patologia filter
+            count = await self.collection.count_documents({
+                "cf_paziente": cf_paziente.upper(),
+                "id_medico": id_medico,
+                "patologia": patologia,  # ✅ CRITICAL: Cronoscita isolation
+                "data_visita": {
+                    "$gte": start_of_day,
+                    "$lte": end_of_day
+                }
+            })
+            
+            logger.info(f"🔍 Cronoscita-specific referto check for {cf_paziente} + {id_medico} in '{patologia}' on {today}: found {count} referti")
+            return count > 0
+            
+        except Exception as e:
+            logger.error(f"Errore controllo referto cronoscita-specific: {e}")
             return False

@@ -269,13 +269,33 @@ export const timelineAPI = {
     return response;
   },
 
-  checkCanScheduleNext: async (cf_paziente, id_medico) => {
-    console.log('📤 API: Checking can schedule next:', { cf_paziente, id_medico });
+  checkCanScheduleNext: async (cf_paziente, id_medico, patologia, cronoscita_id = null) => {
+    // ✅ VALIDATION: Ensure cronoscita parameter is provided
+    if (!patologia || !patologia.trim()) {
+      throw new APIError('Patologia parameter required for scheduling permission check', 400);
+    }
     
-    const params = new URLSearchParams({ id_medico });
+    console.log('📤 API: Checking can schedule next with cronoscita:', { 
+      cf_paziente, 
+      id_medico, 
+      patologia,
+      cronoscita_id 
+    });
+    
+    // ✅ BUILD PARAMS: Include all required parameters
+    const params = new URLSearchParams({ 
+      id_medico,
+      patologia  // ✅ CRITICAL: Include cronoscita parameter
+    });
+    
+    // Add optional cronoscita_id if provided
+    if (cronoscita_id) {
+      params.append('cronoscita_id', cronoscita_id);
+    }
+    
     const response = await apiRequest(`/api/timeline/referti/can-schedule/${cf_paziente}?${params}`);
     
-    console.log('✅ API: Can schedule response:', response);
+    console.log('✅ API: Can schedule response with cronoscita validation:', response);
     return response;
   },
 
