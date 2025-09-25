@@ -573,7 +573,14 @@ export const InnovativeTimeline = ({ appointments, patientId, doctorId, onTimeli
   const displayPastAppts = past.slice(-10); // Show last 10
   const hasFutureAppt = future.length > 0;
   const hasTodayAppt = todayAppts.length > 0;
-
+  console.log('🔍 DEBUG Appointment Organization:', {
+    total_appointments: appointments?.length || 0,
+    past_count: past.length,
+    today_count: todayAppts.length, 
+    future_count: future.length,
+    future_appointments: future,
+    hasFutureAppt: hasFutureAppt
+  });
   const scrollLeft = () => {
     if (pastScrollRef.current) {
       pastScrollRef.current.scrollBy({ left: -200, behavior: 'smooth' });
@@ -667,55 +674,85 @@ export const InnovativeTimeline = ({ appointments, patientId, doctorId, onTimeli
           </div>
         </div>
 
-        {/* Future Section (Right - Clean Light Yellow Successivo Button) */}
+        {/* Future Section (Right - 3-State Button System) */}
         <div style={styles.futureSection}>
           {hasFutureAppt ? (
-            // Has existing future appointment - show as info only
+            // STATE 3: GREEN - Future appointment exists (Completed)
             <div
               style={{
                 ...styles.timelinePoint,
-                ...styles.futurePoint,
-                cursor: 'default'
+                backgroundColor: '#dcfce7', // Soft green
+                cursor: 'default',
+                color: '#166534', // Dark green text
+                fontSize: '12px',
+                fontWeight: '600',
+                border: '2px solid #bbf7d0', // Light green border
+                transition: 'all 0.3s ease'
               }}
-              title={`${future[0].type} - ${future[0].date}`}
+              title={`Appuntamento programmato: ${future[0].type} - ${future[0].date}`}
             >
-              Successivo
+              Completato
               <div style={{
                 ...styles.pointLabel,
-                backgroundColor: 'rgba(107, 114, 128, 0.1)',
-                color: '#4b5563',
-                borderColor: '#d1d5db'
+                backgroundColor: 'rgba(34, 197, 94, 0.15)', // Light green background
+                color: '#166534', // Dark green text
+                borderColor: '#bbf7d0', // Light green border
+                fontSize: '11px',
+                fontWeight: '700'
               }}>
                 {future[0].date}
               </div>
             </div>
-          ) : (
-            // No future appointment - clean light yellow button
+          ) : canScheduleNext ? (
+            // STATE 2: YELLOW - Referto saved, can schedule (Active)
             <div
               style={{
                 ...styles.timelinePoint,
-                backgroundColor: canScheduleNext ? '#fef3c7' : '#e5e7eb',
-                cursor: canScheduleNext ? 'pointer' : 'not-allowed',
-                color: canScheduleNext ? '#92400e' : '#9ca3af',
+                backgroundColor: '#fef3c7', // Yellow
+                cursor: 'pointer',
+                color: '#92400e', // Brown text
                 fontSize: '12px',
                 fontWeight: '600',
-                border: canScheduleNext ? '2px solid #fed7aa' : '2px solid #d1d5db',
+                border: '2px solid #fed7aa', // Yellow border
                 transition: 'all 0.3s ease'
               }}
-              onClick={canScheduleNext ? onOpenScheduler : undefined}
-              title={canScheduleNext ? 'Programma prossimo appuntamento' : 'Completa referto prima'}
+              onClick={onOpenScheduler}
+              title="Programma prossimo appuntamento"
               onMouseEnter={(e) => {
-                if (canScheduleNext) {
-                  e.target.style.backgroundColor = '#fde68a';
-                }
+                e.target.style.backgroundColor = '#fde68a';
               }}
               onMouseLeave={(e) => {
-                if (canScheduleNext) {
-                  e.target.style.backgroundColor = '#fef3c7';
-                }
+                e.target.style.backgroundColor = '#fef3c7';
               }}
             >
               {checkingReferto ? 'Controllo...' : 'Successivo'}
+            </div>
+          ) : (
+            // STATE 1: GREY - No referto saved (Disabled)
+            <div
+              style={{
+                ...styles.timelinePoint,
+                backgroundColor: '#f3f4f6', // Light grey
+                cursor: 'not-allowed',
+                color: '#6b7280', // Grey text
+                fontSize: '12px',
+                fontWeight: '600',
+                border: '2px solid #d1d5db', // Grey border
+                transition: 'all 0.3s ease'
+              }}
+              title="Completa referto prima di programmare appuntamento"
+            >
+              Successivo
+              <div style={{
+                ...styles.pointLabel,
+                backgroundColor: 'rgba(107, 114, 128, 0.1)', // Light grey background
+                color: '#6b7280', // Grey text
+                borderColor: '#d1d5db', // Grey border
+                fontSize: '10px',
+                fontWeight: '600'
+              }}>
+                Completa referto
+              </div>
             </div>
           )}
         </div>
@@ -1522,7 +1559,13 @@ Ricaricare la pagina e selezionare la cronoscita corretta.`;
       
       console.log('✅ Timeline cronoscita validation PASSED:', returnedCronoscita);
       setTimeline(timelineData);
-      
+      console.log('🔍 DEBUG Timeline Data:', {
+        precedenti: timelineData.precedenti?.length || 0,
+        oggi: timelineData.oggi?.length || 0,
+        successivo: timelineData.successivo?.length || 0,
+        successivo_data: timelineData.successivo,
+        total_appointments: timelineData.total_appointments
+      });
       // Validate timeline has Cronoscita context
       if (!timelineData.cronoscita_id && !timelineData.patologia_id) {
         console.warn('⚠️ Timeline missing cronoscita context - scheduler may be limited');
