@@ -1454,7 +1454,7 @@ export const PatientTimeline = ({ patientId, doctorId, patologia, onScheduleAppo
   const [canScheduleNext, setCanScheduleNext] = useState(false);
   const [checkingReferto, setCheckingReferto] = useState(false);
   const [showScheduler, setShowScheduler] = useState(false);
-  
+
   useEffect(() => {
     if (patientId && doctorId) {
       console.log('🏥 Timeline loading for specific Cronoscita:', { patientId, doctorId, patologia });
@@ -1488,27 +1488,10 @@ export const PatientTimeline = ({ patientId, doctorId, patologia, onScheduleAppo
           alert(`✅ Appuntamento programmato con successo per ${appointmentDate}!\n` +
                 `Esami selezionati: ${event.data.data.exam_count}`);
           
-          // ✅ CRITICAL FIX: Ensure timeline refresh completes before state updates
-          const refreshAndUpdate = async () => {
-            try {
-              console.log('🔄 Refreshing timeline after appointment scheduling...');
-              
-              // Refresh timeline data from server
-              await loadTimelineForCronoscita();
-              
-              // Wait a bit for state to settle
-              setTimeout(() => {
-                // Re-check referto status
-                checkCanScheduleNext();
-                console.log('✅ Timeline refresh and state update completed');
-              }, 500);
-              
-            } catch (error) {
-              console.error('❌ Error refreshing timeline:', error);
-            }
-          };
-          
-          refreshAndUpdate();
+          // Simple refresh - no polling needed since we fixed the root cause
+          loadTimelineForCronoscita().then(() => {
+            checkCanScheduleNext();
+          });
           
           // Close scheduler
           setShowScheduler(false);
@@ -1529,6 +1512,10 @@ export const PatientTimeline = ({ patientId, doctorId, patologia, onScheduleAppo
           break;
       }
     };
+
+    // ================================
+    // NEW: APPOINTMENT COMPLETION HANDLER WITH LOADING STATE
+    // ================================
 
     window.addEventListener('message', handleSchedulerMessage);
     

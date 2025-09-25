@@ -191,8 +191,8 @@ class AppointmentRepository:
             cursor = self.collection.find(
                 {"cf_paziente": cf_paziente.upper()}
             ).sort([
-                ("scheduled_date", 1),     # Timeline Service appointments
-                ("appointment_date", 1)    # Scheduler Service appointments  
+                ("appointment_date", 1),
+                ("scheduled_date", 1)
             ])
             
             appointments = await cursor.to_list(length=None)
