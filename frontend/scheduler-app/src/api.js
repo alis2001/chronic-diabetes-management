@@ -44,6 +44,13 @@ class SchedulerAPIError extends Error {
   }
 }
 
+const formatDateWithoutTimezone = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 const apiRequest = async (url, options = {}) => {
   // CRITICAL: Ensure we never call the frontend's own port
   if (API_BASE_URL.includes(':3013')) {
@@ -277,26 +284,31 @@ export const schedulerAPI = {
     const today = new Date();
     
     for (let i = 1; i <= days; i++) {
-      const date = new Date(today);
-      date.setDate(today.getDate() + i);
-      
-      const dateStr = date.toISOString().split('T')[0];
-      const displayStr = date.toLocaleDateString('it-IT', {
+        const date = new Date(today);
+        date.setDate(today.getDate() + i);
+        
+        // FIX: Replace this line
+        // const dateStr = date.toISOString().split('T')[0];  // ❌ BROKEN
+        
+        // WITH:
+        const dateStr = formatDateWithoutTimezone(date);  // ✅ FIXED
+        
+        const displayStr = date.toLocaleDateString('it-IT', {
         weekday: 'long',
         day: '2-digit',
         month: 'long'
-      });
-      
-      dates.push({
+        });
+        
+        dates.push({
         value: dateStr,
         label: displayStr,
         dayName: date.toLocaleDateString('it-IT', { weekday: 'long' }),
         dayOfWeek: date.getDay()
-      });
+        });
     }
     
     return dates;
-  },
+    },
 
   /**
    * Get density color class based on appointment count

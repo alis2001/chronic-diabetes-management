@@ -974,7 +974,6 @@ const ProfessionalTabs = ({ patientId, doctorId, patologia, onRefertoSaved }) =>
         setExistingRefertoData(response.referto);
         setReferto(response.referto.testo_referto || '');
         setRefertoSaved(true);
-        setSaveMessage('Referto già salvato oggi per questa cronoscita ✅');
         console.log('✅ Loaded existing referto for cronoscita:', {
           cronoscita: patologia,
           referto_id: response.referto.referto_id
@@ -2143,7 +2142,7 @@ Ricaricare la pagina e selezionare la cronoscita corretta.`;
                       if (iframe.contentDocument?.readyState !== 'complete') {
                         handleSchedulerLoadError();
                       }
-                    }, 10000); // 10 second timeout
+                    }, 300000);
                     
                     iframe.onload = () => {
                       clearTimeout(timeout);
