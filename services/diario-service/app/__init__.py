@@ -1,0 +1,1 @@
+# services/diario-service/app/__init__.py

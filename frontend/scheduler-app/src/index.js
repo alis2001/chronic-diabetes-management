@@ -338,8 +338,8 @@ const SchedulerApp = () => {
                 className={`exam-button ${selectedExams.includes(exam.mapping_id) ? 'selected' : ''}`}
                 onClick={() => handleExamToggle(exam.mapping_id)}
               >
-                <div className="exam-name">{exam.nome_esame_catalogo}</div>
-                <div className="exam-structure">{exam.struttura_nome}</div>
+                <div className="exam-name">{exam.exam_name}</div>
+                <div className="exam-structure">{exam.structure_name}</div>
                 {selectedExams.includes(exam.mapping_id) && (
                   <div className="selected-indicator">✓</div>
                 )}

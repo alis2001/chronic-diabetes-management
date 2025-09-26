@@ -72,6 +72,7 @@ SERVICES = {
     "timeline": os.getenv("TIMELINE_SERVICE_URL", "http://timeline-service:8001"),
     "analytics": os.getenv("ANALYTICS_SERVICE_URL", "http://analytics-service:8002"), 
     "scheduler": os.getenv("SCHEDULER_SERVICE_URL", "http://scheduler-service:8003"),
+    "diario": os.getenv("DIARIO_SERVICE_URL", "http://diario-service:8005"),
     "admin": os.getenv("ADMIN_SERVICE_URL", "http://admin-dashboard:8084"),
     "melody": os.getenv("MELODY_SERVICE_URL", "http://localhost:5002")   
 }
@@ -131,6 +132,11 @@ def read_root():
                 "prefix": "/api/scheduler/",
                 "description": "Programmazione appuntamenti",
                 "target": SERVICES["scheduler"]
+            },
+            "diario_service": {                     
+                "prefix": "/api/diario/",
+                "description": "Diario clinico pazienti",
+                "target": SERVICES["diario"]
             }
         },
         "health_check": "/health",
@@ -369,6 +375,11 @@ async def referto_proxy(path: str, request: Request):
     """Route all /referti/* requests to timeline service"""
     logger.info(f"📄 Referto route: /referti/{path}")
     return await proxy_request("timeline", f"/referti/{path}", request)
+
+@app.api_route("/api/diario/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def diario_proxy(path: str, request: Request):
+    """Route all /api/diario/* requests to diario service"""
+    return await proxy_request("diario", f"/{path}", request)
 # ================================
 # STARTUP/SHUTDOWN EVENTS
 # ================================

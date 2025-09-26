@@ -810,6 +810,7 @@ const ProfessionalTabs = ({ patientId, doctorId, patologia, onRefertoSaved }) =>
   const [saving, setSaving] = useState(false);
   const [refertoSaved, setRefertoSaved] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
+  const [diarioLoaded, setDiarioLoaded] = useState(false);
   // Analytics iframe state - simplified (no minimize/maximize state)
   const [analyticsLoaded, setAnalyticsLoaded] = useState(false);
   const [hasExistingReferto, setHasExistingReferto] = useState(false);
@@ -869,6 +870,9 @@ const ProfessionalTabs = ({ patientId, doctorId, patologia, onRefertoSaved }) =>
     setActiveTab(tabId);
     if (tabId === 'esami' && !analyticsLoaded) {
       setAnalyticsLoaded(true);
+    }
+    if (tabId === 'diario' && !diarioLoaded) {
+      setDiarioLoaded(true);
     }
   };
 
@@ -1290,35 +1294,26 @@ const ProfessionalTabs = ({ patientId, doctorId, patologia, onRefertoSaved }) =>
 
       case 'diario':
         return (
-          <div style={{...tabContentStyles.diario, padding: '35px', borderRadius: '16px', border: '2px solid', borderColor: tabContentStyles.diario.borderColor}}>
-            <textarea
-              value={diario}
-              onChange={(e) => setDiario(e.target.value)}
-              placeholder="Diario clinico del paziente..."
-              style={{
-                width: '100%',
-                height: '400px',
-                padding: '20px',
-                border: '2px solid rgba(16, 185, 129, 0.2)',
-                borderRadius: '12px',
-                fontSize: '16px',
-                fontFamily: 'inherit',
-                lineHeight: '1.6',
-                resize: 'vertical',
-                backgroundColor: 'rgba(255, 255, 255, 0.8)',
-                transition: 'all 0.3s ease'
-              }}
-              onFocus={(e) => {
-                e.target.style.borderColor = '#10b981';
-                e.target.style.backgroundColor = 'rgba(255, 255, 255, 0.95)';
-                e.target.style.boxShadow = '0 0 0 4px rgba(16, 185, 129, 0.1)';
-              }}
-              onBlur={(e) => {
-                e.target.style.borderColor = 'rgba(16, 185, 129, 0.2)';
-                e.target.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
-                e.target.style.boxShadow = 'none';
-              }}
-            />
+          <div style={{...tabContentStyles.diario, padding: '0', overflow: 'hidden'}}>
+            {diarioLoaded ? (
+              <EmbeddedDiarioWindow 
+                patientId={patientId}
+                doctorId={doctorId}
+              />
+            ) : (
+              // Loading state
+              <div style={{
+                height: '600px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#10b981',
+                fontSize: '18px',
+                fontWeight: '500'
+              }}>
+                📝 Caricamento Diario Clinico...
+              </div>
+            )}
           </div>
         );
 
@@ -1442,6 +1437,38 @@ const EmbeddedAnalyticsWindow = ({
   );
 };
 
+const EmbeddedDiarioWindow = ({ 
+  patientId, 
+  doctorId 
+}) => {
+  const diarioHost = window.location.hostname;
+  const diarioPort = process.env.REACT_APP_DIARIO_FRONTEND_PORT || '3014';
+  const diarioUrl = `http://${diarioHost}:${diarioPort}?cf=${patientId}&doctor_id=${doctorId}&embedded=true`;
+  
+  return (
+    <div style={{
+      height: '800px', // Same size as analytics iframe
+      position: 'relative',
+      background: 'transparent',
+      borderRadius: '0px',
+      overflow: 'hidden'
+    }}>
+      {/* Direct iframe - no wrapper */}
+      <iframe
+        src={diarioUrl}
+        style={{
+          width: '100%',
+          height: '100%',
+          border: 'none',
+          background: 'transparent'
+        }}
+        title="Diario Clinico"
+        allow="clipboard-read; clipboard-write"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-downloads"
+      />
+    </div>
+  );
+};
 
 // ================================
 // 🔥 STEP 2: UPDATED PATIENT TIMELINE - COMPRESSED INFO + TABS

@@ -158,6 +158,7 @@ services:
       - SCHEDULER_SERVICE_URL=http://scheduler-service:8003
       - ADMIN_SERVICE_URL=http://admin-dashboard:8084
       - CORS_ORIGINS=${CORS_ORIGINS:-}
+      - DIARIO_SERVICE_URL=http://diario-service:8005
     depends_on:
       - timeline-service
       - analytics-service
@@ -180,9 +181,7 @@ services:
     ports:
       - "${TIMELINE_FRONTEND_PORT:-3010}:3000"  # Timeline frontend port
     environment:
-      # ✅ PRIMARY: Dynamic API Gateway URL based on VM_HOST
       - REACT_APP_API_GATEWAY_URL=http://${VM_HOST:-localhost}:${API_GATEWAY_PORT:-8080}
-      # ✅ LEGACY FALLBACK: Direct service access (for development/debugging)
       - REACT_APP_TIMELINE_API_URL=http://${VM_HOST:-localhost}:${TIMELINE_SERVICE_PORT:-8001}
       - REACT_APP_ANALYTICS_FRONTEND_PORT=${ANALYTICS_FRONTEND_PORT:-3011}
       - REACT_APP_TIMELINE_FRONTEND_PORT=${TIMELINE_FRONTEND_PORT:-3010}
@@ -274,7 +273,62 @@ services:
     volumes:
       - ./frontend/scheduler-app:/app
       - /app/node_modules
+  
+  diario-service:
+    build:
+      context: ./services/diario-service
+      dockerfile: Dockerfile.dev
+    container_name: diabetes-diario-service
+    restart: unless-stopped
+    ports:
+      - "${DIARIO_SERVICE_PORT:-8005}:8005"
+    environment:
+      - ENV=${ENVIRONMENT:-development}
+      - SERVICE_PORT=8005
+      - VM_HOST=${VM_HOST:-localhost}
+      - MONGODB_URL=mongodb://${MONGO_INITDB_ROOT_USERNAME:-admin}:${MONGO_INITDB_ROOT_PASSWORD:-admin123}@mongodb:27017/${MONGO_INITDB_DATABASE:-diabetes_db}?authSource=admin
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-redis123}@redis:6379/0
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
+      - WIRGILIO_TOKEN=${WIRGILIO_TOKEN}
+      - WIRGILIO_BASE_URL=${WIRGILIO_BASE_URL:-http://192.168.125.44:3002}
+    depends_on:
+      - mongodb
+      - redis
+    networks:
+      - diabetes-network
+    volumes:
+      - ./services/diario-service:/app
 
+  diario-frontend:
+    build:
+      context: ./frontend/diario-app
+      dockerfile: Dockerfile.dev
+    container_name: diabetes-diario-frontend
+    restart: unless-stopped
+    ports:
+      - "${DIARIO_FRONTEND_PORT:-3014}:3000"
+    environment:
+      # PRIMARY: Dynamic API Gateway URL based on VM_HOST
+      - REACT_APP_API_GATEWAY_URL=http://${VM_HOST:-localhost}:${API_GATEWAY_PORT:-8080}
+      
+      # FALLBACK: Direct service URLs
+      - REACT_APP_DIARIO_API_URL=http://${VM_HOST:-localhost}:${DIARIO_SERVICE_PORT:-8005}
+      
+      # Development configuration
+      - CHOKIDAR_USEPOLLING=true
+      - REACT_APP_ENABLE_DEBUG_LOGGING=true
+      
+      # Iframe integration
+      - REACT_APP_IFRAME_MODE=true
+      - REACT_APP_PARENT_ORIGIN=http://${VM_HOST:-localhost}:${TIMELINE_FRONTEND_PORT:-3010}
+    depends_on:
+      - diario-service
+      - api-gateway
+    networks:
+      - diabetes-network
+    volumes:
+      - ./frontend/diario-app:/app
+      - /app/node_modules    
   # ========================================
   # DEVELOPMENT TOOLS
   # ========================================
