@@ -1,7 +1,7 @@
 # services/analytics-service/app/config.py
 """
 Analytics Service Configuration
-Wirgilio API integration configuration - No hardcoded medical data
+Wirgilio API integration configuration - UPDATED FOR NEW HTTPS ENDPOINTS
 """
 
 import os
@@ -23,16 +23,34 @@ class Settings:
     DOCS_URL: str = "/docs"
     REDOC_URL: str = "/redoc"
     
-    # Wirgilio API Configuration
-    WIRGILIO_API_BASE: str = os.getenv("WIRGILIO_API_BASE", "http://192.168.125.44:3002/wirgilio-api")
+    # UPDATED: Wirgilio API Configuration for NEW HTTPS Endpoints
+    WIRGILIO_BASE_URL: str = os.getenv("WIRGILIO_BASE_URL", "https://10.10.13.14")
+    WIRGILIO_API_PATH: str = os.getenv("WIRGILIO_API_PATH", "/cpi/wirgilio-api")
     WIRGILIO_TOKEN: str = os.getenv("WIRGILIO_TOKEN", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMTkyIiwiaWF0IjoxNTkyMjI5MTA5fQ.Nr9Wk6NAJuEa16OV8a_Qc3VAWhDrMYfkD_E33tfMQqA")
-    WIRGILIO_ENDPOINT: str = "/esamilaboratorios/listperdataora"
+    
+    # NEW: Laboratory endpoint path
+    WIRGILIO_ESAMI_ENDPOINT: str = "/esamilaboratorios/listperdataora"
+    
+    # NEW: SSL Configuration
+    WIRGILIO_VERIFY_SSL: bool = os.getenv("WIRGILIO_VERIFY_SSL", "true").lower() == "true"
+    WIRGILIO_SSL_TIMEOUT: int = int(os.getenv("WIRGILIO_SSL_TIMEOUT", "30"))
     
     # Analytics Configuration
-    ANALYTICS_TIMEOUT_SECONDS: int = int(os.getenv("ANALYTICS_TIMEOUT_SECONDS", 30))
+    ANALYTICS_TIMEOUT_SECONDS: int = int(os.getenv("ANALYTICS_TIMEOUT_SECONDS", 120))
     MAX_CHART_DATA_POINTS: int = int(os.getenv("MAX_CHART_DATA_POINTS", 1000))
     MAX_RETRIES: int = 3
     RETRY_DELAY_SECONDS: int = 2
+    
+    # COMPUTED: Full API URLs
+    @property
+    def WIRGILIO_API_BASE(self) -> str:
+        """Complete base URL for Wirgilio API"""
+        return f"{self.WIRGILIO_BASE_URL}{self.WIRGILIO_API_PATH}"
+    
+    @property 
+    def WIRGILIO_ENDPOINT(self) -> str:
+        """Complete endpoint for laboratory data"""
+        return self.WIRGILIO_ESAMI_ENDPOINT
 
 # Initialize settings
 settings = Settings()

@@ -74,6 +74,10 @@ services:
       - MONGODB_URL=mongodb://${MONGO_INITDB_ROOT_USERNAME:-admin}:${MONGO_INITDB_ROOT_PASSWORD:-admin123}@mongodb:27017/${MONGO_INITDB_DATABASE:-diabetes_db}?authSource=admin
       - REDIS_URL=redis://:${REDIS_PASSWORD:-redis123}@redis:6379/0
       - CORS_ORIGINS=${CORS_ORIGINS:-}
+      - WIRGILIO_TOKEN=${WIRGILIO_TOKEN}
+      - WIRGILIO_BASE_URL=${WIRGILIO_BASE_URL:-https://10.10.13.14}
+      - WIRGILIO_VERIFY_SSL=${WIRGILIO_VERIFY_SSL:-true}
+      - WIRGILIO_API_PATH=${WIRGILIO_API_PATH:-/cpi/wirgilio-api}
     depends_on:
       - mongodb
       - redis
@@ -290,7 +294,9 @@ services:
       - REDIS_URL=redis://:${REDIS_PASSWORD:-redis123}@redis:6379/0
       - CORS_ORIGINS=${CORS_ORIGINS:-}
       - WIRGILIO_TOKEN=${WIRGILIO_TOKEN}
-      - WIRGILIO_BASE_URL=${WIRGILIO_BASE_URL:-http://192.168.125.44:3002}
+      - WIRGILIO_BASE_URL=${WIRGILIO_BASE_URL:-https://10.10.13.14}
+      - WIRGILIO_VERIFY_SSL=${WIRGILIO_VERIFY_SSL:-true}
+      - WIRGILIO_API_PATH=${WIRGILIO_API_PATH:-/cpi/wirgilio-api}
     depends_on:
       - mongodb
       - redis

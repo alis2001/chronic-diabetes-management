@@ -19,7 +19,9 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
-WIRGILIO_BASE = "http://192.168.125.44:3002"
+WIRGILIO_BASE_URL = os.getenv("WIRGILIO_BASE_URL", "https://10.10.13.14")
+WIRGILIO_API_PATH = os.getenv("WIRGILIO_API_PATH", "/cpi/wirgilio-api")
+WIRGILIO_VERIFY_SSL = os.getenv("WIRGILIO_VERIFY_SSL", "true").lower() == "true"
 WIRGILIO_TOKEN = os.getenv("WIRGILIO_TOKEN", "your-wirgilio-api-token")
 
 class HealthResponse(BaseModel):
@@ -49,11 +51,11 @@ async def get_documents(cf: str):
             "Content-Type": "application/json"
         }
         
-        url = f"{WIRGILIO_BASE}/wirgilio-api/archivios/?codicefiscale={cf}"
+        url = f"{WIRGILIO_BASE_URL}{WIRGILIO_API_PATH}/archivios/?codicefiscale={cf}"
         logger.info(f"🌐 Wirgilio URL: {url}")
         logger.info(f"🔐 Using token: {WIRGILIO_TOKEN[:10]}...")
         
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=60.0, verify=WIRGILIO_VERIFY_SSL) as client:
             response = await client.get(url, headers=headers)
             
             logger.info(f"📡 Wirgilio API response status: {response.status_code}")
@@ -89,10 +91,11 @@ async def get_pdf(file_id: str):
             "Content-Type": "application/json"
         }
         
-        url = f"{WIRGILIO_BASE}/repository/uploads/base64/file/{file_id}"
+        # Correct URL as specified: https://10.10.13.14/cpi/repository/uploads/base64/file/{file_id}
+        url = f"{WIRGILIO_BASE_URL}/cpi/repository/uploads/base64/file/{file_id}"
         logger.info(f"🌐 PDF URL: {url}")
         
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=30.0, verify=WIRGILIO_VERIFY_SSL) as client:
             response = await client.get(url, headers=headers)
             
             logger.info(f"📡 PDF API response status: {response.status_code}")
@@ -103,12 +106,8 @@ async def get_pdf(file_id: str):
             
             return response.json()
             
-    except httpx.TimeoutException:
-        logger.error(f"⏰ Timeout fetching PDF")
-        raise HTTPException(status_code=504, detail="Timeout fetching PDF")
-    except httpx.ConnectError as e:
-        logger.error(f"🔌 Connection error fetching PDF: {str(e)}")
-        raise HTTPException(status_code=503, detail=f"Cannot connect to PDF API: {str(e)}")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"❌ PDF fetch error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"PDF fetch error: {str(e)}")

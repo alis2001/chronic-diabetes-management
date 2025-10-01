@@ -34,7 +34,7 @@ class WirgilioService:
     async def test_connection(self) -> bool:
         """Test connection to Wirgilio API"""
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            async with httpx.AsyncClient(timeout=self.timeout, verify=settings.WIRGILIO_VERIFY_SSL) as client:
                 headers = {
                     "Authorization": f"Bearer {self.token}",
                     "Content-Type": "application/json"
@@ -55,7 +55,7 @@ class WirgilioService:
     ) -> List[Dict[str, Any]]:
         """Fetch laboratory data from Wirgilio API with optional filtering"""
         try:
-            async with httpx.AsyncClient(timeout=self.timeout) as client:
+            async with httpx.AsyncClient(timeout=self.timeout, verify=settings.WIRGILIO_VERIFY_SSL) as client:
                 headers = {
                     "Authorization": f"Bearer {self.token}",
                     "Content-Type": "application/json"

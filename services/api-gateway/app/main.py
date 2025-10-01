@@ -194,7 +194,7 @@ async def proxy_request(service_name: str, path: str, request: Request):
     target_url = f"{service_url}{path}"
     
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=150.0) as client:
             # Forward the request
             response = await client.request(
                 method=request.method,
@@ -251,7 +251,7 @@ async def analytics_proxy(path: str, request: Request):
     target_url = f"{service_url}/analytics/{path}"
     
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=150.0) as client:
             # Forward the request with all query parameters preserved
             response = await client.request(
                 method=request.method,
