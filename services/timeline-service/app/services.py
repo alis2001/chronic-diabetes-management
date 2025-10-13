@@ -877,7 +877,12 @@ class RefertoService:
         from .models import Referto, RefertoStatus
         
         now = datetime.now()
+        
+        # ✅ Use existing referto_id if provided (for updates), otherwise create new
+        is_update = bool(request.referto_id)
+        
         referto_data = Referto(
+            referto_id=request.referto_id,  # ✅ Use existing ID for updates, None for new
             cf_paziente=request.cf_paziente.upper(),
             id_medico=request.id_medico,
             appointment_id=request.appointment_id,
@@ -900,7 +905,8 @@ class RefertoService:
         # Salva nel database
         referto_id = await self.referto_repo.save_referto(referto_data)
         
-        logger.info(f"✅ Referto salvato: {referto_id} per paziente {request.cf_paziente} in cronoscita '{request.patologia}' dal medico {request.id_medico}")
+        action = "aggiornato" if is_update else "creato"
+        logger.info(f"✅ Referto {action}: {referto_id} per paziente {request.cf_paziente} in cronoscita '{request.patologia}' dal medico {request.id_medico}")
         
         # Restituisci risposta
         from .models import RefertoSaveResponse

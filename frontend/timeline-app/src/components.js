@@ -1,5 +1,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
+import { ProgressBar, Step } from "react-step-progress-bar";
+import "react-step-progress-bar/styles.css";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 import { 
   timelineAPI, 
   MEDICI, 
@@ -533,12 +537,13 @@ export const PatientRegistration = ({ lookupResult, formData, onRegistrationSucc
 };
 
 // ================================
-// 🔥 STEP 2: NON-CLICKABLE TIMELINE WITH SUCCESSIVO
+// 🔥 PROFESSIONAL TIMELINE USING react-step-progress-bar (Highly Customizable)
+// Layout: Past (max 5) → OGGI (center, large) → SUCCESSIVO (right)
 // ================================
 
-export const InnovativeTimeline = ({ appointments, patientId, doctorId, onTimelineUpdate, canScheduleNext, checkingReferto, onOpenScheduler
- }) => {
-  const pastScrollRef = useRef(null);
+export const InnovativeTimeline = ({ appointments, patientId, doctorId, onTimelineUpdate, canScheduleNext, checkingReferto, onOpenScheduler }) => {
+  const [hoveredStep, setHoveredStep] = useState(null);
+  const [pastScrollOffset, setPastScrollOffset] = useState(0);
 
   // FIXED: Proper date-based appointment organization
   const today = new Date();
@@ -563,258 +568,596 @@ export const InnovativeTimeline = ({ appointments, patientId, doctorId, onTimeli
     });
     
     return { 
-      past: past.sort((a, b) => new Date(a.date) - new Date(b.date)), 
+      past: past.sort((a, b) => new Date(a.date) - new Date(b.date)), // Oldest to newest
       today: todayAppts, 
       future: future.sort((a, b) => new Date(a.date) - new Date(b.date))
     };
   };
 
   const { past, today: todayAppts, future } = organizeAppointments(appointments);
-  const displayPastAppts = past.slice(-10); // Show last 10
   const hasFutureAppt = future.length > 0;
-  const hasTodayAppt = todayAppts.length > 0;
-  console.log('🔍 DEBUG Appointment Organization:', {
+  
+  console.log('🔍 Timeline Organization:', {
     total_appointments: appointments?.length || 0,
     past_count: past.length,
     today_count: todayAppts.length, 
     future_count: future.length,
-    future_appointments: future,
     hasFutureAppt: hasFutureAppt
   });
-  const scrollLeft = () => {
-    if (pastScrollRef.current) {
-      pastScrollRef.current.scrollBy({ left: -200, behavior: 'smooth' });
+
+  // 3-POINT SLIDING WINDOW APPROACH
+  // Page 0 (default/rightmost): [Latest Past] - [OGGI] - [SUCCESSIVO]
+  // Page 1: [Past #14] - [Past #13] - [Past #12] (3 past appointments)
+  // Page 2: [Past #11] - [Past #10] - [Past #9] (3 past appointments)
+  // etc.
+  
+  const POINTS_PER_PAGE = 3;
+  const currentPage = pastScrollOffset; // Use as page number instead of offset
+  
+  // Calculate total pages: 1 for default view + pages for remaining past appointments
+  // If we have 15 past: Page 0 shows 1, leaving 14. 14/3 = 5 pages (rounded up)
+  const remainingPastAfterDefault = Math.max(0, past.length - 1);
+  const totalPages = 1 + Math.ceil(remainingPastAfterDefault / POINTS_PER_PAGE);
+  
+  // Determine what to show based on current page
+  const isDefaultView = currentPage === 0;
+  
+  let visiblePoints = [];
+  if (isDefaultView) {
+    // Show: Latest Past + OGGI + SUCCESSIVO
+    if (past.length > 0) {
+      visiblePoints = [
+        { type: 'past', data: past[past.length - 1], index: past.length - 1 },
+        { type: 'oggi', data: todayAppts },
+        { type: hasFutureAppt ? 'future' : 'successivo', data: hasFutureAppt ? future[0] : null }
+      ];
+    } else {
+      // No past appointments
+      visiblePoints = [
+        { type: 'oggi', data: todayAppts },
+        { type: hasFutureAppt ? 'future' : 'successivo', data: hasFutureAppt ? future[0] : null }
+      ];
+    }
+  } else {
+    // Show: 3 past appointments (OLDEST on LEFT, NEWEST on RIGHT)
+    // Page 1: indices 11, 12, 13 (left→right = older→newer)
+    // Page 2: indices 8, 9, 10
+    // Page 3: indices 5, 6, 7
+    
+    // Calculate the HIGHEST index for this page (rightmost/newest on the page)
+    const highestIdx = past.length - 2 - ((currentPage - 1) * POINTS_PER_PAGE);
+    
+    // Calculate the LOWEST index for this page (leftmost/oldest on the page)
+    const lowestIdx = Math.max(0, highestIdx - (POINTS_PER_PAGE - 1));
+    
+    // Add appointments from OLDEST (left) to NEWEST (right)
+    for (let idx = lowestIdx; idx <= highestIdx && idx < past.length; idx++) {
+      visiblePoints.push({ type: 'past', data: past[idx], index: idx });
+    }
+  }
+
+  // Navigation
+  const canScrollLeft = currentPage < totalPages - 1 && past.length > 1;
+  const canScrollRight = currentPage > 0;
+
+  const handleScrollLeft = () => {
+    if (canScrollLeft) {
+      setPastScrollOffset(currentPage + 1);
     }
   };
 
-  const scrollRight = () => {
-    if (pastScrollRef.current) {
-      pastScrollRef.current.scrollBy({ left: 200, behavior: 'smooth' });
+  const handleScrollRight = () => {
+    if (canScrollRight) {
+      setPastScrollOffset(currentPage - 1);
     }
+  };
+
+  // Handle date selection to jump to specific page
+  const handleDateSelect = (e) => {
+    const selectedDateStr = e.target.value; // YYYY-MM-DD format
+    
+    // Only process if we have a complete date string (YYYY-MM-DD format)
+    if (!selectedDateStr || selectedDateStr.length !== 10) return;
+    
+    const selectedDate = new Date(selectedDateStr);
+    selectedDate.setHours(0, 0, 0, 0);
+    
+    if (isNaN(selectedDate)) return;
+    
+    // If date is today or future, go to default view
+    const todayCheck = new Date(today);
+    todayCheck.setHours(0, 0, 0, 0);
+    if (selectedDate >= todayCheck) {
+      setPastScrollOffset(0);
+      e.target.value = ''; // Clear the input
+      return;
+    }
+    
+    // Find appointment with EXACT matching date
+    let exactIndex = -1;
+    
+    past.forEach((apt, index) => {
+      const aptDate = new Date(apt.date);
+      aptDate.setHours(0, 0, 0, 0);
+      
+      // Check if dates match exactly
+      if (aptDate.getTime() === selectedDate.getTime()) {
+        exactIndex = index;
+      }
+    });
+    
+    // If no exact match found, don't navigate - just silently ignore
+    if (exactIndex === -1) {
+      console.log('No appointment found for date:', selectedDateStr);
+      e.target.value = ''; // Clear the input
+      return;
+    }
+    
+    console.log('Found appointment at index:', exactIndex, 'out of', past.length);
+    
+    // If it's the most recent past appointment (last in array), go to default view
+    if (exactIndex === past.length - 1) {
+      console.log('Most recent appointment - going to default view');
+      setPastScrollOffset(0);
+      e.target.value = ''; // Clear the input
+      return;
+    }
+    
+    // Calculate which page contains this appointment
+    // past array is sorted oldest to newest: [0, 1, 2, ..., past.length-1]
+    // Page 0 (default): shows past[past.length-1] + OGGI + SUCCESSIVO
+    // Page 1: shows past[past.length-2], past[past.length-3], past[past.length-4]
+    // Page 2: shows past[past.length-5], past[past.length-6], past[past.length-7]
+    
+    // How many positions from the end?
+    const positionsFromEnd = past.length - 1 - exactIndex;
+    
+    if (positionsFromEnd === 0) {
+      // Most recent - default view
+      console.log('Positions from end: 0 - default view');
+      setPastScrollOffset(0);
+    } else {
+      // Calculate page number
+      // positionsFromEnd 1 -> not on any page (this is shown in default view)
+      // positionsFromEnd 2,3,4 -> page 1
+      // positionsFromEnd 5,6,7 -> page 2
+      const page = Math.ceil((positionsFromEnd - 1) / POINTS_PER_PAGE);
+      console.log('Positions from end:', positionsFromEnd, '-> Page:', page);
+      setPastScrollOffset(Math.min(page, totalPages - 1));
+    }
+    
+    // Clear the input after navigation
+    e.target.value = '';
   };
 
   return (
-    <div style={styles.timelineContainer}>
-      
-      <div style={styles.timelineWrapper}>
-        <div style={styles.timelineLine} />
-        
-        {/* Past Appointments Section (Left - Scrollable) */}
-        <div style={styles.pastSection}>
-          {displayPastAppts.length > 5 && (
-            <div 
-              style={{...styles.scrollIndicator, ...styles.leftScrollIndicator}}
-              onClick={scrollLeft}
-              title="Scorri per vedere più visite passate"
-            >
-              ←
-            </div>
-          )}
-          
-          <div 
-            ref={pastScrollRef}
-            className="past-scroll-container"
-            style={styles.pastScrollContainer}
-          >
-            {displayPastAppts.map((appointment, index) => (
-              <div
-                key={appointment.appointment_id || index}
-                style={{
-                  ...styles.timelinePoint,
-                  ...styles.pastPoint,
-                  cursor: 'default' // 🔥 NON-CLICKABLE
-                }}
-                title={`${appointment.type} - ${appointment.date}`}
-              >
-                {index + 1}
-                <div style={{
-                  ...styles.pointLabel,
-                  backgroundColor: 'rgba(139, 92, 246, 0.1)',
-                  color: '#8b5cf6',
-                  borderColor: '#c4b5fd'
-                }}>
-                  {appointment.date}
-                </div>
-              </div>
-            ))}
-          </div>
-          
-          {displayPastAppts.length > 5 && (
-            <div 
-              style={{...styles.scrollIndicator, right: '10px'}}
-              onClick={scrollRight}
-              title="Scorri per vedere altre visite"
-            >
-              →
-            </div>
-          )}
-        </div>
-
-        {/* Today Section (Center - Always Present) */}
-        <div style={styles.todaySection}>
-          <div
+    <div style={{
+      padding: '50px 30px',
+      backgroundColor: '#ffffff',
+      borderRadius: '20px',
+      boxShadow: '0 8px 30px rgba(0, 0, 0, 0.12)',
+      marginBottom: '30px'
+    }}>
+      {/* Navigation arrows for past appointments */}
+      {past.length > 1 && (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          maxWidth: '700px',
+          margin: '0 auto 30px auto',
+          gap: '20px'
+        }}>
+          <button
+            onClick={handleScrollLeft}
+            disabled={!canScrollLeft}
             style={{
-              ...styles.timelinePoint,
-              ...styles.todayPoint,
-              cursor: 'default' // 🔥 NON-CLICKABLE
+              padding: '10px 20px',
+              borderRadius: '10px',
+              border: '2px solid #e5e7eb',
+              background: canScrollLeft ? 'white' : '#f3f4f6',
+              color: canScrollLeft ? '#3b82f6' : '#9ca3af',
+              fontSize: '16px',
+              fontWeight: '700',
+              cursor: canScrollLeft ? 'pointer' : 'not-allowed',
+              boxShadow: canScrollLeft ? '0 2px 8px rgba(0, 0, 0, 0.1)' : 'none',
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
             }}
-            title="Visita di oggi"
           >
-            OGGI
-            <div style={{
-              ...styles.pointLabel,
-              backgroundColor: 'rgba(16, 185, 129, 0.1)',
-              color: '#059669',
-              borderColor: '#6ee7b7',
-              fontSize: '12px',
-              fontWeight: '700'
-            }}>
-              {today.toLocaleDateString('it-IT')}
-            </div>
-          </div>
+            ← Più Vecchie
+          </button>
+          
+          {/* Custom Date Picker with purple appointment dates */}
+          <DatePicker
+            selected={null}
+            onChange={(date) => {
+              if (date) {
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                const dateStr = `${year}-${month}-${day}`;
+                handleDateSelect({ target: { value: dateStr } });
+              }
+            }}
+            highlightDates={[{
+              "react-datepicker__day--highlighted-custom-1": past.map(apt => new Date(apt.date))
+            }]}
+            minDate={past.length > 0 ? new Date(past[0].date) : null}
+            maxDate={new Date()}
+            dateFormat="dd/MM/yyyy"
+            locale="it"
+            placeholderText="Seleziona data"
+            className="custom-datepicker"
+            calendarClassName="custom-calendar"
+            wrapperClassName="datepicker-wrapper"
+            customInput={
+              <input
+                style={{
+                  padding: '10px 16px',
+                  borderRadius: '8px',
+                  border: '2px solid white',
+                  background: 'white',
+                  color: '#374151',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 6px rgba(0, 0, 0, 0.1)',
+                  outline: 'none',
+                  minWidth: '150px',
+                  textAlign: 'center'
+                }}
+              />
+            }
+          />
+          
+          <button
+            onClick={handleScrollRight}
+            disabled={!canScrollRight}
+            style={{
+              padding: '10px 20px',
+              borderRadius: '10px',
+              border: '2px solid #e5e7eb',
+              background: canScrollRight ? 'white' : '#f3f4f6',
+              color: canScrollRight ? '#3b82f6' : '#9ca3af',
+              fontSize: '16px',
+              fontWeight: '700',
+              cursor: canScrollRight ? 'pointer' : 'not-allowed',
+              boxShadow: canScrollRight ? '0 2px 8px rgba(0, 0, 0, 0.1)' : 'none',
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}
+          >
+            Più Recenti →
+          </button>
         </div>
+      )}
 
-        {/* Future Section (Right - 3-State Button System) */}
-        <div style={styles.futureSection}>
-          {hasFutureAppt ? (
-            // STATE 3: GREEN - Future appointment exists (Completed)
-            <div
-              style={{
-                ...styles.timelinePoint,
-                backgroundColor: '#dcfce7', // Soft green
-                cursor: 'default',
-                color: '#166534', // Dark green text
-                fontSize: '12px',
-                fontWeight: '600',
-                border: '2px solid #bbf7d0', // Light green border
-                transition: 'all 0.3s ease'
-              }}
-              title={`Appuntamento programmato: ${future[0].type} - ${future[0].date}`}
-            >
-              Completato
-              <div style={{
-                ...styles.pointLabel,
-                backgroundColor: 'rgba(34, 197, 94, 0.15)', // Light green background
-                color: '#166534', // Dark green text
-                borderColor: '#bbf7d0', // Light green border
-                fontSize: '11px',
-                fontWeight: '700'
-              }}>
-                {future[0].date}
-              </div>
-            </div>
-          ) : canScheduleNext ? (
-            // STATE 2: YELLOW - Referto saved, can schedule (Active)
-            <div
-              style={{
-                ...styles.timelinePoint,
-                backgroundColor: '#fef3c7', // Yellow
-                cursor: 'pointer',
-                color: '#92400e', // Brown text
-                fontSize: '12px',
-                fontWeight: '600',
-                border: '2px solid #fed7aa', // Yellow border
-                transition: 'all 0.3s ease'
-              }}
-              onClick={onOpenScheduler}
-              title="Programma prossimo appuntamento"
-              onMouseEnter={(e) => {
-                e.target.style.backgroundColor = '#fde68a';
-              }}
-              onMouseLeave={(e) => {
-                e.target.style.backgroundColor = '#fef3c7';
-              }}
-            >
-              {checkingReferto ? 'Controllo...' : 'Successivo'}
-            </div>
-          ) : (
-            // STATE 1: GREY - No referto saved (Disabled)
-            <div style={{ position: 'relative' }}>
-              {/* Question mark OUTSIDE and ABOVE button */}
-              <div 
-                style={{
-                  position: 'absolute',
-                  top: '-20px',
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  color: '#fbbf24', // Yellow
-                  fontSize: '16px',
-                  fontWeight: '600',
-                  cursor: 'help',
-                  zIndex: 10
-                }}
-                onMouseEnter={(e) => {
-                  const tooltip = e.currentTarget.querySelector('.custom-tooltip');
-                  if (tooltip) tooltip.style.opacity = '1';
-                }}
-                onMouseLeave={(e) => {
-                  const tooltip = e.currentTarget.querySelector('.custom-tooltip');
-                  if (tooltip) tooltip.style.opacity = '0';
-                }}
-              >
-                ❓
-                {/* Custom Tooltip */}
-                <div 
-                  className="custom-tooltip"
-                  style={{
-                    position: 'absolute',
-                    bottom: '100%',
-                    right: '100%',
-                    marginRight: '8px',
-                    marginBottom: '4px',
-                    backgroundColor: '#1f2937',
-                    color: 'white',
-                    padding: '6px 10px',
-                    borderRadius: '6px',
-                    fontSize: '10px',
-                    lineHeight: '1.4',
-                    whiteSpace: 'nowrap',
-                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                    opacity: '0',
-                    transition: 'opacity 0.2s ease',
-                    pointerEvents: 'none',
-                    zIndex: 1000,
-                    textAlign: 'left'
-                  }}
-                >
-                  <div style={{ fontWeight: '600', color: '#fbbf24', fontSize: '10px' }}>
-                    🔒 Completa il referto per attivare
-                  </div>
-                  {/* Tooltip arrow */}
-                  <div style={{
-                    position: 'absolute',
-                    bottom: '8px',
-                    right: '-5px',
-                    width: '0',
-                    height: '0',
-                    borderTop: '5px solid transparent',
-                    borderBottom: '5px solid transparent',
-                    borderLeft: '5px solid #1f2937'
-                  }} />
-                </div>
-              </div>
-              
-              {/* Button with Successivo centered */}
-              <div
-                style={{
-                  ...styles.timelinePoint,
-                  backgroundColor: '#f3f4f6', // Light grey
-                  cursor: 'not-allowed',
-                  color: '#6b7280', // Grey text
-                  fontSize: '12px',
-                  fontWeight: '600',
-                  border: '2px solid #d1d5db', // Grey border
-                  transition: 'all 0.3s ease',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}
-              >
-                Successivo
-              </div>
-            </div>
-          )}
-        </div>
+      {/* react-step-progress-bar library - CUSTOM LAYOUT */}
+      <div style={{
+        width: '90%',
+        margin: '0 auto',
+        minHeight: '280px',
+        padding: '40px 40px',
+        position: 'relative'
+      }}>
+        <ProgressBar
+          percent={isDefaultView ? 50 : 100}
+          filledBackground={isDefaultView ? "linear-gradient(to right, #8b5cf6, #10b981)" : "linear-gradient(to right, #8b5cf6, #a855f7)"}
+          height={10}
+          unfilledBackground={isDefaultView ? "linear-gradient(to right, #10b981, #f59e0b)" : "#e5e7eb"}
+        >
+          {/* Render 3-point sliding window */}
+          {visiblePoints.map((point, pointIndex) => {
+            // Calculate even spacing based on number of points
+            const numPoints = visiblePoints.length;
+            let position;
+            
+            if (numPoints === 3) {
+              position = 20 + (pointIndex * 30); // 20%, 50%, 80%
+            } else if (numPoints === 2) {
+              position = 33 + (pointIndex * 34); // 33%, 67%
+            } else {
+              // Single point - ALWAYS centered at 50%
+              position = 50;
+            }
+
+            // OGGI gets center treatment
+            const isOggi = point.type === 'oggi';
+            const isPast = point.type === 'past';
+            const isSuccessivo = point.type === 'successivo';
+            const isFuture = point.type === 'future';
+
+            // For OGGI in default view with 3 points, force absolute center position
+            if (isOggi && isDefaultView && numPoints === 3) {
+              position = 50;
+            }
+
+            const pointKey = point.type === 'past' ? `past-${point.index}` : point.type;
+
+            return (
+              <Step key={pointKey} position={position}>
+                {({ accomplished }) => (
+                  isOggi ? (
+                    // OGGI BUTTON - LARGEST, GREEN
+                    <div style={{ 
+                      position: isDefaultView ? 'absolute' : 'relative',
+                      left: isDefaultView ? '50%' : 'auto',
+                      transform: isDefaultView ? 'translateX(-50%)' : 'none',
+                      top: '-55px',
+                      textAlign: 'center',
+                      zIndex: 50
+                    }}
+                      onMouseEnter={() => setHoveredStep('oggi')}
+                      onMouseLeave={() => setHoveredStep(null)}
+                    >
+                      {/* OGGI dot - LARGEST */}
+                      <div style={{
+                        width: '110px',
+                        height: '110px',
+                        borderRadius: '50%',
+                        backgroundColor: '#10b981',
+                        color: 'white',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '22px',
+                        fontWeight: '900',
+                        boxShadow: '0 12px 35px rgba(16, 185, 129, 0.7)',
+                        cursor: 'default',
+                        border: '6px solid white',
+                        transform: hoveredStep === 'oggi' ? 'scale(1.08)' : 'scale(1)',
+                        transition: 'all 0.3s ease',
+                        position: 'relative',
+                        zIndex: 50
+                      }}>
+                        OGGI
+                      </div>
+                      {/* OGGI date below - CLICKABLE BUTTON to return to default view */}
+                      <button
+                        onClick={() => setPastScrollOffset(0)}
+                        style={{
+                          position: 'absolute',
+                          top: '125px',
+                          left: '50%',
+                          transform: 'translateX(-50%)',
+                          padding: '10px 18px',
+                          backgroundColor: 'white',
+                          borderRadius: '10px',
+                          border: '2px solid #10b981',
+                          boxShadow: '0 4px 12px rgba(16, 185, 129, 0.25)',
+                          fontSize: '14px',
+                          fontWeight: '700',
+                          color: '#10b981',
+                          textAlign: 'center',
+                          whiteSpace: 'nowrap',
+                          transition: 'all 0.2s ease',
+                          cursor: 'pointer',
+                          outline: 'none'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.target.style.backgroundColor = '#f0fdf4';
+                          e.target.style.transform = 'translateX(-50%) scale(1.05)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.target.style.backgroundColor = 'white';
+                          e.target.style.transform = 'translateX(-50%) scale(1)';
+                        }}
+                        title="Clicca per tornare alla vista corrente"
+                      >
+                        {today.toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }).toUpperCase()}
+                      </button>
+                    </div>
+                  ) : isPast ? (
+                    // PAST APPOINTMENT BUTTON
+                    <div style={{ position: 'relative', textAlign: 'center' }}
+                      onMouseEnter={() => setHoveredStep(`past-${point.index}`)}
+                      onMouseLeave={() => setHoveredStep(null)}
+                    >
+                      {/* Past appointment dot with DATE + YEAR */}
+                      <div style={{
+                        width: isDefaultView ? '75px' : '80px',
+                        height: isDefaultView ? '75px' : '80px',
+                        borderRadius: '50%',
+                        backgroundColor: '#8b5cf6',
+                        color: 'white',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '13px',
+                        fontWeight: '700',
+                        boxShadow: '0 6px 18px rgba(139, 92, 246, 0.45)',
+                        cursor: 'pointer',
+                        border: '5px solid white',
+                        transform: hoveredStep === `past-${point.index}` ? 'scale(1.15)' : 'scale(1)',
+                        transition: 'all 0.2s ease',
+                        position: 'relative',
+                        zIndex: 20,
+                        lineHeight: '1.1'
+                      }}>
+                        <div style={{ fontSize: '16px', fontWeight: '800' }}>
+                          {new Date(point.data.date).toLocaleDateString('it-IT', { day: 'numeric' })}
+                        </div>
+                        <div style={{ fontSize: '10px', fontWeight: '600', opacity: 0.95 }}>
+                          {new Date(point.data.date).toLocaleDateString('it-IT', { month: 'short' }).toUpperCase()}
+                        </div>
+                        <div style={{ fontSize: '11px', fontWeight: '700', opacity: 1, marginTop: '2px' }}>
+                          {new Date(point.data.date).getFullYear()}
+                        </div>
+                      </div>
+                    </div>
+                  ) : isFuture ? (
+                    // FUTURE APPOINTMENT - GREEN CHECK
+                    <div style={{ position: 'relative', textAlign: 'center' }}
+                      onMouseEnter={() => setHoveredStep('future')}
+                      onMouseLeave={() => setHoveredStep(null)}
+                    >
+                      <div style={{
+                        width: '75px',
+                        height: '75px',
+                        borderRadius: '50%',
+                        backgroundColor: '#22c55e',
+                        color: 'white',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '32px',
+                        fontWeight: '700',
+                        boxShadow: '0 8px 24px rgba(34, 197, 94, 0.5)',
+                        cursor: 'default',
+                        border: '5px solid white',
+                        transform: hoveredStep === 'future' ? 'scale(1.1)' : 'scale(1)',
+                        transition: 'all 0.2s ease',
+                        position: 'relative',
+                        zIndex: 20
+                      }}>
+                        ✓
+                      </div>
+                      {/* Future appointment date below - Italian format */}
+                      <div style={{
+                        position: 'absolute',
+                        top: '90px',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        padding: '10px 18px',
+                        backgroundColor: 'white',
+                        borderRadius: '10px',
+                        border: '2px solid #22c55e',
+                        boxShadow: '0 4px 12px rgba(34, 197, 94, 0.25)',
+                        fontSize: '14px',
+                        fontWeight: '700',
+                        color: '#22c55e',
+                        textAlign: 'center',
+                        whiteSpace: 'nowrap',
+                        transition: 'all 0.2s ease'
+                      }}>
+                        {new Date(point.data.date).toLocaleDateString('it-IT', { 
+                          weekday: 'short', 
+                          day: 'numeric', 
+                          month: 'short', 
+                          year: 'numeric' 
+                        }).toUpperCase()}
+                      </div>
+                    </div>
+                  ) : (
+                    // SUCCESSIVO BUTTON (schedulable or locked)
+                    <div style={{ position: 'relative', textAlign: 'center' }}
+                      onMouseEnter={() => setHoveredStep('successivo')}
+                      onMouseLeave={() => setHoveredStep(null)}
+                    >
+                      {canScheduleNext ? (
+                        // YELLOW SCHEDULABLE
+                        <>
+                          <div
+                            onClick={onOpenScheduler}
+                            style={{
+                              width: '75px',
+                              height: '75px',
+                              borderRadius: '50%',
+                              backgroundColor: '#fbbf24',
+                              color: 'white',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '30px',
+                              fontWeight: '700',
+                              boxShadow: '0 8px 24px rgba(251, 191, 36, 0.6)',
+                              cursor: 'pointer',
+                              border: '5px solid white',
+                              transform: hoveredStep === 'successivo' ? 'scale(1.15)' : 'scale(1)',
+                              transition: 'all 0.2s ease',
+                              position: 'relative',
+                              zIndex: 20
+                            }}
+                            title="Clicca per programmare appuntamento"
+                          >
+                            📅
+                          </div>
+                          <div style={{
+                            position: 'absolute',
+                            top: '90px',
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            minWidth: '140px',
+                            padding: '14px',
+                            backgroundColor: 'white',
+                            borderRadius: '12px',
+                            border: '2px solid #fbbf24',
+                            boxShadow: '0 4px 12px rgba(251, 191, 36, 0.35)',
+                            fontSize: '12px',
+                            color: '#374151',
+                            lineHeight: '1.5',
+                            transition: 'all 0.2s ease'
+                          }}>
+                            <div style={{ fontWeight: '700', color: '#f59e0b', marginBottom: '6px', fontSize: '14px' }}>
+                              Successivo
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#059669', fontWeight: '600' }}>
+                              ✅ Disponibile
+                            </div>
+                            <div style={{ fontSize: '10px', color: '#6b7280', marginTop: '4px' }}>
+                              Clicca per programmare
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        // GREY LOCKED
+                        <>
+                          <div style={{
+                            width: '75px',
+                            height: '75px',
+                            borderRadius: '50%',
+                            backgroundColor: '#e5e7eb',
+                            color: '#9ca3af',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '30px',
+                            fontWeight: '700',
+                            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.12)',
+                            cursor: 'not-allowed',
+                            border: '5px solid white',
+                            transition: 'all 0.2s ease',
+                            position: 'relative',
+                            zIndex: 20
+                          }}>
+                            🔒
+                          </div>
+                          <div style={{
+                            position: 'absolute',
+                            top: '90px',
+                            left: '50%',
+                            transform: 'translateX(-50%)',
+                            minWidth: '180px',
+                            maxWidth: '220px',
+                            padding: '12px 14px',
+                            backgroundColor: 'white',
+                            borderRadius: '12px',
+                            border: '2px solid #d1d5db',
+                            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+                            fontSize: '11px',
+                            color: '#6b7280',
+                            lineHeight: '1.4',
+                            textAlign: 'center'
+                          }}>
+                            <div style={{ fontSize: '10px', fontStyle: 'italic' }}>
+                              Completa e salva il referto per abilitare il prossimo appuntamento
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )
+                )}
+              </Step>
+            );
+          })}
+        </ProgressBar>
       </div>
 
       {/* Timeline Legend */}
@@ -822,36 +1165,65 @@ export const InnovativeTimeline = ({ appointments, patientId, doctorId, onTimeli
         display: 'flex', 
         justifyContent: 'center',
         gap: '40px',
-        marginTop: '40px',
-        fontSize: '16px',
+        marginTop: '30px',
+        paddingTop: '20px',
+        borderTop: '1px solid #e5e7eb',
+        fontSize: '14px',
         fontWeight: '500'
       }}>
-        <div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
+        <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
           <div style={{
-            width: '20px', 
-            height: '20px', 
+            width: '16px', 
+            height: '16px', 
             borderRadius: '50%', 
             backgroundColor: '#8b5cf6'
           }} />
-          <span style={{color: '#8b5cf6'}}>Visite Passate</span>
+          <span style={{color: '#6b7280'}}>Visite Passate ({past.length})</span>
         </div>
-        <div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
+        
+        {/* OGGI as HOME button - enlarged and prominent */}
+        <button
+          onClick={() => setPastScrollOffset(0)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+            border: '2px solid #10b981',
+            cursor: 'pointer',
+            padding: '12px 24px',
+            borderRadius: '12px',
+            transition: 'all 0.2s ease',
+            outline: 'none',
+            boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
+            fontSize: '16px'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'linear-gradient(135deg, #059669 0%, #047857 100%)';
+            e.currentTarget.style.transform = 'scale(1.08)';
+            e.currentTarget.style.boxShadow = '0 6px 16px rgba(16, 185, 129, 0.4)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+            e.currentTarget.style.transform = 'scale(1)';
+            e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.3)';
+          }}
+          title="Clicca per tornare alla vista corrente"
+        >
+          <span style={{color: 'white', fontWeight: '800', fontSize: '16px'}}>🏠 OGGI</span>
+        </button>
+        
+        <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
           <div style={{
-            width: '20px', 
-            height: '20px', 
+            width: '16px', 
+            height: '16px', 
             borderRadius: '50%', 
-            backgroundColor: '#10b981'
+            backgroundColor: hasFutureAppt ? '#22c55e' : (canScheduleNext ? '#fbbf24' : '#9ca3af')
           }} />
-          <span style={{color: '#059669'}}>Oggi</span>
-        </div>
-        <div style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
-          <div style={{
-            width: '20px', 
-            height: '20px', 
-            borderRadius: '50%', 
-            backgroundColor: '#6b7280'
-          }} />
-          <span style={{color: '#4b5563'}}>Successivo</span>
+          <span style={{color: '#6b7280'}}>
+            {hasFutureAppt ? 'Programmato' : (canScheduleNext ? 'Disponibile' : 'Bloccato')}
+          </span>
         </div>
       </div>
     </div>
@@ -862,7 +1234,7 @@ export const InnovativeTimeline = ({ appointments, patientId, doctorId, onTimeli
 // 🔥 STEP 2: PROFESSIONAL TABBED SECTION
 // ================================
 
-const ProfessionalTabs = ({ patientId, doctorId, patologia, onRefertoSaved }) => {
+const ProfessionalTabs = ({ patientId, doctorId, patologia, onRefertoSaved, onDirtyStateChange, hasFutureAppointment }) => {
   const [activeTab, setActiveTab] = useState('refertazione');
   const [referto, setReferto] = useState('');
   const [diario, setDiario] = useState('');
@@ -875,6 +1247,16 @@ const ProfessionalTabs = ({ patientId, doctorId, patologia, onRefertoSaved }) =>
   const [hasExistingReferto, setHasExistingReferto] = useState(false);
   const [loadingExistingReferto, setLoadingExistingReferto] = useState(false);
   const [existingRefertoData, setExistingRefertoData] = useState(null);
+  const [savedRefertoText, setSavedRefertoText] = useState(''); // Track last saved version
+  const [isDirty, setIsDirty] = useState(false); // Track if modified after save
+  const [currentRefertoId, setCurrentRefertoId] = useState(null); // Track referto_id for updates
+
+  // Notify parent when dirty state changes (only when it changes, not on every render)
+  useEffect(() => {
+    if (onDirtyStateChange) {
+      onDirtyStateChange(isDirty);
+    }
+  }, [isDirty]); // Remove onDirtyStateChange from dependencies to prevent infinite loop
 
   // CSS animation for AI sparkles
   const sparkleStyle = `
@@ -1029,10 +1411,14 @@ const ProfessionalTabs = ({ patientId, doctorId, patologia, onRefertoSaved }) =>
       
       if (response.success && response.has_referto_today && response.referto) {
         // Found existing referto for today in this cronoscita
+        const loadedText = response.referto.testo_referto || '';
         setHasExistingReferto(true);
         setExistingRefertoData(response.referto);
-        setReferto(response.referto.testo_referto || '');
+        setReferto(loadedText);
+        setSavedRefertoText(loadedText); // Track the saved version
+        setCurrentRefertoId(response.referto.referto_id); // Save referto_id for updates
         setRefertoSaved(true);
+        setIsDirty(false); // Not dirty when just loaded
         console.log('✅ Loaded existing referto for cronoscita:', {
           cronoscita: patologia,
           referto_id: response.referto.referto_id
@@ -1042,7 +1428,10 @@ const ProfessionalTabs = ({ patientId, doctorId, patologia, onRefertoSaved }) =>
         setHasExistingReferto(false);
         setExistingRefertoData(null);
         setReferto('');
+        setSavedRefertoText('');
+        setCurrentRefertoId(null); // Reset referto_id
         setRefertoSaved(false);
+        setIsDirty(false);
         setSaveMessage('');
         console.log('ℹ️ No existing referto found for today in cronoscita:', patologia);
       }
@@ -1063,20 +1452,16 @@ const ProfessionalTabs = ({ patientId, doctorId, patologia, onRefertoSaved }) =>
   const renderTabContent = () => {
     switch (activeTab) {
       case 'refertazione':
-        // 🔥 MIN LENGTH REMOVED - Allow saving with 0 characters
-        const canSave = !hasExistingReferto; // Only check if not already saved
-        const isReadOnly = hasExistingReferto || refertoSaved;
+        // 🔥 NEW LOGIC: Allow editing until future appointment exists
+        // isReadOnly: Lock editing ONLY if future appointment is scheduled
+        // canSave: Can save if there's content AND (no existing referto OR referto has been modified)
+        const isReadOnly = hasFutureAppointment; // Lock only when future appointment exists
+        const canSave = !isReadOnly && referto.trim().length > 0; // Can save if not locked and has content
 
         const handleSaveReferto = async () => {
-          // 🔥 MIN LENGTH VALIDATION REMOVED
-          // Original validation commented out:
-          // if (!canSave) {
-          //   setSaveMessage('Il referto deve contenere almeno 10 caratteri');
-          //   return;
-          // }
-
-          if (hasExistingReferto) {
-            setSaveMessage('Referto già salvato per oggi. Non è possibile salvare nuovamente.');
+          // Allow re-saving as long as no future appointment exists
+          if (!canSave) {
+            setSaveMessage('Referto vuoto. Inserisci del testo per salvare.');
             return;
           }
 
@@ -1092,13 +1477,18 @@ const ProfessionalTabs = ({ patientId, doctorId, patologia, onRefertoSaved }) =>
               data_visita: new Date().toISOString().split('T')[0],
               
               // ✅ THIS WAS MISSING - CAUSES 422 ERROR!
-              patologia: patologia  // Add cronoscita context from workspace
+              patologia: patologia,  // Add cronoscita context from workspace
+              
+              // ✅ CRITICAL: Pass referto_id if updating existing referto
+              referto_id: currentRefertoId  // This makes backend UPDATE instead of CREATE
             };
 
             console.log('💾 Saving referto with cronoscita context:', {
               cf_paziente: patientId,
               cronoscita: patologia,
-              text_length: referto.length
+              text_length: referto.length,
+              is_update: hasExistingReferto,
+              referto_id: currentRefertoId
             });
 
             const response = await timelineAPI.saveReferto(refertoData);
@@ -1106,7 +1496,16 @@ const ProfessionalTabs = ({ patientId, doctorId, patologia, onRefertoSaved }) =>
             if (response.success) {
               setRefertoSaved(true);
               setHasExistingReferto(true);
-              setSaveMessage('Referto salvato con successo! ✅');
+              setSavedRefertoText(referto); // Save the current version
+              setIsDirty(false); // Mark as clean
+              
+              // If this was a new referto, save the returned ID
+              if (!currentRefertoId && response.referto_id) {
+                setCurrentRefertoId(response.referto_id);
+                console.log('📝 New referto created with ID:', response.referto_id);
+              }
+              
+              setSaveMessage(''); // Clear any messages
               console.log('✅ Referto saved successfully with cronoscita:', response);
               
               if (onRefertoSaved) {
@@ -1176,47 +1575,33 @@ const ProfessionalTabs = ({ patientId, doctorId, patologia, onRefertoSaved }) =>
                 color: '#1d4ed8'
               }}>
                 Refertazione Medica
-                {hasExistingReferto && (
-                  <span style={{
-                    fontSize: '12px',
-                    fontWeight: '500',
-                    color: '#059669',
-                    marginLeft: '10px',
-                    padding: '4px 8px',
-                    background: 'rgba(16, 185, 129, 0.1)',
-                    borderRadius: '6px',
-                    border: '1px solid rgba(16, 185, 129, 0.3)'
-                  }}>
-                    Salvato Oggi
-                  </span>
-                )}
               </h3>
 
               {/* Salva Referto Button */}
               <button
                 onClick={handleSaveReferto}
-                disabled={!canSave || saving || hasExistingReferto}
+                disabled={!canSave || saving}
                 style={{
                   padding: '10px 20px',
-                  background: hasExistingReferto
-                    ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
-                    : canSave && !saving
-                      ? (refertoSaved 
-                          ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
-                          : 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)')
-                      : '#e5e7eb',
-                  color: (hasExistingReferto || refertoSaved || canSave) && !saving ? 'white' : '#9ca3af',
+                  background: canSave && !saving
+                    ? (isDirty 
+                        ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' // Orange if modified
+                        : (hasExistingReferto 
+                            ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' // Green if saved and clean
+                            : 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)')) // Blue if new
+                    : '#e5e7eb',
+                  color: canSave && !saving ? 'white' : '#9ca3af',
                   border: 'none',
                   borderRadius: '8px',
                   fontSize: '14px',
                   fontWeight: '600',
-                  cursor: (canSave || hasExistingReferto) && !saving ? 'pointer' : 'not-allowed',
+                  cursor: canSave && !saving ? 'pointer' : 'not-allowed',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
-                  boxShadow: (canSave || hasExistingReferto) && !saving ? '0 4px 12px rgba(59, 130, 246, 0.2)' : 'none',
+                  boxShadow: canSave && !saving ? '0 4px 12px rgba(59, 130, 246, 0.2)' : 'none',
                   transition: 'all 0.3s ease',
-                  minWidth: '140px',
+                  minWidth: '160px',
                   justifyContent: 'center',
                   opacity: hasExistingReferto ? 0.8 : 1
                 }}
@@ -1233,11 +1618,11 @@ const ProfessionalTabs = ({ patientId, doctorId, patologia, onRefertoSaved }) =>
                     }} />
                     Salvando...
                   </>
-                ) : hasExistingReferto ? (
+                ) : isDirty ? (
                   <>
-                    ✅ Già Salvato
+                    💾 Salva Modifiche
                   </>
-                ) : refertoSaved ? (
+                ) : hasExistingReferto ? (
                   <>
                     ✅ Salvato
                   </>
@@ -1265,8 +1650,8 @@ const ProfessionalTabs = ({ patientId, doctorId, patologia, onRefertoSaved }) =>
               </div>
             )}
 
-            {/* Voice Recording Button - only show if not already saved */}
-            {!hasExistingReferto && (
+            {/* Voice Recording Button - show if editable (no future appointment) */}
+            {!isReadOnly && (
               <div style={{marginBottom: '25px'}}>
                 <button
                   onClick={handleVoiceRecording}
@@ -1298,16 +1683,21 @@ const ProfessionalTabs = ({ patientId, doctorId, patologia, onRefertoSaved }) =>
               value={referto}
               onChange={(e) => {
                 if (!isReadOnly) {
-                  setReferto(e.target.value);
-                  // Reset saved state when text changes after saving
-                  if (refertoSaved && e.target.value !== referto) {
-                    setRefertoSaved(false);
+                  const newValue = e.target.value;
+                  setReferto(newValue);
+                  
+                  // Track dirty state: check if current text differs from saved version
+                  if (hasExistingReferto && newValue !== savedRefertoText) {
+                    setIsDirty(true);
+                    setSaveMessage(''); // No message shown
+                  } else if (hasExistingReferto && newValue === savedRefertoText) {
+                    setIsDirty(false);
                     setSaveMessage('');
                   }
                 }
               }}
               readOnly={isReadOnly}
-              placeholder={isReadOnly ? "Referto salvato - visualizzazione in sola lettura" : "Inserisci qui la refertazione medica del paziente..."}
+              placeholder={isReadOnly ? "🔒 Referto bloccato - Il prossimo appuntamento è stato programmato" : "Inserisci qui la refertazione medica del paziente..."}
               style={{
                 width: '100%',
                 height: '350px',
@@ -1533,6 +1923,18 @@ export const PatientTimeline = ({ patientId, doctorId, patologia, onScheduleAppo
   const [canScheduleNext, setCanScheduleNext] = useState(false);
   const [checkingReferto, setCheckingReferto] = useState(false);
   const [showScheduler, setShowScheduler] = useState(false);
+  const [refertoHasUnsavedChanges, setRefertoHasUnsavedChanges] = useState(false);
+
+  // Handle referto dirty state changes - SIMPLIFIED to prevent infinite loop
+  const handleRefertoStateChange = (isDirty) => {
+    setRefertoHasUnsavedChanges(isDirty);
+    // Don't call checkCanScheduleNext here - it causes infinite loops
+    // Instead, just disable scheduling if dirty
+    if (isDirty) {
+      setCanScheduleNext(false);
+    }
+    // When saved (not dirty), the onRefertoSaved callback will handle re-checking
+  };
 
   useEffect(() => {
     if (patientId && doctorId) {
@@ -2077,6 +2479,8 @@ Ricaricare la pagina e selezionare la cronicità corretta.`;
         doctorId={doctorId}
         patologia={patologia}
         onRefertoSaved={checkCanScheduleNext}
+        onDirtyStateChange={handleRefertoStateChange}
+        hasFutureAppointment={timeline?.successivo && timeline.successivo.length > 0}
       />
 
       {/* ================================

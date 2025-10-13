@@ -93,6 +93,9 @@ class RefertoSaveRequest(BaseModel):
     # ✅ CRONOSCITA CONTEXT - REQUIRED FOR ISOLATION
     patologia: str = Field(..., description="Cronoscita di appartenenza (OBBLIGATORIO)")
     
+    # ✅ REFERTO_ID for updates - if provided, will UPDATE existing referto
+    referto_id: Optional[str] = Field(None, description="ID referto esistente per aggiornamento")
+    
     # 🔥 MIN LENGTH REMOVED - Allow empty referti (even blank text)
     testo_referto: str = Field(default="", description="Testo refertazione (lunghezza minima: 0 caratteri)")
     diagnosi: Optional[str] = None

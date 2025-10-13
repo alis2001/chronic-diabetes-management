@@ -247,22 +247,31 @@ export const timelineAPI = {
     console.log('📤 API: Saving referto with data:', {
       cf_paziente: refertoData.cf_paziente,
       patologia: refertoData.patologia,
-      has_text: !!refertoData.testo_referto
+      has_text: !!refertoData.testo_referto,
+      referto_id: refertoData.referto_id,
+      is_update: !!refertoData.referto_id
     });
+    
+    const requestBody = {
+      cf_paziente: refertoData.cf_paziente,
+      id_medico: refertoData.id_medico,
+      appointment_id: refertoData.appointment_id || null,
+      patologia: refertoData.patologia,  // ✅ CRITICAL: Include cronoscita
+      testo_referto: refertoData.testo_referto,
+      diagnosi: refertoData.diagnosi || null,
+      terapia_prescritta: refertoData.terapia_prescritta || null,
+      note_medico: refertoData.note_medico || null,
+      data_visita: refertoData.data_visita || new Date().toISOString().split('T')[0]
+    };
+    
+    // ✅ ADD referto_id if updating (this triggers upsert in backend)
+    if (refertoData.referto_id) {
+      requestBody.referto_id = refertoData.referto_id;
+    }
     
     const response = await apiRequest('/api/timeline/referti/save', {
       method: 'POST',
-      body: JSON.stringify({
-        cf_paziente: refertoData.cf_paziente,
-        id_medico: refertoData.id_medico,
-        appointment_id: refertoData.appointment_id || null,
-        patologia: refertoData.patologia,  // ✅ CRITICAL: Include cronoscita
-        testo_referto: refertoData.testo_referto,
-        diagnosi: refertoData.diagnosi || null,
-        terapia_prescritta: refertoData.terapia_prescritta || null,
-        note_medico: refertoData.note_medico || null,
-        data_visita: refertoData.data_visita || new Date().toISOString().split('T')[0]
-      })
+      body: JSON.stringify(requestBody)
     });
     
     console.log('✅ API: Referto save response:', response);
