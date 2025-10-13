@@ -795,12 +795,17 @@ class TimelineService:
         
         patologia_name = patient.get("patologia", patologia or "Sconosciuta")
         
-        logger.info(f"✅ Timeline loaded for {cf_paziente} in SPECIFIC Cronoscita {patologia_name}: {len(precedenti)} precedenti, {len(oggi)} oggi, {len(successivo)} futuri")
+        # ✅ Fetch nome_presentante (display name) for frontend
+        patologia_display = await cronoscita_repo.get_pathologie_display_name(patologia_name)
+        patologia_display_uppercase = patologia_display.upper() if patologia_display else patologia_name.upper()
+        
+        logger.info(f"✅ Timeline loaded for {cf_paziente} in SPECIFIC Cronoscita {patologia_name} (Display: {patologia_display_uppercase}): {len(precedenti)} precedenti, {len(oggi)} oggi, {len(successivo)} futuri")
         
         return TimelineResponse(
             patient_id=cf_paziente,
             patient_name=patient_name,
-            patologia=patologia_name,  # ✅ This will now be the CORRECT Cronoscita
+            patologia=patologia_name.upper(),  # ✅ Technical name in UPPERCASE
+            patologia_display=patologia_display_uppercase,  # ✅ Display name in UPPERCASE
             cronoscita_id=cronoscita_id,  # CRITICAL for scheduler
             patologia_id=cronoscita_id,   # Alias for compatibility
             enrollment_date=patient["enrollment_date"].strftime("%d/%m/%Y"),
@@ -852,9 +857,13 @@ class RefertoService:
                 f"Il referto può essere salvato solo per la cronoscita corretta."
             )
         
-        # Validazione testo referto
-        if len(request.testo_referto.strip()) < 10:
-            raise ValueError("Il referto deve contenere almeno 10 caratteri")
+        # 🔥 MIN LENGTH VALIDATION REMOVED - Allow empty referti
+        # Original validation commented out:
+        # if len(request.testo_referto.strip()) < 10:
+        #     raise ValueError("Il referto deve contenere almeno 10 caratteri")
+        
+        # NEW: Allow any length including 0 characters
+        # No minimum validation - referto can be empty
         
         # ✅ Get cronoscita_id if available
         from .database import get_database

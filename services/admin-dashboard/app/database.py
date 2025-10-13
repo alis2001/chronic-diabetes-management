@@ -786,6 +786,7 @@ class CronoscitaRepository:
             
             cronoscita_doc = {
                 "nome": cronoscita_data["nome"],
+                "nome_presentante": cronoscita_data.get("nome_presentante", cronoscita_data["nome"]),
                 "codice": codice,
                 "created_at": datetime.now(),
                 "updated_at": datetime.now(),
@@ -793,7 +794,7 @@ class CronoscitaRepository:
             }
             
             result = await self.cronoscita_collection.insert_one(cronoscita_doc)
-            logger.info(f"✅ Cronoscita created: {cronoscita_data['nome']} ({codice})")
+            logger.info(f"✅ Cronoscita created: {cronoscita_data['nome']} ({codice}) - Display: {cronoscita_doc['nome_presentante']}")
             
             return str(result.inserted_id)
             
@@ -838,6 +839,7 @@ class CronoscitaRepository:
                 cronoscita_data = {
                     "id": cronoscita_id,
                     "nome": cronoscita["nome"],
+                    "nome_presentante": cronoscita.get("nome_presentante", cronoscita["nome"]),  # Fallback to nome for old records
                     "codice": cronoscita["codice"],
                     "created_at": cronoscita["created_at"],
                     "updated_at": cronoscita["updated_at"],

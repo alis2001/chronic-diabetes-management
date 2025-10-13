@@ -62,7 +62,8 @@ class Referto(BaseModel):
     cronoscita_id: Optional[str] = Field(None, description="ID Cronoscita (opzionale)")
     
     # Contenuto referto
-    testo_referto: str = Field(..., min_length=10, description="Testo refertazione medica")
+    # 🔥 MIN LENGTH REMOVED - Allow empty referti (even blank text)
+    testo_referto: str = Field(default="", description="Testo refertazione medica (lunghezza minima: 0 caratteri)")
     diagnosi: Optional[str] = Field(None, description="Diagnosi principale")
     terapia_prescritta: Optional[str] = Field(None, description="Terapia prescritta")
     note_medico: Optional[str] = Field(None, description="Note aggiuntive")
@@ -92,7 +93,8 @@ class RefertoSaveRequest(BaseModel):
     # ✅ CRONOSCITA CONTEXT - REQUIRED FOR ISOLATION
     patologia: str = Field(..., description="Cronoscita di appartenenza (OBBLIGATORIO)")
     
-    testo_referto: str = Field(..., min_length=10, description="Minimo 10 caratteri")
+    # 🔥 MIN LENGTH REMOVED - Allow empty referti (even blank text)
+    testo_referto: str = Field(default="", description="Testo refertazione (lunghezza minima: 0 caratteri)")
     diagnosi: Optional[str] = None
     terapia_prescritta: Optional[str] = None
     note_medico: Optional[str] = None
@@ -281,7 +283,8 @@ class TimelineResponse(BaseModel):
     """Risposta timeline paziente con informazioni cronoscita per scheduler"""
     patient_id: str = Field(..., description="Codice fiscale paziente")
     patient_name: Optional[str] = Field(None, description="Nome completo paziente")
-    patologia: str = Field(..., description="Nome patologia")
+    patologia: str = Field(..., description="Nome patologia (technical name)")
+    patologia_display: Optional[str] = Field(None, description="Nome presentante (user-friendly display name)")
     
     # CRITICAL: Add cronoscita_id for scheduler integration
     cronoscita_id: Optional[str] = Field(None, description="ID Cronoscita per scheduler")

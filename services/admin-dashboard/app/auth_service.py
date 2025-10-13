@@ -221,7 +221,7 @@ class AuthService:
             }
     
     async def login_request(self, email: str, password: str) -> Dict[str, Any]:
-        """Request login - sends verification code to email - IMPROVED WITH USER REDIRECTION"""
+        """Request login - 2FA DISABLED - Direct login with password only"""
         try:
             db = await self._get_database()
             
@@ -271,41 +271,78 @@ class AuthService:
                     "suggestion": "check_password"
                 }
             
-            # Generate and send login verification code
-            verification_code = email_service.generate_verification_code()
+            # ========================================
+            # 🔥 2FA DISABLED - DIRECT LOGIN
+            # ========================================
+            # Original 2FA code commented out:
+            # # Generate and send login verification code
+            # verification_code = email_service.generate_verification_code()
+            # 
+            # # Store verification code
+            # await db.admin_verification_codes.insert_one({
+            #     "email": email,
+            #     "code": verification_code,
+            #     "expires_at": datetime.now() + timedelta(minutes=self.verification_expiry_minutes),
+            #     "attempts": 0,
+            #     "created_at": datetime.now(),
+            #     "used": False,
+            #     "purpose": "login"
+            # })
+            # 
+            # # Send login verification email
+            # email_sent = await email_service.send_verification_email(
+            #     email,
+            #     user["nome"],
+            #     user["cognome"],
+            #     verification_code,
+            #     "login"
+            # )
+            # 
+            # if not email_sent:
+            #     return {
+            #         "success": False,
+            #         "error": "Errore nell'invio dell'email di verifica"
+            #     }
+            # 
+            # logger.info(f"Login verification code sent to: {email}")
+            # 
+            # return {
+            #     "success": True,
+            #     "message": "Codice di verifica inviato alla tua email",
+            #     "verification_required": True
+            # }
             
-            # Store verification code
-            await db.admin_verification_codes.insert_one({
-                "email": email,
-                "code": verification_code,
-                "expires_at": datetime.now() + timedelta(minutes=self.verification_expiry_minutes),
-                "attempts": 0,
-                "created_at": datetime.now(),
-                "used": False,
-                "purpose": "login"
-            })
-            
-            # Send login verification email
-            email_sent = await email_service.send_verification_email(
-                email,
-                user["nome"],
-                user["cognome"],
-                verification_code,
-                "login"
+            # ✅ NEW: Direct login without 2FA
+            # Update last login timestamp
+            await db.admin_users.update_one(
+                {"email": email},
+                {
+                    "$set": {
+                        "last_login": datetime.now(),
+                        "login_attempts": 0  # Reset failed attempts
+                    }
+                }
             )
             
-            if not email_sent:
-                return {
-                    "success": False,
-                    "error": "Errore nell'invio dell'email di verifica"
-                }
+            # Prepare user data for session
+            user_data = {
+                "user_id": user["user_id"],
+                "email": user["email"],
+                "nome": user["nome"],
+                "cognome": user["cognome"],
+                "username": user["username"],
+                "role": user["role"]
+            }
             
-            logger.info(f"Login verification code sent to: {email}")
+            logger.info(f"✅ Direct login successful (2FA disabled): {email}")
             
+            # Return success with user data - NO verification required
             return {
                 "success": True,
-                "message": "Codice di verifica inviato alla tua email",
-                "verification_required": True
+                "message": "Login completato con successo",
+                "verification_required": False,  # 🔥 KEY CHANGE
+                "user_id": user["user_id"],
+                "user_data": user_data
             }
             
         except Exception as e:

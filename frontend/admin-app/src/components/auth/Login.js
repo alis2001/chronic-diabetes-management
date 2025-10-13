@@ -66,7 +66,27 @@ const Login = ({
       console.log('✅ Login request response:', response);
       
       if (response.success) {
-        // Success - verification code sent
+        // 🔥 2FA DISABLED CHECK
+        if (response.verification_required === false && response.access_token) {
+          // Direct login without 2FA - session created immediately
+          console.log('✅ Direct login successful (2FA disabled)');
+          
+          // Store session token using imported sessionStorage
+          const { sessionStorage } = await import('../../api');
+          sessionStorage.setToken(response.access_token);
+          sessionStorage.setUser(response.user_info);
+          
+          // Trigger auth success callback from parent
+          // This needs to be passed as a prop to Login component
+          console.log('🎉 Notifying parent of successful authentication');
+          
+          // Reload page to trigger main app with authenticated session
+          window.location.reload();
+          
+          return; // Exit - don't show verification screen
+        }
+        
+        // Original 2FA flow (if verification_required === true)
         console.log('📧 Verification code sent to:', formData.email);
         onLoginRequireVerification(formData.email, formData.password);
       } else {
@@ -258,7 +278,10 @@ const Login = ({
       
       <div className="auth-info" style={{ marginTop: '20px', textAlign: 'center' }}>
         <p style={{ fontSize: '14px', color: '#6b7280' }}>
-          💡 Dopo l'accesso riceverai un codice di verifica via email
+          🔓 Autenticazione diretta con email e password
+        </p>
+        <p style={{ fontSize: '12px', color: '#9ca3af', marginTop: '8px' }}>
+          2FA disabilitato per questo ambiente
         </p>
       </div>
     </div>

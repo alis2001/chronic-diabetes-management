@@ -270,6 +270,7 @@ class LaboratorioOverviewResponse(BaseModel):
 class CronoscitaCreate(BaseModel):
     """Request model for creating Cronoscita"""
     nome: str = Field(..., min_length=2, max_length=100, description="Nome Cronoscita (sarà convertito in maiuscolo)")
+    nome_presentante: str = Field(..., min_length=2, max_length=150, description="Nome presentante (display name)")
     
     @validator('nome')
     def validate_nome(cls, v):
@@ -287,6 +288,19 @@ class CronoscitaCreate(BaseModel):
             raise ValueError('Nome deve essere di almeno 2 caratteri')
         
         return nome_clean
+    
+    @validator('nome_presentante')
+    def validate_nome_presentante(cls, v):
+        """Validate and transform nome presentante to uppercase"""
+        if not v or not v.strip():
+            raise ValueError('Nome presentante è richiesto')
+        
+        nome_presentante_clean = v.strip().upper()  # ✅ Convert to uppercase for consistency
+        
+        if len(nome_presentante_clean) < 2:
+            raise ValueError('Nome presentante deve essere di almeno 2 caratteri')
+        
+        return nome_presentante_clean
 
 class MasterPrestazione(BaseModel):
     """Master prestazioni catalog (imported from XLSX)"""
@@ -302,6 +316,7 @@ class CronoscitaResponse(BaseModel):
     """Response model for Cronoscita"""
     id: str
     nome: str
+    nome_presentante: str  # Display name shown to users
     codice: str  # Short random ID for reference (e.g., "CR-A7B2")
     created_at: datetime
     updated_at: datetime

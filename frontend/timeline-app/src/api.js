@@ -188,7 +188,7 @@ export const timelineAPI = {
       if (error.status === 404 && patologia) {
         // Patient not found in this specific Cronoscita
         throw new APIError(
-          `Paziente non registrato per ${patologia}. Verificare registrazione o selezionare Cronoscita corretta.`,
+          `Paziente non registrato per ${patologia}. Verificare registrazione o selezionare Cronicità corretta.`,
           404
         );
       }
@@ -399,7 +399,7 @@ export const hasAvailablePathologie = () => {
 export const getPatologieOptions = () => {
   return Object.entries(PATOLOGIE).map(([code, display]) => ({
     value: code,
-    label: display
+    label: display  // Already uppercase from backend
   }));
 };
 

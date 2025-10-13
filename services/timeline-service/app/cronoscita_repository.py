@@ -33,6 +33,7 @@ class CronoscitaRepository:
                 {
                     "_id": 0,  # Exclude MongoDB _id
                     "nome": 1,
+                    "nome_presentante": 1,  # Display name for users
                     "codice": 1,
                     "created_at": 1
                 }
@@ -41,11 +42,12 @@ class CronoscitaRepository:
             cronoscita_list = await cursor.to_list(length=None)
             
             # Format for Timeline frontend compatibility
+            # ✅ Login form shows technical name, dashboard shows nome_presentante (via separate API call)
             pathologie_options = []
             for cronoscita in cronoscita_list:
                 pathologie_options.append({
-                    "code": cronoscita["nome"],      # Used as value in dropdown
-                    "display": cronoscita["nome"],   # Used as display text
+                    "code": cronoscita["nome"],      # Technical name (used as value and shown in login form)
+                    "display": cronoscita["nome"],   # Same technical name for login form dropdown
                     "cronoscita_code": cronoscita["codice"]  # Internal reference
                 })
             
@@ -64,11 +66,11 @@ class CronoscitaRepository:
         try:
             cronoscita = await self.collection.find_one(
                 {"nome": cronoscita_name, "is_active": True},
-                {"nome": 1, "_id": 0}
+                {"nome": 1, "nome_presentante": 1, "_id": 0}
             )
             
             if cronoscita:
-                return cronoscita["nome"]
+                return cronoscita.get("nome_presentante", cronoscita["nome"])
             else:
                 logger.warning(f"⚠️ Cronoscita not found: {cronoscita_name}")
                 return cronoscita_name  # Fallback to input

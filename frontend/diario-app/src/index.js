@@ -8,6 +8,7 @@ const DiarioApp = () => {
   const [error, setError] = useState(null);
   const [showPdfModal, setShowPdfModal] = useState(false);
   const [pdfData, setPdfData] = useState(null);
+  const [pdfUrl, setPdfUrl] = useState(null); // ✅ Store Blob URL instead
   const [loadingPdf, setLoadingPdf] = useState(false);
 
   const cf = new URLSearchParams(window.location.search).get('cf') || '';
@@ -45,7 +46,20 @@ const DiarioApp = () => {
       if (!response.ok) throw new Error('Failed to fetch PDF');
       
       const data = await response.json();
-      setPdfData(data.strBase64);
+      
+      // Convert base64 to Blob URL
+      const base64Data = data.strBase64;
+      const binaryString = atob(base64Data);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      
+      const blob = new Blob([bytes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      
+      setPdfUrl(url);
+      setPdfData(base64Data);
       setShowPdfModal(true);
     } catch (err) {
       alert('Errore nel caricamento PDF: ' + err.message);
@@ -56,6 +70,10 @@ const DiarioApp = () => {
 
   const closePdfModal = () => {
     setShowPdfModal(false);
+    if (pdfUrl) {
+      URL.revokeObjectURL(pdfUrl);
+      setPdfUrl(null);
+    }
     setPdfData(null);
   };
 
@@ -124,7 +142,7 @@ const DiarioApp = () => {
         )}
       </div>
 
-      {showPdfModal && pdfData && (
+      {showPdfModal && pdfUrl && (
         <div className="modal-overlay" onClick={closePdfModal}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
@@ -133,7 +151,7 @@ const DiarioApp = () => {
             </div>
             <div className="pdf-container">
               <iframe
-                src={`data:application/pdf;base64,${pdfData}`}
+                src={pdfUrl}
                 className="pdf-frame"
                 title="PDF Document"
               />

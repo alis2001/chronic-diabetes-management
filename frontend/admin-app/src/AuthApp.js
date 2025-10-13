@@ -55,9 +55,14 @@ const AuthApp = ({ onAuthSuccess }) => {
     setInfoMessage('');
   };
 
-  // Handle login request - requires email verification  
+  // Handle login request - 2FA DISABLED - May skip verification if not required
   const handleLoginRequireVerification = async (email, password) => {
-    console.log('🔐 Login requested, switching to verification');
+    console.log('🔐 Login requested');
+    
+    // 🔥 2FA DISABLED: This callback may not be called anymore
+    // The Login component now handles direct login automatically
+    // This is kept for backwards compatibility only
+    
     setTempData({ email, password });
     setCurrentView('verify-login');
     setError('');

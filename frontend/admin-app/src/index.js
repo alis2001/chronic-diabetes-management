@@ -297,9 +297,9 @@ const useCronoscitaSelection = () => {
     setSelectedCronoscita(null);
   };
 
-  const createCronoscita = async (nome) => {
+  const createCronoscita = async (cronoscitaData) => {
     try {
-      const response = await adminAPI.post('/dashboard/cronoscita', { nome });
+      const response = await adminAPI.post('/dashboard/cronoscita', cronoscitaData);
       
       if (response.success) {
         await loadCronoscitaList();
@@ -333,6 +333,7 @@ const CronoscitaSelector = ({ cronoscitaState }) => {
   const [showModal, setShowModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newCronoscitaName, setNewCronoscitaName] = useState('');
+  const [newCronoscitaPresentante, setNewCronoscitaPresentante] = useState('');
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
 
@@ -349,19 +350,28 @@ const CronoscitaSelector = ({ cronoscitaState }) => {
     e.preventDefault();
     
     if (!newCronoscitaName.trim()) {
-      setCreateError('Nome Cronoscita è richiesto');
+      setCreateError('Nome Cronicità è richiesto');
+      return;
+    }
+
+    if (!newCronoscitaPresentante.trim()) {
+      setCreateError('Nome Presentante è richiesto');
       return;
     }
 
     setCreating(true);
     setCreateError('');
 
-    const result = await createCronoscita(newCronoscitaName.trim());
+    const result = await createCronoscita({
+      nome: newCronoscitaName.trim(),
+      nome_presentante: newCronoscitaPresentante.trim()
+    });
     
     if (result.success) {
       setNewCronoscitaName('');
+      setNewCronoscitaPresentante('');
       setShowCreateModal(false);
-      alert(`Cronoscita "${result.cronoscita.nome}" creata con successo!`);
+      alert(`Cronicità "${result.cronoscita.nome_presentante}" creata con successo!`);
     } else {
       setCreateError(result.error);
     }
@@ -483,7 +493,7 @@ const CronoscitaSelector = ({ cronoscitaState }) => {
             
             <form onSubmit={handleCreateCronoscita}>
               <div className="form-group">
-                <label className="form-label">Nome Cronoscita *</label>
+                <label className="form-label">Nome Cronicità (Codice Interno) *</label>
                 <input
                   type="text"
                   className="form-input"
@@ -497,6 +507,22 @@ const CronoscitaSelector = ({ cronoscitaState }) => {
                 <div className="form-help-text">
                   Il nome sarà convertito automaticamente in MAIUSCOLO. 
                   Lettere, numeri, spazi e caratteri - . _ consentiti.
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Nome Presentante (Display) *</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={newCronoscitaPresentante}
+                  onChange={(e) => setNewCronoscitaPresentante(e.target.value)}
+                  placeholder="Es: Diabete Tipo 1, Diabete Tipo 2, Ipertensione"
+                  maxLength={150}
+                  disabled={creating}
+                />
+                <div className="form-help-text">
+                  Nome visualizzato agli utenti nel sistema (es: nelle timeline).
                 </div>
               </div>
 
@@ -521,6 +547,7 @@ const CronoscitaSelector = ({ cronoscitaState }) => {
                   onClick={() => {
                     setShowCreateModal(false);
                     setNewCronoscitaName('');
+                    setNewCronoscitaPresentante('');
                     setCreateError('');
                   }}
                   disabled={creating}
@@ -530,9 +557,9 @@ const CronoscitaSelector = ({ cronoscitaState }) => {
                 <button 
                   type="submit"
                   className="btn-success" 
-                  disabled={creating || !newCronoscitaName.trim()}
+                  disabled={creating || !newCronoscitaName.trim() || !newCronoscitaPresentante.trim()}
                 >
-                  {creating ? 'Creando...' : 'Crea Cronoscita'}
+                  {creating ? 'Creando...' : 'Crea Cronicità'}
                 </button>
               </div>
             </form>
@@ -860,8 +887,8 @@ const DoctorsPage = ({ cronoscitaFilter }) => {
         loading={loading}
         emptyMessage={
           cronoscitaFilter 
-            ? `Nessun medico con pazienti nella Cronoscita: ${cronoscitaFilter}`
-            : "Seleziona una Cronoscita per visualizzare i medici"
+            ? `Nessun medico con pazienti nella Cronicità: ${cronoscitaFilter}`
+            : "Seleziona una Cronicità per visualizzare i medici"
         }
       />
     </div>
@@ -938,7 +965,7 @@ const VisitsPage = ({ cronoscitaFilter }) => {
 
   const getHeaderSubtitle = () => {
     if (cronoscitaFilter) {
-      return `Visite programmate per la Cronoscita: ${cronoscitaFilter}`;
+      return `Visite programmate per la Cronicità: ${cronoscitaFilter}`;
     }
     return 'Registro completo degli appuntamenti e visite';
   };
@@ -971,8 +998,8 @@ const VisitsPage = ({ cronoscitaFilter }) => {
         loading={loading}
         emptyMessage={
           cronoscitaFilter 
-            ? `Nessuna visita programmata per la Cronoscita: ${cronoscitaFilter}`
-            : "Seleziona una Cronoscita per visualizzare le visite"
+            ? `Nessuna visita programmata per la Cronicità: ${cronoscitaFilter}`
+            : "Seleziona una Cronicità per visualizzare le visite"
         }
       />
     </div>

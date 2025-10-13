@@ -51,8 +51,8 @@ export const PatientLookup = ({ onPatientFound, onPatientNotFound, onError }) =>
       const success = await loadAvailablePathologie();
       
       if (!success || !hasAvailablePathologie()) {
-        setPatologieError('Nessuna Cronoscita configurata. Contattare l\'amministratore.');
-        console.error('❌ No Cronoscita available from admin service');
+      setPatologieError('Nessuna Cronicità configurata. Contattare l\'amministratore.');
+      console.error('❌ No Cronoscita available from admin service');
       } else {
         console.log('✅ Cronoscita loaded successfully');
       }
@@ -116,7 +116,7 @@ export const PatientLookup = ({ onPatientFound, onPatientNotFound, onError }) =>
     }
     
     if (!formData.patologia) {
-      alert('Selezionare una Cronoscita');
+      alert('Selezionare una Cronicità');
       return;
     }
     
@@ -149,13 +149,13 @@ export const PatientLookup = ({ onPatientFound, onPatientNotFound, onError }) =>
             cf: formData.cf_paziente
           });
           
-          alert(`❌ CRONOSCITA MISMATCH RILEVATO:
+          alert(`❌ MISMATCH CRONICITÀ RILEVATO:
 
-Cronoscita selezionata: "${selectedCronoscita}"
-Cronoscita nel sistema: "${foundCronoscita}"
+Cronicità selezionata: "${selectedCronoscita}"
+Cronicità nel sistema: "${foundCronoscita}"
 
 🔄 Il paziente risulta registrato per "${foundCronoscita}".
-Selezionare la cronoscita corretta e riprovare.`);
+Selezionare la cronicità corretta e riprovare.`);
           
           setLoading(false);
           return;
@@ -170,11 +170,11 @@ Selezionare la cronoscita corretta e riprovare.`);
         console.log('📋 Patient exists in other Cronoscita - enabling simplified registration');
         console.log('🔄 Existing enrollments:', response.patient_data.existing_enrollments);
         
-        const confirmMessage = `🏥 PAZIENTE TROVATO IN ALTRA CRONOSCITA
+        const confirmMessage = `🏥 PAZIENTE TROVATO IN ALTRA CRONICITÀ
 
   Paziente: ${formData.cf_paziente}
-  Cronoscita esistente: ${response.patient_data.existing_enrollments?.[0] || 'Sconosciuta'}
-  Cronoscita richiesta: ${PATOLOGIE[formData.patologia] || formData.patologia}
+  Cronicità esistente: ${response.patient_data.existing_enrollments?.[0] || 'Sconosciuta'}
+  Cronicità richiesta: ${PATOLOGIE[formData.patologia] || formData.patologia}
 
   📞 I contatti salvati verranno riutilizzati automaticamente.
 
@@ -206,7 +206,7 @@ Selezionare la cronoscita corretta e riprovare.`);
               throw new Error(`Registrazione fallita: cronoscita mismatch dopo registrazione`);
             }
             
-            alert('✅ Paziente registrato con successo nella nuova Cronoscita!');
+            alert('✅ Paziente registrato con successo nella nuova Cronicità!');
             onPatientFound(newLookupResponse, formData);
             
           } catch (autoRegError) {
@@ -272,7 +272,7 @@ Selezionare la cronoscita corretta e riprovare.`);
         
         <div style={styles.formGroup}>
           <label style={styles.label}>
-            Cronoscita/Pathologie *
+            Cronicità *
             {patologieLoading && <span style={{color: '#666', fontSize: '12px'}}> (Caricamento...)</span>}
           </label>
           
@@ -287,7 +287,7 @@ Selezionare la cronoscita corretta e riprovare.`);
             }}>
               ⚠️ {patologieError}
               <br />
-              <small>Configurare almeno una Cronoscita nel pannello amministrativo.</small>
+              <small>Configurare almeno una Cronicità nel pannello amministrativo.</small>
             </div>
           ) : (
             <select
@@ -301,7 +301,7 @@ Selezionare la cronoscita corretta e riprovare.`);
               required
               disabled={patologieLoading || patologieError}
             >
-              <option value="">-- Seleziona Cronoscita --</option>
+              <option value="">-- Seleziona Cronicità --</option>
               {getPatologieOptions().map(option => (
                 <option key={option.value} value={option.value}>
                   {option.label}
@@ -321,13 +321,13 @@ Selezionare la cronoscita corretta e riprovare.`);
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
               <span style={{ fontSize: '18px' }}>🏥</span>
-              <strong style={{ color: '#0066cc', fontSize: '16px' }}>Cronoscita Selezionata</strong>
+              <strong style={{ color: '#0066cc', fontSize: '16px' }}>Cronicità Selezionata</strong>
             </div>
             <div style={{ fontSize: '14px', color: '#333', fontWeight: '600' }}>
               {PATOLOGIE[formData.patologia] || formData.patologia}
             </div>
             <div style={{ fontSize: '12px', color: '#666', marginTop: '8px' }}>
-              💡 Il paziente verrà cercato/registrato specificamente per questa Cronoscita
+              💡 Il paziente verrà cercato/registrato specificamente per questa Cronicità
             </div>
           </div>
         )}
@@ -729,29 +729,88 @@ export const InnovativeTimeline = ({ appointments, patientId, doctorId, onTimeli
             </div>
           ) : (
             // STATE 1: GREY - No referto saved (Disabled)
-            <div
-              style={{
-                ...styles.timelinePoint,
-                backgroundColor: '#f3f4f6', // Light grey
-                cursor: 'not-allowed',
-                color: '#6b7280', // Grey text
-                fontSize: '12px',
-                fontWeight: '600',
-                border: '2px solid #d1d5db', // Grey border
-                transition: 'all 0.3s ease'
-              }}
-              title="Completa referto prima di programmare appuntamento"
-            >
-              Successivo
-              <div style={{
-                ...styles.pointLabel,
-                backgroundColor: 'rgba(107, 114, 128, 0.1)', // Light grey background
-                color: '#6b7280', // Grey text
-                borderColor: '#d1d5db', // Grey border
-                fontSize: '10px',
-                fontWeight: '600'
-              }}>
-                Completa referto
+            <div style={{ position: 'relative' }}>
+              {/* Question mark OUTSIDE and ABOVE button */}
+              <div 
+                style={{
+                  position: 'absolute',
+                  top: '-20px',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  color: '#fbbf24', // Yellow
+                  fontSize: '16px',
+                  fontWeight: '600',
+                  cursor: 'help',
+                  zIndex: 10
+                }}
+                onMouseEnter={(e) => {
+                  const tooltip = e.currentTarget.querySelector('.custom-tooltip');
+                  if (tooltip) tooltip.style.opacity = '1';
+                }}
+                onMouseLeave={(e) => {
+                  const tooltip = e.currentTarget.querySelector('.custom-tooltip');
+                  if (tooltip) tooltip.style.opacity = '0';
+                }}
+              >
+                ❓
+                {/* Custom Tooltip */}
+                <div 
+                  className="custom-tooltip"
+                  style={{
+                    position: 'absolute',
+                    bottom: '100%',
+                    right: '100%',
+                    marginRight: '8px',
+                    marginBottom: '4px',
+                    backgroundColor: '#1f2937',
+                    color: 'white',
+                    padding: '6px 10px',
+                    borderRadius: '6px',
+                    fontSize: '10px',
+                    lineHeight: '1.4',
+                    whiteSpace: 'nowrap',
+                    boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                    opacity: '0',
+                    transition: 'opacity 0.2s ease',
+                    pointerEvents: 'none',
+                    zIndex: 1000,
+                    textAlign: 'left'
+                  }}
+                >
+                  <div style={{ fontWeight: '600', color: '#fbbf24', fontSize: '10px' }}>
+                    🔒 Completa il referto per attivare
+                  </div>
+                  {/* Tooltip arrow */}
+                  <div style={{
+                    position: 'absolute',
+                    bottom: '8px',
+                    right: '-5px',
+                    width: '0',
+                    height: '0',
+                    borderTop: '5px solid transparent',
+                    borderBottom: '5px solid transparent',
+                    borderLeft: '5px solid #1f2937'
+                  }} />
+                </div>
+              </div>
+              
+              {/* Button with Successivo centered */}
+              <div
+                style={{
+                  ...styles.timelinePoint,
+                  backgroundColor: '#f3f4f6', // Light grey
+                  cursor: 'not-allowed',
+                  color: '#6b7280', // Grey text
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  border: '2px solid #d1d5db', // Grey border
+                  transition: 'all 0.3s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                Successivo
               </div>
             </div>
           )}
@@ -1004,14 +1063,17 @@ const ProfessionalTabs = ({ patientId, doctorId, patologia, onRefertoSaved }) =>
   const renderTabContent = () => {
     switch (activeTab) {
       case 'refertazione':
-        const canSave = referto.trim().length >= 10 && !hasExistingReferto;
+        // 🔥 MIN LENGTH REMOVED - Allow saving with 0 characters
+        const canSave = !hasExistingReferto; // Only check if not already saved
         const isReadOnly = hasExistingReferto || refertoSaved;
 
         const handleSaveReferto = async () => {
-          if (!canSave) {
-            setSaveMessage('Il referto deve contenere almeno 10 caratteri');
-            return;
-          }
+          // 🔥 MIN LENGTH VALIDATION REMOVED
+          // Original validation commented out:
+          // if (!canSave) {
+          //   setSaveMessage('Il referto deve contenere almeno 10 caratteri');
+          //   return;
+          // }
 
           if (hasExistingReferto) {
             setSaveMessage('Referto già salvato per oggi. Non è possibile salvare nuovamente.');
@@ -1060,7 +1122,7 @@ const ProfessionalTabs = ({ patientId, doctorId, patologia, onRefertoSaved }) =>
             if (error.message?.includes('422') || error.message?.includes('Unprocessable')) {
               setSaveMessage('❌ Errore validazione dati. Verificare cronoscita selezionata.');
             } else if (error.message?.includes('cronoscita') || error.message?.includes('Cronoscita')) {
-              setSaveMessage('❌ Errore cronoscita. Riselezionare cronoscita corretta.');
+              setSaveMessage('❌ Errore cronicità. Riselezionare cronicità corretta.');
             } else {
               setSaveMessage('❌ Errore di connessione durante il salvataggio');
             }
@@ -1277,17 +1339,8 @@ const ProfessionalTabs = ({ patientId, doctorId, patologia, onRefertoSaved }) =>
               }}
             />
 
-            {/* Character Counter */}
-            <div style={{
-              marginTop: '10px',
-              fontSize: '12px',
-              color: isReadOnly ? '#6b7280' : canSave ? '#059669' : '#ef4444',
-              fontWeight: '500',
-              textAlign: 'right'
-            }}>
-              {referto.length} caratteri 
-              {isReadOnly ? ' (referto salvato)' : canSave ? ' (minimo raggiunto ✅)' : ' (minimo 10 caratteri)'}
-            </div>
+            {/* Character Counter - REMOVED per user request */}
+            {/* User doesn't want character count display */}
           </div>
         );
 
@@ -1562,6 +1615,11 @@ export const PatientTimeline = ({ patientId, doctorId, patologia, onScheduleAppo
       
       const timelineData = await timelineAPI.getTimeline(patientId, doctorId, patologia);
       console.log('📊 Timeline response received:', timelineData);
+      console.log('🔍 Patologia details:', {
+        technical: timelineData.patologia,
+        display: timelineData.patologia_display,
+        requested: patologia
+      });
       
       const returnedCronoscita = timelineData.patologia?.trim() || '';
       const requestedCronoscita = patologia?.trim() || '';
@@ -1573,13 +1631,13 @@ export const PatientTimeline = ({ patientId, doctorId, patologia, onScheduleAppo
           patient: patientId
         });
         
-        const errorMessage = `❌ CRONOSCITA MISMATCH NELLA TIMELINE:
+        const errorMessage = `❌ MISMATCH CRONICITÀ NELLA TIMELINE:
 
-Cronoscita richiesta: "${requestedCronoscita}"
-Cronoscita nei dati: "${returnedCronoscita}"
+Cronicità richiesta: "${requestedCronoscita}"
+Cronicità nei dati: "${returnedCronoscita}"
 
 🔄 Il paziente risulta registrato per "${returnedCronoscita}".
-Ricaricare la pagina e selezionare la cronoscita corretta.`;
+Ricaricare la pagina e selezionare la cronicità corretta.`;
         
         setError(errorMessage);
         alert(errorMessage);
@@ -1604,8 +1662,8 @@ Ricaricare la pagina e selezionare la cronoscita corretta.`;
       console.error('❌ Timeline loading error:', error);
       
       if (error.message?.includes('CRONOSCITA MISMATCH') || error.message?.includes('cronoscita') || error.message?.includes('Cronoscita')) {
-        setError(`❌ ERRORE CRONOSCITA: ${error.message}`);
-        alert(`❌ ERRORE CRONOSCITA:\n\n${error.message}\n\n🔄 Selezionare la cronoscita corretta e riprovare.`);
+        setError(`❌ ERRORE CRONICITÀ: ${error.message}`);
+        alert(`❌ ERRORE CRONICITÀ:\n\n${error.message}\n\n🔄 Selezionare la cronicità corretta e riprovare.`);
       } else {
         setError(error.message || 'Errore caricamento timeline');
       }
@@ -1734,24 +1792,24 @@ Ricaricare la pagina e selezionare la cronoscita corretta.`;
 
     // ✅ Validate Cronoscita context match
     if (patologia && timeline.patologia !== patologia) {
-      alert(`❌ Cronoscita Context Mismatch:
+      alert(`❌ Mismatch Cronicità:
 
     Timeline mostra: ${PATOLOGIE[timeline.patologia] || timeline.patologia}
-    Cronoscita selezionata: ${PATOLOGIE[patologia] || patologia}
+    Cronicità selezionata: ${PATOLOGIE[patologia] || patologia}
 
-    🔄 Ricaricare la pagina e selezionare la Cronoscita corretta.`);
+    🔄 Ricaricare la pagina e selezionare la Cronicità corretta.`);
       return;
     }
     
     // Check if scheduler is explicitly disabled
     if (timeline.scheduler_available === false) {
-      alert(`❌ Scheduler non disponibile:\n${timeline.scheduler_error || 'Cronoscita non configurata'}\n\nContattare l'amministratore per configurare la Cronoscita per questo paziente.`);
+      alert(`❌ Scheduler non disponibile:\n${timeline.scheduler_error || 'Cronicità non configurata'}\n\nContattare l'amministratore per configurare la Cronicità per questo paziente.`);
       return;
     }
     
     // Check for cronoscita_id (most critical)
     if (!timeline.cronoscita_id && !timeline.patologia_id) {
-      alert(`❌ Impossibile aprire scheduler:\n\nCronoscita non configurata per il paziente.\nPatologia: ${timeline.patologia || 'Non specificata'}\n\n🔧 Soluzioni:\n• Contattare l'amministratore\n• Verificare configurazione Cronoscita\n• Ricontrollare registrazione paziente`);
+      alert(`❌ Impossibile aprire scheduler:\n\nCronicità non configurata per il paziente.\nPatologia: ${timeline.patologia || 'Non specificata'}\n\n🔧 Soluzioni:\n• Contattare l'amministratore\n• Verificare configurazione Cronicità\n• Ricontrollare registrazione paziente`);
       return;
     }
     
@@ -1783,7 +1841,7 @@ Ricaricare la pagina e selezionare la cronoscita corretta.`;
     // Optional: Show confirmation for first-time users
     if (localStorage.getItem('scheduler_first_time') !== 'false') {
       setTimeout(() => {
-        alert('💡 Scheduler Professionale:\n\n• Seleziona data con colori densità\n• Scegli esami configurati dall\'admin\n• Un solo appuntamento per patologia\n\n✅ Pronto per la programmazione!');
+        alert('💡 Scheduler Professionale:\n\n• Seleziona data con colori densità\n• Scegli esami configurati dall\'admin\n• Un solo appuntamento per cronicità\n\n✅ Pronto per la programmazione!');
         localStorage.setItem('scheduler_first_time', 'false');
       }, 1000);
     }
@@ -1954,7 +2012,7 @@ Ricaricare la pagina e selezionare la cronoscita corretta.`;
                   borderRadius: '12px',
                   fontWeight: '500'
                 }}>
-                  🏥 {PATOLOGIE[timeline.patologia] || timeline.patologia}
+                  🏥 {timeline.patologia_display || timeline.patologia}
                 </span>
 
                 {/* ✅ Multi-Cronoscita Status Indicator */}
@@ -1967,7 +2025,7 @@ Ricaricare la pagina e selezionare la cronoscita corretta.`;
                     borderRadius: '8px',
                     fontWeight: '500'
                   }}>
-                    ⚠️ Cronoscita Mismatch
+                    ⚠️ Mismatch Cronicità
                   </span>
                 )}
                 
@@ -2085,7 +2143,7 @@ Ricaricare la pagina e selezionare la cronoscita corretta.`;
                       Programmazione Appuntamento
                     </h3>
                     <p style={{margin: '2px 0 0 0', fontSize: '14px', opacity: 0.9}}>
-                      {timeline.patient_name} ({patientId}) • {timeline.patologia}
+                      {timeline.patient_name} ({patientId}) • {timeline.patologia_display || timeline.patologia}
                     </p>
                   </div>
                 </div>

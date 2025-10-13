@@ -182,7 +182,7 @@ const LaboratorioManagement = ({ cronoscita }) => {
     e.preventDefault();
     
     if (!cronoscita?.id) {
-      alert('Errore: Cronoscita non selezionata');
+      alert('Errore: Cronicità non selezionata');
       return;
     }
 
@@ -227,7 +227,7 @@ const LaboratorioManagement = ({ cronoscita }) => {
     e.preventDefault();
     
     if (!cronoscita?.id) {
-      alert('Errore: Cronoscita non selezionata');
+      alert('Errore: Cronicità non selezionata');
       return;
     }
     

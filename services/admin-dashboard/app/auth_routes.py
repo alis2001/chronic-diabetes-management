@@ -75,7 +75,7 @@ async def verify_email(request: EmailVerificationRequest):
 
 @auth_router.post("/login-request")
 async def login_request(login_data: dict):
-    """Request login - sends 6-digit code to email"""
+    """Request login - 2FA DISABLED - Direct login with email + password"""
     try:
         email = login_data.get("email")
         password = login_data.get("password")
@@ -83,20 +83,50 @@ async def login_request(login_data: dict):
         if not email or not password:
             raise HTTPException(status_code=400, detail="Email e password richiesti")
         
-        logger.info(f"🔐 Login request: {email}")
+        logger.info(f"🔐 Direct login request (2FA disabled): {email}")
         
         result = await auth_service.login_request(email, password)
         
         if result["success"]:
-            logger.info(f"✅ Login verification code sent: {email}")
-            return {
-                "success": True,
-                "message": result["message"],
-                "verification_required": True
-            }
+            # 🔥 2FA DISABLED: Create session immediately
+            if not result.get("verification_required", False):
+                # Direct login - create session now
+                session_token = await session_manager.create_session(
+                    result["user_id"],
+                    result["user_data"]
+                )
+                
+                logger.info(f"✅ Direct login successful (2FA disabled): {email}")
+                
+                return {
+                    "success": True,
+                    "message": "Login completato con successo",
+                    "verification_required": False,  # 🔥 No verification needed
+                    "access_token": session_token,
+                    "user_info": result["user_data"],
+                    "expires_in": 8 * 3600  # 8 hours
+                }
+            else:
+                # Original 2FA flow (kept for backwards compatibility)
+                logger.info(f"✅ Login verification code sent: {email}")
+                return {
+                    "success": True,
+                    "message": result["message"],
+                    "verification_required": True
+                }
         else:
-            logger.warning(f"❌ Login request failed: {email} - {result['error']}")
-            raise HTTPException(status_code=400, detail=result["error"])
+            logger.warning(f"❌ Login request failed: {email} - {result.get('error', 'Unknown error')}")
+            
+            # Return structured error for frontend routing
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "success": False,
+                    "error": result.get("error", "Errore di accesso"),
+                    "error_type": result.get("error_type", "unknown"),
+                    "redirect_to": result.get("redirect_to")
+                }
+            )
             
     except HTTPException:
         raise

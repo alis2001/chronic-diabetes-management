@@ -954,10 +954,11 @@ def create_application() -> FastAPI:
             cronoscita_list = await cronoscita_repo.get_all_cronoscita()
             
             # Filter only active ones and format for Timeline
+            # ✅ Login form shows technical name, dashboard shows nome_presentante
             active_cronoscita = [
                 {
-                    "code": cronoscita["nome"],  # Use nome as the selection value
-                    "display": cronoscita["nome"],  # Same for display
+                    "code": cronoscita["nome"],  # Technical name (used as value and shown in login form)
+                    "display": cronoscita["nome"],  # Same technical name for login form dropdown
                     "cronoscita_id": cronoscita["id"]
                 }
                 for cronoscita in cronoscita_list if cronoscita.get("is_active", True)
