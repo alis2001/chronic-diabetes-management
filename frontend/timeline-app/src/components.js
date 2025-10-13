@@ -612,8 +612,9 @@ export const InnovativeTimeline = ({ appointments, patientId, doctorId, onTimeli
         { type: hasFutureAppt ? 'future' : 'successivo', data: hasFutureAppt ? future[0] : null }
       ];
     } else {
-      // No past appointments
+      // No past appointments - show placeholder button
       visiblePoints = [
+        { type: 'no_past', data: null }, // Placeholder for "No visite precedenti"
         { type: 'oggi', data: todayAppts },
         { type: hasFutureAppt ? 'future' : 'successivo', data: hasFutureAppt ? future[0] : null }
       ];
@@ -866,9 +867,10 @@ export const InnovativeTimeline = ({ appointments, patientId, doctorId, onTimeli
               position = 50;
             }
 
-            // OGGI gets center treatment
+            // Identify point types
             const isOggi = point.type === 'oggi';
             const isPast = point.type === 'past';
+            const isNoPast = point.type === 'no_past';
             const isSuccessivo = point.type === 'successivo';
             const isFuture = point.type === 'future';
 
@@ -882,7 +884,57 @@ export const InnovativeTimeline = ({ appointments, patientId, doctorId, onTimeli
             return (
               <Step key={pointKey} position={position}>
                 {({ accomplished }) => (
-                  isOggi ? (
+                  isNoPast ? (
+                    // NO PAST APPOINTMENTS PLACEHOLDER
+                    <div style={{ position: 'relative', textAlign: 'center' }}
+                      onMouseEnter={() => setHoveredStep('no-past')}
+                      onMouseLeave={() => setHoveredStep(null)}
+                    >
+                      {/* No past appointment placeholder dot */}
+                      <div style={{
+                        width: '75px',
+                        height: '75px',
+                        borderRadius: '50%',
+                        backgroundColor: '#d1d5db',
+                        color: '#6b7280',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '32px',
+                        fontWeight: '700',
+                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                        cursor: 'default',
+                        border: '5px solid white',
+                        transition: 'all 0.2s ease',
+                        position: 'relative',
+                        zIndex: 20
+                      }}>
+                        ∅
+                      </div>
+                      {/* Info frame below - shows only when no past appointments */}
+                      <div style={{
+                        position: 'absolute',
+                        top: '90px',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        minWidth: '150px',
+                        maxWidth: '180px',
+                        padding: '12px 14px',
+                        backgroundColor: 'white',
+                        borderRadius: '12px',
+                        border: '2px solid #d1d5db',
+                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+                        fontSize: '11px',
+                        color: '#6b7280',
+                        lineHeight: '1.4',
+                        textAlign: 'center'
+                      }}>
+                        <div style={{ fontSize: '10px', fontStyle: 'italic' }}>
+                          Nessuna visita precedente per questo paziente
+                        </div>
+                      </div>
+                    </div>
+                  ) : isOggi ? (
                     // OGGI BUTTON - LARGEST, GREEN
                     <div style={{ 
                       position: isDefaultView ? 'absolute' : 'relative',
