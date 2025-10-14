@@ -94,6 +94,7 @@ export const DoctorWorkspace = () => {
   // Application state
   const [serviceHealth, setServiceHealth] = useState(null);
   const [error, setError] = useState(null);
+  const [currentPatientName, setCurrentPatientName] = useState(null);
 
   // Validate doctor exists
   const doctorInfo = MEDICI[doctorId];
@@ -421,7 +422,10 @@ export const DoctorWorkspace = () => {
   return (
     <div style={styles.container}>
       {/* Original Header */}
-      <Header serviceHealth={serviceHealth} />
+      <Header 
+        serviceHealth={serviceHealth}
+        patientName={currentPatientName}
+      />
       
       {/* Global Error Display */}
       {error && (
@@ -469,6 +473,7 @@ export const DoctorWorkspace = () => {
                 doctorId={doctorId}
                 patologia={sessionData.patientData.patologia} // ✅ Pass Cronoscita context
                 onScheduleAppointment={handleScheduleAppointment}
+                onPatientNameLoad={setCurrentPatientName}
               />
               <ActionButtons />
             </>
@@ -499,6 +504,7 @@ export const DoctorWorkspace = () => {
               doctorId={doctorId}
               patologia={sessionData.patientData.patologia} // ✅ Pass Cronoscita context
               onScheduleAppointment={handleScheduleAppointment}
+              onPatientNameLoad={setCurrentPatientName}
             />
           ) : (
             <PatientLookup

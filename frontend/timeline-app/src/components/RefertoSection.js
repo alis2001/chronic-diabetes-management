@@ -105,8 +105,15 @@ const RefertoSection = ({
     
     try {
       const sections = await timelineAPI.getActiveRefertoSections(cronoscitaId);
-      setAvailableSections(sections || []);
-      console.log('✅ Loaded', sections.length, 'additional referto sections');
+      
+      // Convert all section names to Title Case for display
+      const sectionsWithTitleCase = (sections || []).map(section => ({
+        ...section,
+        section_name: toTitleCase(section.section_name)
+      }));
+      
+      setAvailableSections(sectionsWithTitleCase);
+      console.log('✅ Loaded', sectionsWithTitleCase.length, 'additional sections');
     } catch (error) {
       console.error('❌ Error loading sections:', error);
       setAvailableSections([]);
@@ -232,7 +239,7 @@ const RefertoSection = ({
       const response = await timelineAPI.saveReferto(refertoData);
       
       if (response.success) {
-        setSaveMessage('✅ Referto salvato con successo!');
+        setSaveMessage('✅ Valutazione salvata con successo!');
         setHasExistingReferto(true);
         setSavedRefertoText(referto);
         setIsDirty(false);
@@ -251,7 +258,7 @@ const RefertoSection = ({
       }
     } catch (error) {
       console.error('Error saving referto:', error);
-      setSaveMessage('❌ Errore nel salvataggio del referto');
+      setSaveMessage('❌ Errore nel salvataggio della valutazione');
     } finally {
       setSaving(false);
     }
@@ -533,7 +540,7 @@ const RefertoSection = ({
       {loadingExistingReferto && (
         <div style={styles.loadingBanner}>
           <div style={styles.spinner}></div>
-          Caricamento referto esistente...
+          Caricamento valutazione esistente...
         </div>
       )}
 
@@ -552,7 +559,7 @@ const RefertoSection = ({
               title="Registrazione vocale con AI"
             >
               <span className="ai-sparkle" style={styles.sparkle}>✨</span>
-              <span>🎤 Referto Vocale AI</span>
+              <span>🎤 Valutazione Vocale AI</span>
             </button>
           )}
         </div>
@@ -584,7 +591,7 @@ const RefertoSection = ({
           ) : hasExistingReferto ? (
             <>✅ Salvato</>
           ) : (
-            <>💾 Salva Referto</>
+            <>💾 Salva Valutazione</>
           )}
         </button>
       </div>
@@ -614,8 +621,8 @@ const RefertoSection = ({
             readOnly={isReadOnly}
             placeholder={
               isReadOnly 
-                ? "🔒 Referto bloccato - Il prossimo appuntamento è stato programmato" 
-                : "Inserisci qui la refertazione medica del paziente..."
+                ? "🔒 Valutazione bloccata - Il prossimo appuntamento è stato programmato" 
+                : "Inserisci qui la valutazione medica del paziente..."
             }
             style={{
               ...styles.textarea,
@@ -644,7 +651,7 @@ const RefertoSection = ({
         {/* Right: Additional Sections (1/3) */}
         <div style={styles.sectionsSidebar}>
           <h4 style={styles.sidebarTitle}>
-            Ulteriori Sezioni del Referto
+            Menu Sezioni
           </h4>
 
           {loadingSections ? (
@@ -691,7 +698,7 @@ const RefertoSection = ({
 
           {!isReadOnly && availableSections.length > 0 && (
             <div style={styles.sidebarHint}>
-              💡 Clicca per aggiungere/rimuovere sezioni nel referto
+              💡 Clicca per aggiungere/rimuovere sezioni nella valutazione
             </div>
           )}
         </div>
@@ -773,7 +780,7 @@ const RefertoSection = ({
 
           {phrases.length > 0 && usedPhrases.size > 0 && (
             <div style={styles.frasarioHint}>
-              💡 {usedPhrases.size} frase{usedPhrases.size > 1 ? 'i' : ''} già utilizzat{usedPhrases.size > 1 ? 'e' : 'a'} nel referto
+              💡 {usedPhrases.size} frase{usedPhrases.size > 1 ? 'i' : ''} già utilizzat{usedPhrases.size > 1 ? 'e' : 'a'} nella valutazione
             </div>
           )}
         </div>
@@ -939,7 +946,8 @@ const styles = {
     fontWeight: '600',
     color: '#374151',
     textTransform: 'uppercase',
-    letterSpacing: '0.5px'
+    letterSpacing: '0.5px',
+    textAlign: 'center'
   },
   sidebarLoading: {
     flex: 1,

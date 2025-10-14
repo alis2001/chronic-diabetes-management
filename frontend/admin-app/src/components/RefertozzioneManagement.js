@@ -211,7 +211,14 @@ const RefertozzioneManagement = ({ cronoscita }) => {
         return;
       }
       
-      const sectionName = `REFERTO ${selectedCronoscita.nome}`;
+      // Convert to Title Case: "Valutazione Ortopedia" instead of "VALUTAZIONE ORTOPEDIA"
+      const cronoscitaNameTitleCase = selectedCronoscita.nome
+        .toLowerCase()
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+      
+      const sectionName = `Valutazione ${cronoscitaNameTitleCase}`;
       const sectionCode = generateSectionCode(sectionName);
       const maxOrder = sections.length > 0 ? Math.max(...sections.map(s => s.display_order)) : 0;
       
@@ -449,7 +456,7 @@ const RefertozzioneManagement = ({ cronoscita }) => {
     <div>
       <div style={{marginBottom: '24px'}}>
         <h2 style={{margin: '0 0 8px 0', fontSize: '24px', fontWeight: '600'}}>
-          ⚕️ Sezioni Referto Aggiuntive
+          ⚕️ Sezioni Valutazione Aggiuntive
         </h2>
         <p style={{margin: 0, color: '#666666'}}>
           Configurazione sezioni per <strong>{cronoscita?.nome_presentante || cronoscita?.nome}</strong>
@@ -459,7 +466,7 @@ const RefertozzioneManagement = ({ cronoscita }) => {
       {/* Add New Section */}
       <div style={styles.addSection}>
         <div style={styles.selectWrapper}>
-          <label style={styles.selectLabel}>REFERTO</label>
+          <label style={styles.selectLabel}>VALUTAZIONE</label>
           <select
             value={selectedCronoscitaId}
             onChange={(e) => setSelectedCronoscitaId(e.target.value)}
@@ -691,7 +698,7 @@ const RefertozzioneManagement = ({ cronoscita }) => {
       {/* Tab Navigation */}
       <div style={styles.tabs}>
         {[
-          {id: 'sezioni', label: 'Sezioni Referto', icon: '⚕️'},
+          {id: 'sezioni', label: 'Sezioni Valutazione', icon: '⚕️'},
           {id: 'frasario', label: 'Frasario', icon: '📝'}
         ].map(tab => (
           <button

@@ -22,13 +22,13 @@ import RefertoSection from './components/RefertoSection';
 // CLEAN HEADER
 // ================================
 
-export const Header = ({ serviceHealth }) => (
+export const Header = ({ serviceHealth, patientName }) => (
   <div style={styles.header}>
     <div style={styles.headerContent}>
-      <h1>Timeline Paziente</h1>
-      <p style={{margin: '5px 0 0 0', fontSize: '16px', opacity: 0.9, fontWeight: '400'}}>
-        Sistema Gestione Visite Mediche
-      </p>
+      <h1>
+        <span style={{fontSize: '2rem'}}>Timeline</span>{' '}
+        <span style={{fontSize: '1.6rem', fontWeight: '600'}}>{patientName || 'Paziente'}</span>
+      </h1>
     </div>
   </div>
 );
@@ -740,104 +740,7 @@ export const InnovativeTimeline = ({ appointments, patientId, doctorId, onTimeli
       boxShadow: '0 8px 30px rgba(0, 0, 0, 0.12)',
       marginBottom: '30px'
     }}>
-      {/* Navigation arrows for past appointments */}
-      {past.length > 1 && (
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          maxWidth: '700px',
-          margin: '0 auto 30px auto',
-          gap: '20px'
-        }}>
-          <button
-            onClick={handleScrollLeft}
-            disabled={!canScrollLeft}
-            style={{
-              padding: '10px 20px',
-              borderRadius: '10px',
-              border: '2px solid #e5e7eb',
-              background: canScrollLeft ? 'white' : '#f3f4f6',
-              color: canScrollLeft ? '#3b82f6' : '#9ca3af',
-              fontSize: '16px',
-              fontWeight: '700',
-              cursor: canScrollLeft ? 'pointer' : 'not-allowed',
-              boxShadow: canScrollLeft ? '0 2px 8px rgba(0, 0, 0, 0.1)' : 'none',
-              transition: 'all 0.2s ease',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px'
-            }}
-          >
-            ← Più Vecchie
-          </button>
-          
-          {/* Custom Date Picker with purple appointment dates */}
-          <DatePicker
-            selected={null}
-            onChange={(date) => {
-              if (date) {
-                const year = date.getFullYear();
-                const month = String(date.getMonth() + 1).padStart(2, '0');
-                const day = String(date.getDate()).padStart(2, '0');
-                const dateStr = `${year}-${month}-${day}`;
-                handleDateSelect({ target: { value: dateStr } });
-              }
-            }}
-            highlightDates={[{
-              "react-datepicker__day--highlighted-custom-1": past.map(apt => new Date(apt.date))
-            }]}
-            minDate={past.length > 0 ? new Date(past[0].date) : null}
-            maxDate={new Date()}
-            dateFormat="dd/MM/yyyy"
-            locale="it"
-            placeholderText="Seleziona data"
-            className="custom-datepicker"
-            calendarClassName="custom-calendar"
-            wrapperClassName="datepicker-wrapper"
-            customInput={
-              <input
-                style={{
-                  padding: '10px 16px',
-                  borderRadius: '8px',
-                  border: '2px solid white',
-                  background: 'white',
-                  color: '#374151',
-                  fontSize: '13px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  boxShadow: '0 2px 6px rgba(0, 0, 0, 0.1)',
-                  outline: 'none',
-                  minWidth: '150px',
-                  textAlign: 'center'
-                }}
-              />
-            }
-          />
-          
-          <button
-            onClick={handleScrollRight}
-            disabled={!canScrollRight}
-            style={{
-              padding: '10px 20px',
-              borderRadius: '10px',
-              border: '2px solid #e5e7eb',
-              background: canScrollRight ? 'white' : '#f3f4f6',
-              color: canScrollRight ? '#3b82f6' : '#9ca3af',
-              fontSize: '16px',
-              fontWeight: '700',
-              cursor: canScrollRight ? 'pointer' : 'not-allowed',
-              boxShadow: canScrollRight ? '0 2px 8px rgba(0, 0, 0, 0.1)' : 'none',
-              transition: 'all 0.2s ease',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px'
-            }}
-          >
-            Più Recenti →
-          </button>
-        </div>
-      )}
+      {/* Navigation moved to bottom */}
 
       {/* react-step-progress-bar library - CUSTOM LAYOUT */}
       <div style={{
@@ -1222,61 +1125,106 @@ export const InnovativeTimeline = ({ appointments, patientId, doctorId, onTimeli
         paddingTop: '20px',
         borderTop: '1px solid #e5e7eb',
         fontSize: '14px',
-        fontWeight: '500'
+        fontWeight: '500',
+        marginLeft: '-30px'
       }}>
-        <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
-          <div style={{
-            width: '16px', 
-            height: '16px', 
-            borderRadius: '50%', 
-            backgroundColor: '#8b5cf6'
-          }} />
-          <span style={{color: '#6b7280'}}>Visite Passate ({past.length})</span>
-        </div>
-        
-        {/* OGGI as HOME button - enlarged and prominent */}
-        <button
-          onClick={() => setPastScrollOffset(0)}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px',
-            background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-            border: '2px solid #10b981',
-            cursor: 'pointer',
-            padding: '12px 24px',
-            borderRadius: '12px',
-            transition: 'all 0.2s ease',
-            outline: 'none',
-            boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
-            fontSize: '16px'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'linear-gradient(135deg, #059669 0%, #047857 100%)';
-            e.currentTarget.style.transform = 'scale(1.08)';
-            e.currentTarget.style.boxShadow = '0 6px 16px rgba(16, 185, 129, 0.4)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
-            e.currentTarget.style.transform = 'scale(1)';
-            e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.3)';
-          }}
-          title="Clicca per tornare alla vista corrente"
-        >
-          <span style={{color: 'white', fontWeight: '800', fontSize: '16px'}}>🏠 OGGI</span>
-        </button>
-        
-        <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
-          <div style={{
-            width: '16px', 
-            height: '16px', 
-            borderRadius: '50%', 
-            backgroundColor: hasFutureAppt ? '#22c55e' : (canScheduleNext ? '#fbbf24' : '#9ca3af')
-          }} />
-          <span style={{color: '#6b7280'}}>
-            {hasFutureAppt ? 'Programmato' : (canScheduleNext ? 'Disponibile' : 'Bloccato')}
-          </span>
+        <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
+          {/* Più Vecchie button */}
+          <button
+            onClick={() => setPastScrollOffset(Math.min(currentPage + 1, totalPages - 1))}
+            disabled={currentPage >= totalPages - 1}
+            style={{
+              padding: '10px 20px',
+              borderRadius: '10px',
+              border: '2px solid #e5e7eb',
+              background: (currentPage < totalPages - 1) ? 'white' : '#f3f4f6',
+              color: (currentPage < totalPages - 1) ? '#3b82f6' : '#9ca3af',
+              fontSize: '16px',
+              fontWeight: '700',
+              cursor: (currentPage < totalPages - 1) ? 'pointer' : 'not-allowed',
+              boxShadow: (currentPage < totalPages - 1) ? '0 2px 8px rgba(0, 0, 0, 0.1)' : 'none',
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              outline: 'none'
+            }}
+            onMouseEnter={(e) => {
+              if (currentPage < totalPages - 1) {
+                e.currentTarget.style.transform = 'scale(1.05)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'scale(1)';
+            }}
+          >
+            ← Precedenti
+          </button>
+          
+          {/* OGGI as HOME button - enlarged and prominent */}
+          <button
+            onClick={() => setPastScrollOffset(0)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              border: '2px solid #10b981',
+              cursor: 'pointer',
+              padding: '12px 24px',
+              borderRadius: '12px',
+              transition: 'all 0.2s ease',
+              outline: 'none',
+              boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
+              fontSize: '16px'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'linear-gradient(135deg, #059669 0%, #047857 100%)';
+              e.currentTarget.style.transform = 'scale(1.08)';
+              e.currentTarget.style.boxShadow = '0 6px 16px rgba(16, 185, 129, 0.4)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+              e.currentTarget.style.transform = 'scale(1)';
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(16, 185, 129, 0.3)';
+            }}
+            title="Clicca per tornare alla vista corrente"
+          >
+            <span style={{color: 'white', fontWeight: '800', fontSize: '16px'}}>🏠 OGGI</span>
+          </button>
+          
+          {/* Più Recenti button */}
+          <button
+            onClick={() => setPastScrollOffset(Math.max(currentPage - 1, 0))}
+            disabled={currentPage === 0}
+            style={{
+              padding: '10px 20px',
+              borderRadius: '10px',
+              border: '2px solid #e5e7eb',
+              background: (currentPage > 0) ? 'white' : '#f3f4f6',
+              color: (currentPage > 0) ? '#3b82f6' : '#9ca3af',
+              fontSize: '16px',
+              fontWeight: '700',
+              cursor: (currentPage > 0) ? 'pointer' : 'not-allowed',
+              boxShadow: (currentPage > 0) ? '0 2px 8px rgba(0, 0, 0, 0.1)' : 'none',
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              outline: 'none'
+            }}
+            onMouseEnter={(e) => {
+              if (currentPage > 0) {
+                e.currentTarget.style.transform = 'scale(1.05)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'scale(1)';
+            }}
+          >
+            Recenti →
+          </button>
         </div>
       </div>
     </div>
@@ -1980,7 +1928,7 @@ const EmbeddedDiarioWindow = ({
 // 🔥 STEP 2: UPDATED PATIENT TIMELINE - COMPRESSED INFO + TABS
 // ================================
 
-export const PatientTimeline = ({ patientId, doctorId, patologia, onScheduleAppointment }) => {
+export const PatientTimeline = ({ patientId, doctorId, patologia, onScheduleAppointment, onPatientNameLoad }) => {
   const [timeline, setTimeline] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -2112,6 +2060,12 @@ Ricaricare la pagina e selezionare la cronicità corretta.`;
       
       console.log('✅ Timeline cronoscita validation PASSED:', returnedCronoscita);
       setTimeline(timelineData);
+      
+      // Update patient name in header
+      if (onPatientNameLoad && timelineData.patient_name) {
+        onPatientNameLoad(timelineData.patient_name);
+      }
+      
       console.log('🔍 DEBUG Timeline Data:', {
         precedenti: timelineData.precedenti?.length || 0,
         oggi: timelineData.oggi?.length || 0,
@@ -2417,7 +2371,7 @@ Ricaricare la pagina e selezionare la cronicità corretta.`;
           flexWrap: 'wrap',
           gap: '20px'
         }}>
-          {/* Patient Name - Main Info */}
+          {/* Patient Info - Without Name (Name is now in Header) */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
@@ -2426,82 +2380,53 @@ Ricaricare la pagina e selezionare la cronicità corretta.`;
             minWidth: '200px'
           }}>
             <div style={{
-              width: '50px',
-              height: '50px',
-              borderRadius: '50%',
-              background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
-              color: 'white',
-              fontSize: '18px',
-              fontWeight: 'bold',
-              boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)'
+              gap: '15px',
+              flexWrap: 'wrap'
             }}>
-              👤
-            </div>
-            
-            <div style={{flex: 1}}>
-              <h3 style={{
-                margin: 0,
-                fontSize: '20px',
-                fontWeight: '700',
-                color: '#1e40af',
-                lineHeight: '1.2'
+              <span style={{
+                fontSize: '13px',
+                color: '#6b7280',
+                fontFamily: 'Monaco, monospace',
+                background: 'rgba(107, 114, 128, 0.1)',
+                padding: '4px 10px',
+                borderRadius: '6px'
               }}>
-                {timeline.patient_name || `Paziente ${patientId}`}
-              </h3>
+                {patientId}
+              </span>
               
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '15px',
-                marginTop: '6px',
-                flexWrap: 'wrap'
+              <span style={{
+                fontSize: '13px',
+                color: '#059669',
+                background: 'rgba(5, 150, 105, 0.1)',
+                padding: '4px 10px',
+                borderRadius: '12px',
+                fontWeight: '500'
               }}>
-                <span style={{
-                  fontSize: '13px',
-                  color: '#6b7280',
-                  fontFamily: 'Monaco, monospace',
-                  background: 'rgba(107, 114, 128, 0.1)',
-                  padding: '2px 8px',
-                  borderRadius: '4px'
-                }}>
-                  {patientId}
-                </span>
-                
-                <span style={{
-                  fontSize: '13px',
-                  color: '#059669',
-                  background: 'rgba(5, 150, 105, 0.1)',
-                  padding: '3px 8px',
-                  borderRadius: '12px',
-                  fontWeight: '500'
-                }}>
-                  🏥 {timeline.patologia_display || timeline.patologia}
-                </span>
+                🏥 {timeline.patologia_display || timeline.patologia}
+              </span>
 
-                {/* ✅ Multi-Cronoscita Status Indicator */}
-                {patologia && timeline.patologia !== patologia && (
-                  <span style={{
-                    fontSize: '12px',
-                    color: '#f59e0b',
-                    background: 'rgba(245, 158, 11, 0.1)',
-                    padding: '3px 8px',
-                    borderRadius: '8px',
-                    fontWeight: '500'
-                  }}>
-                    ⚠️ Mismatch Cronicità
-                  </span>
-                )}
-                
+              {/* ✅ Multi-Cronoscita Status Indicator */}
+              {patologia && timeline.patologia !== patologia && (
                 <span style={{
                   fontSize: '12px',
-                  color: '#6b7280'
+                  color: '#f59e0b',
+                  background: 'rgba(245, 158, 11, 0.1)',
+                  padding: '3px 8px',
+                  borderRadius: '8px',
+                  fontWeight: '500'
                 }}>
-                  Dal: {timeline.enrollment_date}
+                  ⚠️ Mismatch Cronicità
                 </span>
-              </div>
+              )}
+              
+              <span style={{
+                fontSize: '12px',
+                color: '#6b7280'
+              }}>
+                Data Arruolamento: {timeline.enrollment_date}
+              </span>
             </div>
           </div>
           

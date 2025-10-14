@@ -1020,7 +1020,7 @@ const Navigation = ({ activeTab, onTabChange }) => {
     { id: 'patients', label: 'Pazienti', icon: '👥' },
     { id: 'doctors', label: 'Medici', icon: '👨‍⚕️' },
     { id: 'laboratorio', label: 'Prestazioni', icon: '🔬' }, 
-    { id: 'refertazione', label: 'Refertazione', icon: '⚕️' },
+    { id: 'refertazione', label: 'Valutazione', icon: '⚕️' },
     { id: 'visits', label: 'Visite', icon: '📅' }
   ];
 
