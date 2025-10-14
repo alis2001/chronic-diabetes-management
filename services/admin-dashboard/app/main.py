@@ -4,7 +4,7 @@ Admin Dashboard - CRONOSCITA VERSION - CLEANED
 Professional admin interface with Cronoscita organizational structure
 """
 
-from fastapi import FastAPI, Request, HTTPException, Depends, Query
+from fastapi import FastAPI, Request, HTTPException, Depends, Query, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles

@@ -389,6 +389,58 @@ const RefertozzioneManagement = ({ cronoscita }) => {
     }
   };
 
+  // Drag handlers for phrases
+  const handlePhraseDragStart = (e, index) => {
+    setDraggedPhraseIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.target.style.opacity = '0.5';
+  };
+
+  const handlePhraseDragEnd = (e) => {
+    e.target.style.opacity = '1';
+    setDraggedPhraseIndex(null);
+  };
+
+  const handlePhraseDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
+
+  const handlePhraseDrop = async (e, dropIndex) => {
+    e.preventDefault();
+    
+    if (draggedPhraseIndex === null || draggedPhraseIndex === dropIndex) {
+      return;
+    }
+
+    const newPhrases = [...phrases];
+    const draggedPhrase = newPhrases[draggedPhraseIndex];
+    
+    newPhrases.splice(draggedPhraseIndex, 1);
+    newPhrases.splice(dropIndex, 0, draggedPhrase);
+    
+    setPhrases(newPhrases);
+    
+    try {
+      // Update each phrase's display_order individually (same as sections)
+      const updatePromises = newPhrases.map((phrase, index) => {
+        return adminAPI.updateDoctorPhrase(phrase.id, {
+          display_order: index + 1
+        });
+      });
+      
+      await Promise.all(updatePromises);
+      setSuccess('✅ Ordine aggiornato!');
+      setTimeout(() => setSuccess(null), 3000);
+      
+      loadPhrases();
+    } catch (err) {
+      console.error('Error updating phrase order:', err);
+      setError('Errore nell\'aggiornamento dell\'ordine');
+      loadPhrases(); // Reload to revert
+    }
+  };
+
   // ================================
   // RENDER SEZIONI TAB
   // ================================
@@ -415,13 +467,11 @@ const RefertozzioneManagement = ({ cronoscita }) => {
             disabled={loading}
           >
             <option value="">-- Seleziona Cronoscita --</option>
-            {availableCronoscita
-              .filter(c => c.id !== cronoscita.id)
-              .map(c => (
-                <option key={c.id} value={c.id}>
-                  {c.nome}
-                </option>
-              ))}
+            {availableCronoscita.map(c => (
+              <option key={c.id} value={c.id}>
+                {c.nome} {c.id === cronoscita.id ? '(Corrente)' : ''}
+              </option>
+            ))}
           </select>
         </div>
         <button 
@@ -588,6 +638,10 @@ const RefertozzioneManagement = ({ cronoscita }) => {
             <div
               key={phrase.id}
               draggable={true}
+              onDragStart={(e) => handlePhraseDragStart(e, index)}
+              onDragEnd={handlePhraseDragEnd}
+              onDragOver={handlePhraseDragOver}
+              onDrop={(e) => handlePhraseDrop(e, index)}
               style={{
                 ...styles.sectionRow,
                 ...(draggedPhraseIndex === index ? styles.sectionRowDragging : {})

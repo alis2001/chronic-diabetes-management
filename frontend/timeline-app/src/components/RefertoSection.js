@@ -160,42 +160,17 @@ const RefertoSection = ({
         setCurrentCronoscitaIdForPhrases(cronoscitaId);
       }
     } else {
-      // ✅ Add section at the TOP (or 2 lines below last section)
+      // ✅ ALWAYS add new section at the END with ONE empty line
       let newText;
       
-      // Find all existing sections to determine where to insert
-      const existingSectionHeaders = availableSections
-        .filter(s => activeSections.has(s.id))
-        .map(s => `${s.section_name}:`);
-      
-      if (existingSectionHeaders.length === 0) {
-        // No existing sections - add at the very top
-        if (referto.trim()) {
-          // If there's existing text, put section at top with 2 line breaks after
-          newText = `${sectionHeader} \n\n${referto}`;
-        } else {
-          // Empty referto
-          newText = `${sectionHeader} `;
-        }
+      if (!referto.trim()) {
+        // Empty referto - just add the section
+        newText = `${sectionHeader} `;
       } else {
-        // Find position of last section
-        let lastSectionPos = -1;
-        let lastSectionEndPos = -1;
-        
-        existingSectionHeaders.forEach(header => {
-          const pos = referto.indexOf(header);
-          if (pos > lastSectionPos) {
-            lastSectionPos = pos;
-            // Find end of this section's line
-            const lineEndPos = referto.indexOf('\n', pos);
-            lastSectionEndPos = lineEndPos === -1 ? referto.length : lineEndPos;
-          }
-        });
-        
-        // Insert 2 lines below the last section
-        const before = referto.substring(0, lastSectionEndPos);
-        const after = referto.substring(lastSectionEndPos);
-        newText = `${before}\n\n${sectionHeader} ${after}`;
+        // Add section at the very end, one empty line before it
+        // Remove any trailing whitespace first
+        const trimmedReferto = referto.trimEnd();
+        newText = `${trimmedReferto}\n\n${sectionHeader} `;
       }
       
       setReferto(newText);
