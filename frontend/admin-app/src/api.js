@@ -551,6 +551,43 @@ export const adminAPI = {
     return await apiRequest(url, {
       method: 'DELETE'
     });
+  },
+
+  // ================================
+  // FRASARIO (DOCTOR PHRASES) MANAGEMENT
+  // ================================
+
+  // Create doctor phrase
+  createDoctorPhrase: async (phraseData) => {
+    return await apiRequest('/api/admin/dashboard/frasario/phrases', {
+      method: 'POST',
+      body: JSON.stringify(phraseData)
+    });
+  },
+
+  // Get phrases for a doctor in a specific Cronoscita
+  getDoctorPhrases: async (codiceMedico, cronoscitaId) => {
+    return await apiRequest(`/api/admin/dashboard/frasario/phrases/${codiceMedico}/${cronoscitaId}`);
+  },
+
+  // Update doctor phrase
+  updateDoctorPhrase: async (phraseId, phraseData) => {
+    return await apiRequest(`/api/admin/dashboard/frasario/phrases/${phraseId}`, {
+      method: 'PUT',
+      body: JSON.stringify(phraseData)
+    });
+  },
+
+  // Delete doctor phrase
+  deleteDoctorPhrase: async (phraseId) => {
+    return await apiRequest(`/api/admin/dashboard/frasario/phrases/${phraseId}`, {
+      method: 'DELETE'
+    });
+  },
+
+  // Get doctors by Cronoscita (from doctors collection)
+  getDoctorsByCronoscita: async (cronoscitaId) => {
+    return await apiRequest(`/api/admin/dashboard/frasario/doctors/${cronoscitaId}`);
   }
 };
 

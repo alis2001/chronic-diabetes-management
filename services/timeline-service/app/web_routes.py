@@ -8,6 +8,7 @@ from fastapi import APIRouter, Request, Form, Depends, HTTPException
 from fastapi.responses import JSONResponse
 import logging
 from typing import Optional
+from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from .session import (
     session_manager, SessionCookie, require_valid_session, get_current_session
@@ -18,6 +19,109 @@ logger = logging.getLogger(__name__)
 
 # Create API router for session management
 session_router = APIRouter(prefix="/api/session", tags=["Session Management"])
+
+# ================================
+# HELPER: AUTO-TRACK DOCTOR ACTIVITY
+# ================================
+
+async def _track_doctor_activity(
+    db: AsyncIOMotorDatabase,
+    doctor_id: str,
+    patologia: str,
+    cf_paziente: str,
+    cronoscita_repo
+):
+    """
+    Automatically track doctor activity when they login with a patient.
+    Creates/updates doctor entry in doctors collection.
+    Event-driven tracking - happens on every login.
+    """
+    try:
+        # Get doctor info from hardcoded credentials
+        doctor_creds = HARDCODED_DOCTOR_CREDENTIALS.get(doctor_id)
+        if not doctor_creds:
+            logger.warning(f"⚠️ Doctor {doctor_id} not found in credentials")
+            return
+        
+        # Get cronoscita ID
+        cronoscita_doc = await db.cronoscita.find_one({"nome": patologia, "is_active": True})
+        if not cronoscita_doc:
+            logger.warning(f"⚠️ Cronoscita '{patologia}' not found for tracking")
+            return
+        
+        cronoscita_id = str(cronoscita_doc["_id"])
+        
+        # Check if doctor exists in doctors collection
+        doctor_doc = await db.doctors.find_one({"codice_medico": doctor_id})
+        
+        if not doctor_doc:
+            # ✅ CREATE NEW DOCTOR ENTRY
+            doctor_entry = {
+                "codice_medico": doctor_id,
+                "nome_completo": doctor_creds.nome_completo,
+                "specializzazione": doctor_creds.specializzazione,
+                "struttura": doctor_creds.struttura,
+                "email": None,
+                "cronoscita_activity": [
+                    {
+                        "cronoscita_id": cronoscita_id,
+                        "cronoscita_nome": patologia,
+                        "first_patient_date": datetime.now(),
+                        "last_access_date": datetime.now(),
+                        "total_patients_enrolled": 1,
+                        "total_visits_completed": 0
+                    }
+                ],
+                "is_active": True,
+                "created_at": datetime.now(),
+                "updated_at": datetime.now(),
+                "last_login": datetime.now()
+            }
+            
+            await db.doctors.insert_one(doctor_entry)
+            logger.info(f"✅ Created doctor entry for {doctor_id}")
+        
+        else:
+            # ✅ UPDATE EXISTING DOCTOR
+            # Check if this Cronoscita is already in their activity
+            activity = doctor_doc.get("cronoscita_activity", [])
+            cronoscita_exists = False
+            
+            for i, act in enumerate(activity):
+                if act.get("cronoscita_id") == cronoscita_id:
+                    # Update existing activity
+                    activity[i]["last_access_date"] = datetime.now()
+                    cronoscita_exists = True
+                    break
+            
+            if not cronoscita_exists:
+                # Add new Cronoscita activity
+                activity.append({
+                    "cronoscita_id": cronoscita_id,
+                    "cronoscita_nome": patologia,
+                    "first_patient_date": datetime.now(),
+                    "last_access_date": datetime.now(),
+                    "total_patients_enrolled": 1,
+                    "total_visits_completed": 0
+                })
+            
+            # Update doctor document
+            await db.doctors.update_one(
+                {"codice_medico": doctor_id},
+                {
+                    "$set": {
+                        "cronoscita_activity": activity,
+                        "last_login": datetime.now(),
+                        "updated_at": datetime.now()
+                    }
+                }
+            )
+            
+            logger.info(f"✅ Updated doctor activity for {doctor_id} in '{patologia}'")
+    
+    except Exception as e:
+        logger.error(f"❌ Error tracking doctor activity: {e}")
+        raise
 
 # ================================
 # SESSION MANAGEMENT APIS
@@ -74,6 +178,14 @@ async def login(
                 )
             
             logger.info(f"✅ Cronoscita validated for session: '{patologia}'")
+            
+            # ✅ AUTO-TRACK DOCTOR IN DOCTORS COLLECTION (Event-driven)
+            try:
+                await _track_doctor_activity(db, id_medico, patologia, cf_paziente, cronoscita_repo)
+                logger.info(f"📊 Doctor activity tracked for {id_medico} in Cronoscita '{patologia}'")
+            except Exception as track_error:
+                # Non-blocking: Log error but don't fail login
+                logger.warning(f"⚠️ Could not track doctor activity: {track_error}")
                 
         except Exception as e:
             logger.error(f"❌ Error validating pathology during login: {str(e)}")

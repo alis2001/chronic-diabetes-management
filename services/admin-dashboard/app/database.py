@@ -1136,6 +1136,339 @@ class RefertoSectionRepository:
             return False
 
 # ================================
+# DOCTOR REPOSITORY
+# ================================
+
+class DoctorRepository:
+    """Repository for Doctor operations"""
+    
+    def __init__(self, db: AsyncIOMotorDatabase):
+        self.database = db
+        self.doctor_collection = db.doctors
+        self.cronoscita_collection = db.cronoscita
+    
+    async def create_or_update_doctor(self, doctor_data: Dict[str, Any]) -> str:
+        """Create or update doctor (upsert)"""
+        try:
+            codice_medico = doctor_data.get("codice_medico")
+            
+            # Check if doctor exists
+            existing = await self.doctor_collection.find_one({"codice_medico": codice_medico})
+            
+            if existing:
+                # Update existing doctor
+                update_fields = {
+                    "nome_completo": doctor_data.get("nome_completo"),
+                    "specializzazione": doctor_data.get("specializzazione"),
+                    "struttura": doctor_data.get("struttura", "ASL Roma 1"),
+                    "updated_at": datetime.now(),
+                    "last_login": datetime.now()
+                }
+                
+                await self.doctor_collection.update_one(
+                    {"codice_medico": codice_medico},
+                    {"$set": update_fields}
+                )
+                
+                logger.info(f"✅ Doctor updated: {codice_medico}")
+                return str(existing["_id"])
+            else:
+                # Create new doctor
+                doctor_doc = {
+                    "codice_medico": codice_medico,
+                    "nome_completo": doctor_data.get("nome_completo"),
+                    "specializzazione": doctor_data.get("specializzazione"),
+                    "struttura": doctor_data.get("struttura", "ASL Roma 1"),
+                    "email": doctor_data.get("email"),
+                    "firma_digitale": doctor_data.get("firma_digitale"),
+                    "cronoscita_activity": [],
+                    "is_active": True,
+                    "created_at": datetime.now(),
+                    "updated_at": datetime.now(),
+                    "last_login": datetime.now()
+                }
+                
+                result = await self.doctor_collection.insert_one(doctor_doc)
+                logger.info(f"✅ Doctor created: {codice_medico}")
+                return str(result.inserted_id)
+                
+        except Exception as e:
+            logger.error(f"❌ Error creating/updating doctor: {e}")
+            raise
+    
+    async def track_cronoscita_activity(self, codice_medico: str, cronoscita_id: str, action: str = "access"):
+        """Track doctor activity in a Cronoscita"""
+        try:
+            # Get cronoscita name
+            cronoscita = await self.cronoscita_collection.find_one({"_id": ObjectId(cronoscita_id)})
+            if not cronoscita:
+                return
+            
+            cronoscita_nome = cronoscita["nome"]
+            
+            # Get doctor
+            doctor = await self.doctor_collection.find_one({"codice_medico": codice_medico})
+            if not doctor:
+                logger.warning(f"⚠️ Doctor {codice_medico} not found for activity tracking")
+                return
+            
+            # Check if cronoscita already in activity list
+            activity_list = doctor.get("cronoscita_activity", [])
+            existing_activity = next((a for a in activity_list if a["cronoscita_id"] == cronoscita_id), None)
+            
+            if existing_activity:
+                # Update existing activity
+                await self.doctor_collection.update_one(
+                    {
+                        "codice_medico": codice_medico,
+                        "cronoscita_activity.cronoscita_id": cronoscita_id
+                    },
+                    {
+                        "$set": {
+                            "cronoscita_activity.$.last_access_date": datetime.now(),
+                            "updated_at": datetime.now()
+                        },
+                        "$inc": {
+                            "cronoscita_activity.$.total_patients_enrolled": 1 if action == "enroll" else 0,
+                            "cronoscita_activity.$.total_visits_completed": 1 if action == "visit" else 0
+                        }
+                    }
+                )
+            else:
+                # Add new cronoscita to activity list
+                new_activity = {
+                    "cronoscita_id": cronoscita_id,
+                    "cronoscita_nome": cronoscita_nome,
+                    "first_patient_date": datetime.now(),
+                    "last_access_date": datetime.now(),
+                    "total_patients_enrolled": 1 if action == "enroll" else 0,
+                    "total_visits_completed": 1 if action == "visit" else 0
+                }
+                
+                await self.doctor_collection.update_one(
+                    {"codice_medico": codice_medico},
+                    {
+                        "$push": {"cronoscita_activity": new_activity},
+                        "$set": {"updated_at": datetime.now()}
+                    }
+                )
+            
+            logger.info(f"✅ Tracked {action} for {codice_medico} in {cronoscita_nome}")
+            
+        except Exception as e:
+            logger.error(f"❌ Error tracking doctor activity: {e}")
+            # Don't raise - activity tracking is non-critical
+    
+    async def get_doctors_by_cronoscita(self, cronoscita_id: str) -> List[Dict[str, Any]]:
+        """Get all doctors who have worked with a specific Cronoscita"""
+        try:
+            # Find doctors with this cronoscita in their activity list
+            doctors_cursor = self.doctor_collection.find({
+                "cronoscita_activity.cronoscita_id": cronoscita_id,
+                "is_active": True
+            }).sort("nome_completo", 1)
+            
+            doctors = await doctors_cursor.to_list(length=None)
+            
+            result = []
+            for doctor in doctors:
+                result.append({
+                    "id": str(doctor["_id"]),
+                    "codice_medico": doctor["codice_medico"],
+                    "nome_completo": doctor["nome_completo"],
+                    "specializzazione": doctor["specializzazione"],
+                    "struttura": doctor.get("struttura", "ASL Roma 1")
+                })
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"❌ Error getting doctors by cronoscita: {e}")
+            return []
+    
+    async def get_all_doctors(self) -> List[Dict[str, Any]]:
+        """Get all active doctors"""
+        try:
+            doctors_cursor = self.doctor_collection.find({"is_active": True}).sort("nome_completo", 1)
+            doctors = await doctors_cursor.to_list(length=None)
+            
+            result = []
+            for doctor in doctors:
+                result.append({
+                    "id": str(doctor["_id"]),
+                    "codice_medico": doctor["codice_medico"],
+                    "nome_completo": doctor["nome_completo"],
+                    "specializzazione": doctor["specializzazione"],
+                    "struttura": doctor.get("struttura", "ASL Roma 1"),
+                    "cronoscita_activity": doctor.get("cronoscita_activity", [])
+                })
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"❌ Error getting all doctors: {e}")
+            return []
+
+# ================================
+# DOCTOR PHRASES REPOSITORY
+# ================================
+
+class DoctorPhraseRepository:
+    """Repository for Doctor Phrases operations"""
+    
+    def __init__(self, db: AsyncIOMotorDatabase):
+        self.database = db
+        self.phrase_collection = db.doctor_phrases
+        self.cronoscita_collection = db.cronoscita
+    
+    async def create_phrase(self, phrase_data: Dict[str, Any]) -> str:
+        """Create new doctor phrase"""
+        try:
+            # Get next display order
+            max_order_doc = await self.phrase_collection.find_one(
+                {
+                    "codice_medico": phrase_data["codice_medico"],
+                    "cronoscita_id": phrase_data["cronoscita_id"]
+                },
+                sort=[("display_order", -1)]
+            )
+            
+            next_order = (max_order_doc.get("display_order", 0) + 1) if max_order_doc else 1
+            
+            phrase_doc = {
+                "codice_medico": phrase_data["codice_medico"],
+                "cronoscita_id": phrase_data["cronoscita_id"],
+                "phrase_text": phrase_data["phrase_text"],
+                "category": phrase_data.get("category", ""),
+                "display_order": next_order,
+                "usage_count": 0,
+                "last_used": None,
+                "created_at": datetime.now(),
+                "updated_at": datetime.now()
+            }
+            
+            result = await self.phrase_collection.insert_one(phrase_doc)
+            logger.info(f"✅ Phrase created for {phrase_data['codice_medico']}")
+            
+            return str(result.inserted_id)
+            
+        except Exception as e:
+            logger.error(f"❌ Error creating phrase: {e}")
+            raise
+    
+    async def get_phrase_by_id(self, phrase_id: str) -> Optional[Dict[str, Any]]:
+        """Get phrase by ID"""
+        try:
+            phrase = await self.phrase_collection.find_one({"_id": ObjectId(phrase_id)})
+            
+            if phrase:
+                cronoscita = await self.cronoscita_collection.find_one({"_id": ObjectId(phrase["cronoscita_id"])})
+                
+                return {
+                    "id": str(phrase["_id"]),
+                    "codice_medico": phrase["codice_medico"],
+                    "cronoscita_id": phrase["cronoscita_id"],
+                    "cronoscita_nome": cronoscita["nome"] if cronoscita else "N/A",
+                    "phrase_text": phrase["phrase_text"],
+                    "category": phrase.get("category", ""),
+                    "display_order": phrase.get("display_order", 0),
+                    "usage_count": phrase.get("usage_count", 0),
+                    "last_used": phrase.get("last_used"),
+                    "created_at": phrase["created_at"],
+                    "updated_at": phrase["updated_at"]
+                }
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"❌ Error getting phrase by ID: {e}")
+            return None
+    
+    async def get_phrases_by_doctor_cronoscita(self, codice_medico: str, cronoscita_id: str) -> List[Dict[str, Any]]:
+        """Get all phrases for a doctor in a specific Cronoscita"""
+        try:
+            # Get cronoscita name
+            cronoscita = await self.cronoscita_collection.find_one({"_id": ObjectId(cronoscita_id)})
+            cronoscita_nome = cronoscita["nome"] if cronoscita else "N/A"
+            
+            # Get phrases ordered by display_order
+            phrases_cursor = self.phrase_collection.find({
+                "codice_medico": codice_medico,
+                "cronoscita_id": cronoscita_id
+            }).sort("display_order", 1)
+            
+            phrases = await phrases_cursor.to_list(length=None)
+            
+            result = []
+            for phrase in phrases:
+                result.append({
+                    "id": str(phrase["_id"]),
+                    "codice_medico": phrase["codice_medico"],
+                    "cronoscita_id": phrase["cronoscita_id"],
+                    "cronoscita_nome": cronoscita_nome,
+                    "phrase_text": phrase["phrase_text"],
+                    "category": phrase.get("category", ""),
+                    "display_order": phrase.get("display_order", 0),
+                    "usage_count": phrase.get("usage_count", 0),
+                    "last_used": phrase.get("last_used"),
+                    "created_at": phrase["created_at"],
+                    "updated_at": phrase["updated_at"]
+                })
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"❌ Error getting phrases: {e}")
+            return []
+    
+    async def update_phrase(self, phrase_id: str, update_data: Dict[str, Any]) -> bool:
+        """Update phrase"""
+        try:
+            update_fields = {k: v for k, v in update_data.items() if v is not None}
+            update_fields["updated_at"] = datetime.now()
+            
+            result = await self.phrase_collection.update_one(
+                {"_id": ObjectId(phrase_id)},
+                {"$set": update_fields}
+            )
+            
+            return result.modified_count > 0
+            
+        except Exception as e:
+            logger.error(f"❌ Error updating phrase: {e}")
+            raise
+    
+    async def delete_phrase(self, phrase_id: str) -> bool:
+        """Permanently delete phrase"""
+        try:
+            result = await self.phrase_collection.delete_one({"_id": ObjectId(phrase_id)})
+            
+            if result.deleted_count > 0:
+                logger.info(f"✅ Phrase deleted: {phrase_id}")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"❌ Error deleting phrase: {e}")
+            return False
+    
+    async def update_phrases_order(self, phrase_ids_in_order: List[str]) -> bool:
+        """Update display order for multiple phrases"""
+        try:
+            for index, phrase_id in enumerate(phrase_ids_in_order):
+                await self.phrase_collection.update_one(
+                    {"_id": ObjectId(phrase_id)},
+                    {"$set": {"display_order": index + 1}}
+                )
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Error updating phrases order: {e}")
+            return False
+
+# ================================
 # DATABASE HEALTH CHECK
 # ================================
 

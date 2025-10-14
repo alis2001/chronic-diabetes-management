@@ -24,14 +24,16 @@ from .session_manager import session_manager
 from .database import (
     connect_to_mongo, close_mongo_connection, check_database_health, 
     get_database, LaboratorioRepository, CronoscitaRepository,
-    MasterCatalogRepository, RefertoSectionRepository
+    MasterCatalogRepository, RefertoSectionRepository,
+    DoctorRepository, DoctorPhraseRepository
 )
 from .models import (
     ExamCatalogCreate, ExamCatalogResponse,
     ExamMappingCreate, ExamMappingResponse, 
     LaboratorioOverviewResponse,
     CronoscitaCreate, CronoscitaResponse,
-    RefertoSectionCreate, RefertoSectionUpdate, RefertoSectionResponse
+    RefertoSectionCreate, RefertoSectionUpdate, RefertoSectionResponse,
+    DoctorPhraseCreate, DoctorPhraseUpdate, DoctorPhraseResponse
 )
 from .config import settings
 
@@ -108,81 +110,60 @@ async def get_doctors_from_database(db):
         return {}
 
 async def get_doctors_info_from_db(db):
-    """Get all doctors info dynamically from database - completely self-contained"""
+    """Get all doctors info dynamically from doctors collection (event-driven tracking)"""
     try:
-        # Timeline service doctor mapping (temporary until cartella clinica integration)
-        TIMELINE_DOCTOR_NAMES = {
-            "DOC001": {
-                "nome_completo": "Dr. Mario Rossi",
-                "specializzazione": "Diabetologia",
-                "struttura": "ASL Roma 1",
-                "codice_medico": "DOC001"
-            },
-            "DOC002": {
-                "nome_completo": "Dr.ssa Laura Bianchi",
-                "specializzazione": "Diabetologia",
-                "struttura": "ASL Roma 1",
-                "codice_medico": "DOC002"
-            },
-            "DOC003": {
-                "nome_completo": "Dr. Giuseppe Verdi",
-                "specializzazione": "Endocrinologia",
-                "struttura": "ASL Roma 1",
-                "codice_medico": "DOC003"
-            },
-            "DOC004": {
-                "nome_completo": "Dr.ssa Anna Ferrari",
-                "specializzazione": "Diabetologia Pediatrica",
-                "struttura": "ASL Roma 1",
-                "codice_medico": "DOC004"
-            }
-        }
-        
-        # Get unique doctors from patients collection
-        pipeline = [
-            {"$match": {"status": {"$ne": "inactive"}}},
-            {"$group": {
-                "_id": "$id_medico",
-                "doctor_id": {"$first": "$id_medico"},
-                "total_patients": {"$sum": 1},
-                "pathologies": {"$addToSet": "$patologia"},
-                "first_registration": {"$min": "$enrollment_date"},
-                "last_activity": {"$max": "$updated_at"}
-            }}
-        ]
-        
-        doctors_cursor = db.patients.aggregate(pipeline)
+        # ✅ Read from doctors collection (auto-populated on login)
+        doctors_cursor = db.doctors.find({"is_active": True})
         doctors_data = await doctors_cursor.to_list(length=None)
         
         doctors_info = {}
         for doctor in doctors_data:
-            doctor_id = doctor["doctor_id"]
+            doctor_id = doctor["codice_medico"]
             
-            # Get doctor details (temporary lookup until cartella clinica)
-            if doctor_id in TIMELINE_DOCTOR_NAMES:
-                doctor_details = TIMELINE_DOCTOR_NAMES[doctor_id]
-                doctors_info[doctor_id] = {
-                    "id": doctor_id,
-                    "nome_completo": doctor_details["nome_completo"],
-                    "specializzazione": doctor_details["specializzazione"],
-                    "struttura": doctor_details["struttura"],
-                    "codice_medico": doctor_details["codice_medico"]
-                }
-            else:
-                # Dynamic fallback for unknown doctors
-                doctors_info[doctor_id] = {
-                    "id": doctor_id,
-                    "nome_completo": f"Dr. {doctor_id}",
-                    "specializzazione": "Specializzazione N/A",
-                    "struttura": "ASL Roma 1",
-                    "codice_medico": doctor_id
-                }
+            # Calculate total patients across all Cronoscita
+            total_patients = sum(
+                act.get("total_patients_enrolled", 0) 
+                for act in doctor.get("cronoscita_activity", [])
+            )
+            
+            # Get list of pathologies this doctor works with
+            pathologies = [
+                act.get("cronoscita_nome") 
+                for act in doctor.get("cronoscita_activity", [])
+            ]
+            
+            # Get first and last activity dates
+            activity_dates = [
+                act.get("first_patient_date") 
+                for act in doctor.get("cronoscita_activity", []) 
+                if act.get("first_patient_date")
+            ]
+            first_date = min(activity_dates) if activity_dates else doctor.get("created_at")
+            
+            last_dates = [
+                act.get("last_access_date") 
+                for act in doctor.get("cronoscita_activity", []) 
+                if act.get("last_access_date")
+            ]
+            last_date = max(last_dates) if last_dates else doctor.get("updated_at")
+            
+            doctors_info[doctor_id] = {
+                "id": doctor_id,
+                "nome_completo": doctor.get("nome_completo", f"Dr. {doctor_id}"),
+                "specializzazione": doctor.get("specializzazione", "N/A"),
+                "struttura": doctor.get("struttura", "N/A"),
+                "codice_medico": doctor_id,
+                "pazienti_registrati": total_patients,
+                "pathologies": pathologies,
+                "first_registration": first_date,
+                "last_activity": last_date
+            }
         
-        logger.info(f"📊 Discovered {len(doctors_info)} active doctors from database")
+        logger.info(f"📊 Loaded {len(doctors_info)} active doctors from doctors collection")
         return doctors_info
         
     except Exception as e:
-        logger.error(f"Error getting doctors from database: {str(e)}")
+        logger.error(f"Error getting doctors from doctors collection: {str(e)}")
         return {}
 
 def create_application() -> FastAPI:
@@ -874,6 +855,13 @@ def create_application() -> FastAPI:
             doctors_data = []
             for doctor_id, doctor_info in doctors_info.items():
                 
+                # ✅ NEW: Filter by cronoscita_activity (from doctors collection)
+                if cronoscita_filter:
+                    # Check if doctor has activity in this Cronoscita
+                    has_activity = cronoscita_filter in doctor_info.get("pathologies", [])
+                    if not has_activity:
+                        continue  # Skip doctors without activity in this Cronoscita
+                
                 # Build query for this doctor's patients
                 patients_query = {
                     "id_medico": doctor_id,
@@ -886,10 +874,6 @@ def create_application() -> FastAPI:
                 
                 # Count patients for this doctor (in this Cronoscita if filtered)
                 patients_count = await db.patients.count_documents(patients_query)
-                
-                # Only include doctor if they have patients in the filtered Cronoscita (when filter is applied)
-                if cronoscita_filter and patients_count == 0:
-                    continue  # Skip doctors with no patients in this Cronoscita
                 
                 # Count appointments for this doctor's patients
                 appointments_query = {"id_medico": doctor_id}
@@ -1192,6 +1176,123 @@ def create_application() -> FastAPI:
         except Exception as e:
             logger.error(f"Error deleting referto section: {str(e)}")
             raise HTTPException(status_code=500, detail="Errore nell'eliminazione della sezione referto")
+    
+    # ================================
+    # DOCTOR PHRASES MANAGEMENT
+    # ================================
+    
+    @app.post("/dashboard/frasario/phrases", response_model=Dict[str, Any])
+    async def create_doctor_phrase(phrase_data: DoctorPhraseCreate):
+        """Create a new phrase for a doctor in a specific Cronoscita"""
+        try:
+            db = await get_database()
+            phrase_repo = DoctorPhraseRepository(db)
+            
+            phrase_id = await phrase_repo.create_phrase(phrase_data.dict())
+            created_phrase = await phrase_repo.get_phrase_by_id(phrase_id)
+            
+            return {
+                "success": True,
+                "message": "Frase aggiunta con successo",
+                "phrase_id": phrase_id,
+                "phrase": created_phrase
+            }
+            
+        except Exception as e:
+            logger.error(f"Error creating phrase: {str(e)}")
+            raise HTTPException(status_code=500, detail="Errore nella creazione della frase")
+    
+    @app.get("/dashboard/frasario/phrases/{codice_medico}/{cronoscita_id}", response_model=Dict[str, Any])
+    async def get_doctor_phrases(codice_medico: str, cronoscita_id: str):
+        """Get all phrases for a doctor in a specific Cronoscita"""
+        try:
+            db = await get_database()
+            phrase_repo = DoctorPhraseRepository(db)
+            
+            phrases = await phrase_repo.get_phrases_by_doctor_cronoscita(codice_medico, cronoscita_id)
+            
+            return {
+                "success": True,
+                "codice_medico": codice_medico,
+                "cronoscita_id": cronoscita_id,
+                "total_phrases": len(phrases),
+                "phrases": phrases
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting phrases: {str(e)}")
+            raise HTTPException(status_code=500, detail="Errore nel recupero delle frasi")
+    
+    @app.put("/dashboard/frasario/phrases/{phrase_id}", response_model=Dict[str, Any])
+    async def update_doctor_phrase(phrase_id: str, phrase_data: DoctorPhraseUpdate):
+        """Update a doctor phrase"""
+        try:
+            db = await get_database()
+            phrase_repo = DoctorPhraseRepository(db)
+            
+            update_dict = {k: v for k, v in phrase_data.dict().items() if v is not None}
+            
+            if not update_dict:
+                raise HTTPException(status_code=400, detail="Nessun campo da aggiornare")
+            
+            success = await phrase_repo.update_phrase(phrase_id, update_dict)
+            
+            if not success:
+                raise HTTPException(status_code=404, detail="Frase non trovata")
+            
+            return {
+                "success": True,
+                "message": "Frase aggiornata con successo"
+            }
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error updating phrase: {str(e)}")
+            raise HTTPException(status_code=500, detail="Errore nell'aggiornamento della frase")
+    
+    @app.delete("/dashboard/frasario/phrases/{phrase_id}", response_model=Dict[str, Any])
+    async def delete_doctor_phrase(phrase_id: str):
+        """Delete a doctor phrase"""
+        try:
+            db = await get_database()
+            phrase_repo = DoctorPhraseRepository(db)
+            
+            success = await phrase_repo.delete_phrase(phrase_id)
+            
+            if not success:
+                raise HTTPException(status_code=404, detail="Frase non trovata")
+            
+            return {
+                "success": True,
+                "message": "Frase eliminata con successo"
+            }
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error deleting phrase: {str(e)}")
+            raise HTTPException(status_code=500, detail="Errore nell'eliminazione della frase")
+    
+    @app.get("/dashboard/frasario/doctors/{cronoscita_id}", response_model=Dict[str, Any])
+    async def get_doctors_by_cronoscita(cronoscita_id: str):
+        """Get all doctors who have worked with a specific Cronoscita"""
+        try:
+            db = await get_database()
+            doctor_repo = DoctorRepository(db)
+            
+            doctors = await doctor_repo.get_doctors_by_cronoscita(cronoscita_id)
+            
+            return {
+                "success": True,
+                "cronoscita_id": cronoscita_id,
+                "total_doctors": len(doctors),
+                "doctors": doctors
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting doctors: {str(e)}")
+            raise HTTPException(status_code=500, detail="Errore nel recupero dei medici")
     
     # ================================
     # APPLICATION STARTUP/SHUTDOWN EVENTS  

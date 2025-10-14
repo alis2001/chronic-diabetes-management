@@ -1,8 +1,8 @@
 // frontend/timeline-app/src/components/RefertoSection.js
 // Referto Section with Additional Sections Sidebar - Clean Separation
 
-import React, { useState, useEffect } from 'react';
-import { timelineAPI } from '../api';
+import React, { useState, useEffect, useRef } from 'react';
+import { timelineAPI, doctorPhrasesAPI } from '../api';
 
 const RefertoSection = ({ 
   patientId, 
@@ -28,6 +28,17 @@ const RefertoSection = ({
   const [activeSections, setActiveSections] = useState(new Set());
   const [loadingSections, setLoadingSections] = useState(false);
 
+  // Frasario state
+  const [phrases, setPhrases] = useState([]);
+  const [loadingPhrases, setLoadingPhrases] = useState(false);
+  const [usedPhrases, setUsedPhrases] = useState(new Set());
+  const [newPhraseText, setNewPhraseText] = useState('');
+  const [addingPhrase, setAddingPhrase] = useState(false);
+  const [showAddPhrase, setShowAddPhrase] = useState(false);
+  const [currentCronoscitaIdForPhrases, setCurrentCronoscitaIdForPhrases] = useState(cronoscitaId);
+  const [cursorPosition, setCursorPosition] = useState(0);
+  const textareaRef = useRef(null);
+
   const isReadOnly = hasFutureAppointment;
 
   // Load existing referto on mount
@@ -50,6 +61,18 @@ const RefertoSection = ({
       onDirtyStateChange(isDirty);
     }
   }, [isDirty, onDirtyStateChange]);
+
+  // Load phrases for current doctor and cronoscita
+  useEffect(() => {
+    if (doctorId && currentCronoscitaIdForPhrases) {
+      loadPhrases();
+    }
+  }, [doctorId, currentCronoscitaIdForPhrases]);
+
+  // Detect which phrases are used in the referto text
+  useEffect(() => {
+    detectUsedPhrases();
+  }, [referto, phrases]);
 
   const loadExistingReferto = async () => {
     setLoadingExistingReferto(true);
@@ -130,14 +153,69 @@ const RefertoSection = ({
         newSet.delete(section.id);
         return newSet;
       });
+      
+      // Revert to default Cronoscita phrases
+      if (currentCronoscitaIdForPhrases !== cronoscitaId) {
+        console.log('↩️ Section removed → Reverting to default visit Cronoscita phrases');
+        setCurrentCronoscitaIdForPhrases(cronoscitaId);
+      }
     } else {
-      // Add section to referto
-      const newText = referto 
-        ? `${referto}\n\n${sectionHeader} `
-        : `${sectionHeader} `;
+      // ✅ Add section at the TOP (or 2 lines below last section)
+      let newText;
+      
+      // Find all existing sections to determine where to insert
+      const existingSectionHeaders = availableSections
+        .filter(s => activeSections.has(s.id))
+        .map(s => `${s.section_name}:`);
+      
+      if (existingSectionHeaders.length === 0) {
+        // No existing sections - add at the very top
+        if (referto.trim()) {
+          // If there's existing text, put section at top with 2 line breaks after
+          newText = `${sectionHeader} \n\n${referto}`;
+        } else {
+          // Empty referto
+          newText = `${sectionHeader} `;
+        }
+      } else {
+        // Find position of last section
+        let lastSectionPos = -1;
+        let lastSectionEndPos = -1;
+        
+        existingSectionHeaders.forEach(header => {
+          const pos = referto.indexOf(header);
+          if (pos > lastSectionPos) {
+            lastSectionPos = pos;
+            // Find end of this section's line
+            const lineEndPos = referto.indexOf('\n', pos);
+            lastSectionEndPos = lineEndPos === -1 ? referto.length : lineEndPos;
+          }
+        });
+        
+        // Insert 2 lines below the last section
+        const before = referto.substring(0, lastSectionEndPos);
+        const after = referto.substring(lastSectionEndPos);
+        newText = `${before}\n\n${sectionHeader} ${after}`;
+      }
       
       setReferto(newText);
       setActiveSections(prev => new Set([...prev, section.id]));
+      
+      // ✅ Switch to linked Cronoscita phrases for this section
+      if (section.linked_cronoscita_id && section.linked_cronoscita_id !== currentCronoscitaIdForPhrases) {
+        console.log('🎯 Section added:', section.section_name, '→ Switching to linked Cronoscita phrases');
+        setCurrentCronoscitaIdForPhrases(section.linked_cronoscita_id);
+      }
+      
+      // Focus textarea and position cursor on the new section line
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+          // Position cursor right after the section header
+          const headerPos = newText.indexOf(sectionHeader) + sectionHeader.length + 1;
+          textareaRef.current.setSelectionRange(headerPos, headerPos);
+        }
+      }, 0);
     }
     
     setIsDirty(true);
@@ -157,6 +235,9 @@ const RefertoSection = ({
       setIsDirty(false);
       setSaveMessage('');
     }
+    
+    // Don't auto-detect zone on text change - let user type freely in current zone
+    // Zone detection only happens on explicit cursor movements (click, arrow keys)
   };
 
   const handleSaveReferto = async () => {
@@ -263,6 +344,212 @@ const RefertoSection = ({
     }
   };
 
+  // ===========================
+  // FRASARIO FUNCTIONS
+  // ===========================
+
+  const toTitleCase = (str) => {
+    return str
+      .toLowerCase()
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
+  const loadPhrases = async () => {
+    setLoadingPhrases(true);
+    try {
+      const response = await doctorPhrasesAPI.getPhrases(doctorId, currentCronoscitaIdForPhrases);
+      const loadedPhrases = response.phrases || [];
+      
+      console.log('✅ Loaded', loadedPhrases.length, 'phrases');
+      loadedPhrases.forEach((phrase, idx) => {
+        console.log(`  Phrase ${idx + 1}:`, phrase.phrase_text);
+      });
+      
+      // Convert all phrases to Title Case for display and insertion
+      const titleCasePhrases = loadedPhrases.map(phrase => ({
+        ...phrase,
+        phrase_text: toTitleCase(phrase.phrase_text)
+      }));
+      
+      setPhrases(titleCasePhrases);
+    } catch (error) {
+      console.error('❌ Error loading phrases:', error);
+      setPhrases([]);
+    } finally {
+      setLoadingPhrases(false);
+    }
+  };
+
+  const detectUsedPhrases = () => {
+    const used = new Set();
+    phrases.forEach(phrase => {
+      if (referto.includes(phrase.phrase_text)) {
+        used.add(phrase.id);
+      }
+    });
+    setUsedPhrases(used);
+  };
+
+  const handlePhraseClick = async (phrase) => {
+    if (isReadOnly) return;
+
+    // Insert phrase at cursor position with automatic space after
+    const textarea = textareaRef.current;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const before = referto.substring(0, start);
+    const after = referto.substring(end);
+    
+    console.log('📝 Inserting phrase:', phrase.phrase_text);
+    console.log('📍 Cursor position:', start, 'to', end);
+    console.log('📄 Before:', before.substring(Math.max(0, before.length - 20)));
+    console.log('📄 After:', after.substring(0, 20));
+    
+    // Always add a space after the phrase
+    const phraseWithSpace = phrase.phrase_text + ' ';
+    const newText = before + phraseWithSpace + after;
+    
+    console.log('✅ New text with phrase:', newText.substring(start - 20, start + phraseWithSpace.length + 20));
+    
+    setReferto(newText);
+    setIsDirty(true);
+
+    // Update usage count
+    try {
+      await doctorPhrasesAPI.updatePhraseUsage(phrase.id);
+    } catch (error) {
+      console.error('Error updating phrase usage:', error);
+    }
+
+    // Focus textarea and set cursor position (after the space)
+    setTimeout(() => {
+      textarea.focus();
+      const newPosition = start + phraseWithSpace.length;
+      console.log('🎯 Setting cursor to position:', newPosition);
+      textarea.setSelectionRange(newPosition, newPosition);
+      
+      // Don't recalculate zone - stay in current zone after inserting phrase
+      // User can click or use arrow keys to change zones
+    }, 0);
+  };
+
+  const handleAddPhrase = async () => {
+    if (!newPhraseText.trim()) return;
+
+    setAddingPhrase(true);
+    try {
+      // Convert to Title Case (First Letter Of Each Word Capitalized)
+      const titleCasePhrase = toTitleCase(newPhraseText.trim());
+      
+      await doctorPhrasesAPI.createPhrase(
+        doctorId,
+        currentCronoscitaIdForPhrases,
+        titleCasePhrase
+      );
+      setNewPhraseText('');
+      setShowAddPhrase(false);
+      await loadPhrases(); // Reload phrases
+      console.log('✅ Phrase added successfully');
+    } catch (error) {
+      console.error('❌ Error adding phrase:', error);
+      alert('Errore durante l\'aggiunta della frase');
+    } finally {
+      setAddingPhrase(false);
+    }
+  };
+
+  const detectCurrentZone = (textarea) => {
+    if (isReadOnly) return;
+    
+    const cursorPos = textarea.selectionStart;
+    setCursorPosition(cursorPos);
+
+    console.log('🔍 DETECTING ZONE - Cursor at position:', cursorPos);
+    console.log('📄 Current referto length:', referto.length);
+    console.log('📋 Available sections:', availableSections.length);
+
+    // ===== ZONE-BASED DETECTION =====
+    // Search for each configured section by its exact name
+    const sections = [];
+    
+    console.log(`  🔎 Searching for ${availableSections.length} configured sections in text...`);
+    
+    availableSections.forEach(section => {
+      // Look for the section header (section_name followed by colon)
+      const searchPattern = `${section.section_name}:`;
+      const sectionStartPos = referto.indexOf(searchPattern);
+      
+      console.log(`  🔍 Looking for: "${searchPattern}"`);
+      console.log(`  📍 Found at position: ${sectionStartPos}`);
+      
+      if (sectionStartPos !== -1 && section.linked_cronoscita_id) {
+        console.log(`  ✅ Matched section: "${section.section_name}" at position ${sectionStartPos}`);
+        sections.push({
+          cronoscitaName: section.section_name,
+          cronoscitaId: section.linked_cronoscita_id,
+          startPos: sectionStartPos,
+          sectionId: section.id
+        });
+      } else if (sectionStartPos === -1) {
+        console.log(`  ❌ Section "${section.section_name}" not found in text`);
+      }
+    });
+
+    console.log('📊 Total sections found:', sections.length);
+
+    // Sort sections by position
+    sections.sort((a, b) => a.startPos - b.startPos);
+
+    // Determine which section zone the cursor is in
+    let currentZoneCronoscitaId = cronoscitaId; // Default
+    let foundZone = false;
+    
+    for (let i = sections.length - 1; i >= 0; i--) {
+      if (cursorPos >= sections[i].startPos) {
+        // Cursor is in or after this section
+        currentZoneCronoscitaId = sections[i].cronoscitaId;
+        console.log(`🎯 Cursor in zone: ${sections[i].cronoscitaName} (pos: ${cursorPos} >= ${sections[i].startPos})`);
+        foundZone = true;
+        break;
+      }
+    }
+    
+    // If no section found, cursor is before all sections → use default
+    if (!foundZone) {
+      if (sections.length > 0 && cursorPos < sections[0].startPos) {
+        console.log('📍 Cursor before all sections → Using default Cronoscita');
+      } else {
+        console.log('📍 No sections or cursor at end → Using default Cronoscita');
+      }
+    }
+
+    console.log(`🔷 Current zone Cronoscita ID: ${currentZoneCronoscitaId}`);
+    console.log(`🔶 Previously showing phrases for: ${currentCronoscitaIdForPhrases}`);
+
+    // Update phrases if zone changed
+    if (currentZoneCronoscitaId !== currentCronoscitaIdForPhrases) {
+      console.log(`🔄 Zone changed → Switching phrases from ${currentCronoscitaIdForPhrases} to ${currentZoneCronoscitaId}`);
+      setCurrentCronoscitaIdForPhrases(currentZoneCronoscitaId);
+    } else {
+      console.log(`✓ Zone unchanged → Keeping current phrases`);
+    }
+  };
+
+  const handleTextareaClick = (e) => {
+    detectCurrentZone(e.target);
+  };
+
+  const handleTextareaKeyUp = (e) => {
+    // Only detect zone on arrow keys (navigation), not on regular typing
+    const isArrowKey = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown'].includes(e.key);
+    
+    if (isArrowKey) {
+      detectCurrentZone(e.target);
+    }
+  };
+
   return (
     <div style={styles.container}>
       <style>{sparkleAnimation}</style>
@@ -344,8 +631,11 @@ const RefertoSection = ({
         {/* Left: Main Referto Textarea (2/3) */}
         <div style={styles.mainReferto}>
           <textarea
+            ref={textareaRef}
             value={referto}
             onChange={handleRefertoChange}
+            onClick={handleTextareaClick}
+            onKeyUp={handleTextareaKeyUp}
             readOnly={isReadOnly}
             placeholder={
               isReadOnly 
@@ -431,6 +721,88 @@ const RefertoSection = ({
           )}
         </div>
       </div>
+
+      {/* Frasario Section - Full Width Below Textarea and Sidebar */}
+      {!isReadOnly && (
+        <div style={styles.frasarioContainer}>
+          <div style={styles.frasarioHeader}>
+            <h4 style={styles.frasarioTitle}>
+              📝 Frasario
+            </h4>
+            <button
+              onClick={() => setShowAddPhrase(!showAddPhrase)}
+              style={styles.addPhraseToggle}
+              title="Aggiungi nuova frase"
+            >
+              {showAddPhrase ? '✖' : '+ Frase'}
+            </button>
+          </div>
+
+          {/* Add New Phrase Form */}
+          {showAddPhrase && (
+            <div style={styles.addPhraseForm}>
+              <input
+                type="text"
+                value={newPhraseText}
+                onChange={(e) => setNewPhraseText(toTitleCase(e.target.value))}
+                placeholder="Inserisci Nuova Frase..."
+                style={styles.addPhraseInput}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAddPhrase();
+                  }
+                }}
+                disabled={addingPhrase}
+              />
+              <button
+                onClick={handleAddPhrase}
+                disabled={!newPhraseText.trim() || addingPhrase}
+                style={{
+                  ...styles.addPhraseButton,
+                  opacity: (!newPhraseText.trim() || addingPhrase) ? 0.5 : 1,
+                  cursor: (!newPhraseText.trim() || addingPhrase) ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {addingPhrase ? '⏳' : '✓'}
+              </button>
+            </div>
+          )}
+
+          {/* Phrases List */}
+          <div style={styles.phrasesList}>
+            {loadingPhrases ? (
+              <div style={styles.phrasesLoading}>
+                <div style={styles.smallSpinner}></div>
+                Caricamento frasi...
+              </div>
+            ) : phrases.length === 0 ? (
+              <div style={styles.noPhrases}>
+                Nessuna frase salvata
+              </div>
+            ) : (
+              phrases
+                .filter(phrase => !usedPhrases.has(phrase.id))
+                .map(phrase => (
+                  <button
+                    key={phrase.id}
+                    onClick={() => handlePhraseClick(phrase)}
+                    style={styles.phraseButton}
+                    title={`Usata ${phrase.usage_count || 0} volte`}
+                  >
+                    {phrase.phrase_text}
+                  </button>
+                ))
+            )}
+          </div>
+
+          {phrases.length > 0 && usedPhrases.size > 0 && (
+            <div style={styles.frasarioHint}>
+              💡 {usedPhrases.size} frase{usedPhrases.size > 1 ? 'i' : ''} già utilizzat{usedPhrases.size > 1 ? 'e' : 'a'} nel referto
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
@@ -686,6 +1058,111 @@ const styles = {
     borderRadius: '6px',
     textAlign: 'center',
     lineHeight: '1.4'
+  },
+  // Frasario Styles
+  frasarioContainer: {
+    marginTop: '16px',
+    padding: '16px',
+    backgroundColor: '#f9fafb',
+    borderRadius: '12px',
+    border: '1px solid #e5e7eb'
+  },
+  frasarioHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '12px'
+  },
+  frasarioTitle: {
+    margin: 0,
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#1f2937'
+  },
+  addPhraseToggle: {
+    padding: '6px 12px',
+    fontSize: '12px',
+    fontWeight: '500',
+    backgroundColor: '#3b82f6',
+    color: 'white',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    transition: 'all 0.2s'
+  },
+  addPhraseForm: {
+    display: 'flex',
+    gap: '8px',
+    marginBottom: '12px'
+  },
+  addPhraseInput: {
+    flex: 1,
+    padding: '8px 12px',
+    fontSize: '12px',
+    border: '1px solid #d1d5db',
+    borderRadius: '6px',
+    fontFamily: 'monospace'
+  },
+  addPhraseButton: {
+    padding: '8px 16px',
+    fontSize: '14px',
+    backgroundColor: '#10b981',
+    color: 'white',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontWeight: '600'
+  },
+  phrasesList: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '8px',
+    minHeight: '60px',
+    maxHeight: '200px',
+    overflowY: 'auto',
+    padding: '8px',
+    backgroundColor: 'white',
+    borderRadius: '8px',
+    border: '1px solid #e5e7eb'
+  },
+  phraseButton: {
+    padding: '8px 12px',
+    fontSize: '12px',
+    fontWeight: '500',
+    backgroundColor: 'white',
+    color: '#374151',
+    border: '2px solid #d1d5db',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    transition: 'all 0.2s',
+    fontFamily: 'monospace',
+    whiteSpace: 'nowrap'
+  },
+  phrasesLoading: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
+    color: '#6b7280',
+    fontSize: '12px',
+    width: '100%',
+    padding: '20px'
+  },
+  noPhrases: {
+    width: '100%',
+    textAlign: 'center',
+    padding: '20px',
+    color: '#9ca3af',
+    fontSize: '12px'
+  },
+  frasarioHint: {
+    marginTop: '8px',
+    padding: '6px',
+    fontSize: '11px',
+    color: '#6b7280',
+    backgroundColor: '#fef3c7',
+    borderRadius: '4px',
+    textAlign: 'center'
   }
 };
 

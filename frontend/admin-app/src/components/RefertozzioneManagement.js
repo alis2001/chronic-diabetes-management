@@ -126,10 +126,10 @@ const RefertozzioneManagement = ({ cronoscita }) => {
       
       const cronoscitaName = selectedCronoscita.nome;
       
-      console.log('📡 Loading doctors for Cronoscita:', cronoscitaName);
+      console.log('📡 Loading doctors for Cronoscita ID:', cronoscitaId);
       
-      // Use existing API with cronoscita_filter to get only doctors in this Cronoscita
-      const response = await adminAPI.getDoctorsList(cronoscitaName);
+      // Use NEW API to get doctors from doctors collection
+      const response = await adminAPI.getDoctorsByCronoscita(cronoscitaId);
       
       console.log('👨‍⚕️ Doctors response:', response);
       
@@ -164,16 +164,14 @@ const RefertozzioneManagement = ({ cronoscita }) => {
         cronoscita: selectedFrasarioCronoscitaId
       });
       
-      // TODO: API call to load phrases
-      // const response = await adminAPI.getDoctorPhrases(selectedDoctorId, selectedFrasarioCronoscitaId);
-      // setPhrases(response.phrases || []);
+      const response = await adminAPI.getDoctorPhrases(selectedDoctorId, selectedFrasarioCronoscitaId);
       
-      // Temporary mock data for testing UI
-      setPhrases([
-        { id: '1', phrase_text: 'GLICEMIA SOTTO CONTROLLO', display_order: 1 },
-        { id: '2', phrase_text: 'HBA1C NEI LIMITI DELLA NORMA', display_order: 2 },
-        { id: '3', phrase_text: 'TERAPIA CON METFORMINA DA PROSEGUIRE', display_order: 3 }
-      ]);
+      if (response.success && response.phrases) {
+        console.log('✅ Loaded', response.phrases.length, 'phrases');
+        setPhrases(response.phrases);
+      } else {
+        setPhrases([]);
+      }
     } catch (err) {
       console.error('Error loading phrases:', err);
       setPhrases([]);
@@ -339,17 +337,56 @@ const RefertozzioneManagement = ({ cronoscita }) => {
 
     setError(null);
     setSuccess(null);
+    setLoading(true);
 
-    // TODO: Implement actual API call when backend is ready
-    console.log('Adding phrase:', {
-      doctor: selectedDoctorId,
-      cronoscita: selectedFrasarioCronoscitaId,
-      phrase: newPhrase
-    });
+    try {
+      const phraseData = {
+        codice_medico: selectedDoctorId,
+        cronoscita_id: selectedFrasarioCronoscitaId,
+        phrase_text: newPhrase.trim()
+      };
 
-    setSuccess('✅ Frase aggiunta! (In attesa di implementazione backend)');
-    setNewPhrase('');
-    setTimeout(() => setSuccess(null), 3000);
+      const response = await adminAPI.createDoctorPhrase(phraseData);
+
+      if (response.success) {
+        setSuccess('✅ Frase aggiunta con successo!');
+        setNewPhrase('');
+        loadPhrases();
+        setTimeout(() => setSuccess(null), 3000);
+      } else {
+        setError(response.message || 'Errore nella creazione della frase');
+      }
+    } catch (err) {
+      console.error('Error creating phrase:', err);
+      setError(err.message || 'Errore nella creazione della frase');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeletePhrase = async () => {
+    setError(null);
+    setSuccess(null);
+    setLoading(true);
+
+    try {
+      const response = await adminAPI.deleteDoctorPhrase(phraseToDelete.id);
+
+      if (response.success) {
+        setSuccess('✅ Frase eliminata!');
+        setShowPhrasesDeleteModal(false);
+        setPhraseToDelete(null);
+        loadPhrases();
+        setTimeout(() => setSuccess(null), 3000);
+      } else {
+        setError(response.message || 'Errore nell\'eliminazione');
+      }
+    } catch (err) {
+      console.error('Error deleting phrase:', err);
+      setError(err.message || 'Errore nell\'eliminazione');
+    } finally {
+      setLoading(false);
+    }
   };
 
   // ================================
@@ -645,6 +682,40 @@ const RefertozzioneManagement = ({ cronoscita }) => {
               <button 
                 style={styles.modalDeleteButton}
                 onClick={handleConfirmDelete}
+                disabled={loading}
+              >
+                {loading ? 'Eliminazione...' : 'Elimina'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Delete Confirmation Modal - Phrases */}
+      {showPhrasesDeleteModal && phraseToDelete && (
+        <div style={styles.modalOverlay} onClick={() => setShowPhrasesDeleteModal(false)}>
+          <div style={styles.modal} onClick={(e) => e.stopPropagation()}>
+            <div style={styles.modalHeader}>
+              <h3>⚠️ Conferma Eliminazione</h3>
+            </div>
+            <div style={styles.modalBody}>
+              <p>
+                Eliminare definitivamente la frase <strong>{phraseToDelete.phrase_text}</strong>?
+              </p>
+              <p style={styles.warningText}>
+                ⚠️ Questa azione non può essere annullata.
+              </p>
+            </div>
+            <div style={styles.modalFooter}>
+              <button 
+                style={styles.modalCancelButton}
+                onClick={() => setShowPhrasesDeleteModal(false)}
+              >
+                Annulla
+              </button>
+              <button 
+                style={styles.modalDeleteButton}
+                onClick={handleDeletePhrase}
                 disabled={loading}
               >
                 {loading ? 'Eliminazione...' : 'Elimina'}

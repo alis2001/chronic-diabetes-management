@@ -5,7 +5,7 @@ Professional user management for healthcare administrators - Pydantic v2 Compati
 """
 
 from pydantic import BaseModel, Field, validator, EmailStr
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 from enum import Enum
 import re
@@ -403,6 +403,93 @@ class RefertoSectionResponse(BaseModel):
     display_order: int
     is_required: bool
     is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }
+
+# ================================
+# DOCTOR MODELS
+# ================================
+
+class DoctorCronoscitaActivity(BaseModel):
+    """Doctor activity in a specific Cronoscita"""
+    cronoscita_id: str
+    cronoscita_nome: str
+    first_patient_date: datetime
+    last_access_date: datetime
+    total_patients_enrolled: int = 0
+    total_visits_completed: int = 0
+
+class DoctorCreate(BaseModel):
+    """Create doctor document"""
+    codice_medico: str = Field(..., description="Codice medico (es. DOC001)")
+    nome_completo: str = Field(..., description="Nome completo")
+    specializzazione: str = Field(..., description="Specializzazione medica")
+    struttura: str = Field(default="ASL Roma 1", description="Struttura ospedaliera")
+    email: Optional[str] = None
+    firma_digitale: Optional[str] = None
+
+class DoctorResponse(BaseModel):
+    """Response model for doctor"""
+    id: str
+    codice_medico: str
+    nome_completo: str
+    specializzazione: str
+    struttura: str
+    email: Optional[str] = None
+    cronoscita_activity: List[Dict[str, Any]] = []
+    is_active: bool = True
+    created_at: datetime
+    updated_at: datetime
+    last_login: Optional[datetime] = None
+    
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }
+
+# ================================
+# DOCTOR PHRASES MODELS
+# ================================
+
+class DoctorPhraseCreate(BaseModel):
+    """Create doctor phrase"""
+    codice_medico: str = Field(..., description="Codice medico")
+    cronoscita_id: str = Field(..., description="Cronoscita ID")
+    phrase_text: str = Field(..., min_length=3, max_length=500, description="Testo della frase")
+    category: Optional[str] = Field(None, description="Categoria (opzionale)")
+    
+    @validator('phrase_text')
+    def validate_phrase(cls, v):
+        """Validate and normalize phrase"""
+        return v.strip().upper()
+
+class DoctorPhraseUpdate(BaseModel):
+    """Update doctor phrase"""
+    phrase_text: Optional[str] = Field(None, min_length=3, max_length=500)
+    display_order: Optional[int] = None
+    
+    @validator('phrase_text')
+    def validate_phrase(cls, v):
+        if v is not None:
+            return v.strip().upper()
+        return v
+
+class DoctorPhraseResponse(BaseModel):
+    """Response model for doctor phrase"""
+    id: str
+    codice_medico: str
+    cronoscita_id: str
+    cronoscita_nome: Optional[str] = None
+    phrase_text: str
+    category: Optional[str] = None
+    display_order: int = 0
+    usage_count: int = 0
+    last_used: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
     

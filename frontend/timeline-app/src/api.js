@@ -535,5 +535,39 @@ export const getDescrizionePriorita = (priority) => {
   return PRIORITA[priority] || priority;
 };
 
+// ================================
+// DOCTOR PHRASES API (Frasario)
+// ================================
+
+export const doctorPhrasesAPI = {
+  // Get phrases for a specific doctor and cronoscita
+  getPhrases: async (codiceMedico, cronoscitaId) => {
+    return await apiRequest(`/api/admin/dashboard/frasario/phrases/${codiceMedico}/${cronoscitaId}`);
+  },
+
+  // Create a new phrase
+  createPhrase: async (codiceMedico, cronoscitaId, phraseText, category = '') => {
+    return await apiRequest('/api/admin/dashboard/frasario/phrases', {
+      method: 'POST',
+      body: JSON.stringify({
+        codice_medico: codiceMedico,
+        cronoscita_id: cronoscitaId,
+        phrase_text: phraseText,
+        category: category
+      })
+    });
+  },
+
+  // Update phrase (increment usage count)
+  updatePhraseUsage: async (phraseId) => {
+    return await apiRequest(`/api/admin/dashboard/frasario/phrases/${phraseId}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        increment_usage: true
+      })
+    });
+  }
+};
+
 // Export default per compatibilità
 export default timelineAPI;
