@@ -510,6 +510,47 @@ export const adminAPI = {
       method: 'PUT',
       body: JSON.stringify(updates)
     });
+  },
+
+  // ================================
+  // REFERTO SECTIONS MANAGEMENT
+  // ================================
+
+  // Create referto section
+  createRefertoSection: async (sectionData) => {
+    return await apiRequest('/api/admin/dashboard/refertazione/sections', {
+      method: 'POST',
+      body: JSON.stringify(sectionData)
+    });
+  },
+
+  // Get all referto sections for a Cronoscita
+  getRefertoSectionsForCronoscita: async (cronoscitaId) => {
+    return await apiRequest(`/api/admin/dashboard/refertazione/sections/${cronoscitaId}`);
+  },
+
+  // Get only active referto sections for a Cronoscita
+  getActiveRefertoSections: async (cronoscitaId) => {
+    return await apiRequest(`/api/admin/dashboard/refertazione/sections/${cronoscitaId}/active`);
+  },
+
+  // Update referto section
+  updateRefertoSection: async (sectionId, sectionData) => {
+    return await apiRequest(`/api/admin/dashboard/refertazione/sections/${sectionId}`, {
+      method: 'PUT',
+      body: JSON.stringify(sectionData)
+    });
+  },
+
+  // Delete referto section
+  deleteRefertoSection: async (sectionId, hardDelete = false) => {
+    const url = hardDelete 
+      ? `/api/admin/dashboard/refertazione/sections/${sectionId}?hard_delete=true`
+      : `/api/admin/dashboard/refertazione/sections/${sectionId}`;
+    
+    return await apiRequest(url, {
+      method: 'DELETE'
+    });
   }
 };
 

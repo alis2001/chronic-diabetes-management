@@ -9,6 +9,7 @@ import './index.css';
 import AuthApp from './AuthApp';
 import { authAPI, adminAPI } from './api';
 import LaboratorioManagement from './components/LaboratorioManagement';
+import RefertozzioneManagement from './components/RefertozzioneManagement';
 
 
 // ================================
@@ -1019,6 +1020,7 @@ const Navigation = ({ activeTab, onTabChange }) => {
     { id: 'patients', label: 'Pazienti', icon: '👥' },
     { id: 'doctors', label: 'Medici', icon: '👨‍⚕️' },
     { id: 'laboratorio', label: 'Prestazioni', icon: '🔬' }, 
+    { id: 'refertazione', label: 'Refertazione', icon: '⚕️' },
     { id: 'visits', label: 'Visite', icon: '📅' }
   ];
 
@@ -1097,6 +1099,33 @@ const DashboardLayout = ({ user, onLogout }) => {
       // Pass the selected Cronoscita object to LaboratorioManagement
       return (
         <LaboratorioManagement 
+          cronoscita={cronoscitaState.selectedCronoscita} 
+        />
+      );
+    }
+
+    // For Refertazione tab, check Cronoscita selection
+    if (activeTab === 'refertazione') {
+      if (!cronoscitaState.selectedCronoscita) {
+        return (
+          <NoCronoscitaSelected 
+            onCreateClick={() => {
+              // Trigger create modal
+              const createBtn = document.querySelector('.create-cronoscita-btn');
+              if (createBtn) createBtn.click();
+            }}
+            onSelectClick={() => {
+              // Trigger select modal  
+              const selectBtn = document.querySelector('.change-cronoscita-btn');
+              if (selectBtn) selectBtn.click();
+            }}
+          />
+        );
+      }
+      
+      // Pass the selected Cronoscita object to RefertozzioneManagement
+      return (
+        <RefertozzioneManagement 
           cronoscita={cronoscitaState.selectedCronoscita} 
         />
       );

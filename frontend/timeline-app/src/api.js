@@ -348,6 +348,32 @@ export const timelineAPI = {
     const response = await apiRequest(`/api/timeline/referti/today/${cf_paziente}?${params}`);
     console.log('✅ API: Today\'s referto response:', response);
     return response;
+  },
+
+  // ================================
+  // REFERTO SECTIONS (Admin configured additional sections)
+  // ================================
+  
+  /**
+   * Get active referto sections for a Cronoscita
+   * These are configured by admins in the Admin Dashboard
+   */
+  getActiveRefertoSections: async (cronoscita_id) => {
+    try {
+      console.log('📋 Loading active referto sections for Cronoscita:', cronoscita_id);
+      
+      const response = await apiRequest(`/api/admin/dashboard/refertazione/sections/${cronoscita_id}/active`);
+      
+      if (response.success && response.sections) {
+        console.log('✅ Loaded', response.sections.length, 'active referto sections');
+        return response.sections;
+      }
+      
+      return [];
+    } catch (error) {
+      console.error('❌ Error loading referto sections:', error);
+      return [];
+    }
   }
 };
 

@@ -24,13 +24,14 @@ from .session_manager import session_manager
 from .database import (
     connect_to_mongo, close_mongo_connection, check_database_health, 
     get_database, LaboratorioRepository, CronoscitaRepository,
-    MasterCatalogRepository 
+    MasterCatalogRepository, RefertoSectionRepository
 )
 from .models import (
     ExamCatalogCreate, ExamCatalogResponse,
     ExamMappingCreate, ExamMappingResponse, 
     LaboratorioOverviewResponse,
-    CronoscitaCreate, CronoscitaResponse
+    CronoscitaCreate, CronoscitaResponse,
+    RefertoSectionCreate, RefertoSectionUpdate, RefertoSectionResponse
 )
 from .config import settings
 
@@ -1054,6 +1055,144 @@ def create_application() -> FastAPI:
         except Exception as e:
             logger.error(f"Error getting visits list: {str(e)}")
             raise HTTPException(status_code=500, detail="Error retrieving visits data")
+    
+    # ================================
+    # REFERTO SECTIONS MANAGEMENT
+    # ================================
+    
+    @app.post("/dashboard/refertazione/sections", response_model=Dict[str, Any])
+    async def create_referto_section(section_data: RefertoSectionCreate):
+        """Create a new referto section for a Cronoscita"""
+        try:
+            db = await get_database()
+            section_repo = RefertoSectionRepository(db)
+            
+            # Create section
+            section_id = await section_repo.create_section(section_data.dict())
+            
+            # Get created section
+            created_section = await section_repo.get_section_by_id(section_id)
+            
+            return {
+                "success": True,
+                "message": f"Sezione referto '{section_data.section_name}' creata con successo",
+                "section_id": section_id,
+                "section": created_section
+            }
+            
+        except ValueError as e:
+            logger.error(f"Validation error creating referto section: {str(e)}")
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            logger.error(f"Error creating referto section: {str(e)}")
+            raise HTTPException(status_code=500, detail="Errore nella creazione della sezione referto")
+    
+    @app.get("/dashboard/refertazione/sections/{cronoscita_id}", response_model=Dict[str, Any])
+    async def get_referto_sections_for_cronoscita(cronoscita_id: str):
+        """Get all referto sections for a specific Cronoscita"""
+        try:
+            db = await get_database()
+            section_repo = RefertoSectionRepository(db)
+            
+            # Get sections
+            sections = await section_repo.get_sections_by_cronoscita(cronoscita_id)
+            
+            return {
+                "success": True,
+                "cronoscita_id": cronoscita_id,
+                "total_sections": len(sections),
+                "sections": sections
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting referto sections: {str(e)}")
+            raise HTTPException(status_code=500, detail="Errore nel recupero delle sezioni referto")
+    
+    @app.get("/dashboard/refertazione/sections/{cronoscita_id}/active", response_model=Dict[str, Any])
+    async def get_active_referto_sections(cronoscita_id: str):
+        """Get only active referto sections for a Cronoscita (for Timeline service)"""
+        try:
+            db = await get_database()
+            section_repo = RefertoSectionRepository(db)
+            
+            # Get active sections
+            sections = await section_repo.get_active_sections_by_cronoscita(cronoscita_id)
+            
+            return {
+                "success": True,
+                "cronoscita_id": cronoscita_id,
+                "sections": sections
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting active referto sections: {str(e)}")
+            raise HTTPException(status_code=500, detail="Errore nel recupero delle sezioni referto attive")
+    
+    @app.put("/dashboard/refertazione/sections/{section_id}", response_model=Dict[str, Any])
+    async def update_referto_section(section_id: str, section_data: RefertoSectionUpdate):
+        """Update a referto section"""
+        try:
+            db = await get_database()
+            section_repo = RefertoSectionRepository(db)
+            
+            # Update section
+            update_dict = {k: v for k, v in section_data.dict().items() if v is not None}
+            
+            if not update_dict:
+                raise HTTPException(status_code=400, detail="Nessun campo da aggiornare")
+            
+            success = await section_repo.update_section(section_id, update_dict)
+            
+            if not success:
+                raise HTTPException(status_code=404, detail="Sezione referto non trovata")
+            
+            # Get updated section
+            updated_section = await section_repo.get_section_by_id(section_id)
+            
+            return {
+                "success": True,
+                "message": "Sezione referto aggiornata con successo",
+                "section": updated_section
+            }
+            
+        except ValueError as e:
+            logger.error(f"Validation error updating referto section: {str(e)}")
+            raise HTTPException(status_code=400, detail=str(e))
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error updating referto section: {str(e)}")
+            raise HTTPException(status_code=500, detail="Errore nell'aggiornamento della sezione referto")
+    
+    @app.delete("/dashboard/refertazione/sections/{section_id}", response_model=Dict[str, Any])
+    async def delete_referto_section(section_id: str, hard_delete: bool = Query(False)):
+        """Delete a referto section (soft delete by default, hard delete if specified)"""
+        try:
+            db = await get_database()
+            section_repo = RefertoSectionRepository(db)
+            
+            if hard_delete:
+                success = await section_repo.hard_delete_section(section_id)
+                message = "Sezione referto eliminata permanentemente"
+            else:
+                success = await section_repo.delete_section(section_id)
+                message = "Sezione referto disattivata con successo"
+            
+            if not success:
+                raise HTTPException(status_code=404, detail="Sezione referto non trovata")
+            
+            return {
+                "success": True,
+                "message": message,
+                "section_id": section_id
+            }
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error deleting referto section: {str(e)}")
+            raise HTTPException(status_code=500, detail="Errore nell'eliminazione della sezione referto")
+    
     # ================================
     # APPLICATION STARTUP/SHUTDOWN EVENTS  
     # ================================

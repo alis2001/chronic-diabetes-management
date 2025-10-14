@@ -339,6 +339,79 @@ def generate_cronoscita_codice() -> str:
     return f"CR-{random_chars}"
 
 # ================================
+# REFERTO SECTIONS MODELS
+# ================================
+
+class RefertoSectionCreate(BaseModel):
+    """Create referto section configuration"""
+    cronoscita_id: str = Field(..., description="Cronoscita ID this section belongs to (owning)")
+    linked_cronoscita_id: str = Field(..., description="Cronoscita ID this section refers to (target)")
+    section_name: str = Field(..., min_length=3, max_length=100, description="Nome della sezione (auto-generated)")
+    section_code: str = Field(..., min_length=2, max_length=50, description="Codice identificativo univoco")
+    description: Optional[str] = Field(None, max_length=500, description="Descrizione della sezione")
+    display_order: int = Field(default=0, description="Ordine di visualizzazione")
+    is_required: bool = Field(default=False, description="Se la sezione è obbligatoria")
+    is_active: bool = Field(default=True, description="Se la sezione è attiva")
+    
+    @validator('section_name')
+    def validate_section_name(cls, v):
+        """Validate and normalize section name"""
+        return v.strip().upper()
+    
+    @validator('section_code')
+    def validate_section_code(cls, v):
+        """Validate section code format"""
+        v = v.strip().upper()
+        if not re.match(r'^[A-Z0-9_]+$', v):
+            raise ValueError('Codice può contenere solo lettere maiuscole, numeri e underscore')
+        return v
+
+class RefertoSectionUpdate(BaseModel):
+    """Update referto section configuration"""
+    section_name: Optional[str] = Field(None, min_length=3, max_length=100)
+    section_code: Optional[str] = Field(None, min_length=2, max_length=50)
+    description: Optional[str] = Field(None, max_length=500)
+    display_order: Optional[int] = None
+    is_required: Optional[bool] = None
+    is_active: Optional[bool] = None
+    
+    @validator('section_name')
+    def validate_section_name(cls, v):
+        if v is not None:
+            return v.strip().upper()
+        return v
+    
+    @validator('section_code')
+    def validate_section_code(cls, v):
+        if v is not None:
+            v = v.strip().upper()
+            if not re.match(r'^[A-Z0-9_]+$', v):
+                raise ValueError('Codice può contenere solo lettere maiuscole, numeri e underscore')
+            return v
+        return v
+
+class RefertoSectionResponse(BaseModel):
+    """Response model for referto section"""
+    id: str
+    cronoscita_id: str
+    cronoscita_nome: Optional[str] = None
+    linked_cronoscita_id: str
+    linked_cronoscita_nome: Optional[str] = None
+    section_name: str
+    section_code: str
+    description: Optional[str] = None
+    display_order: int
+    is_required: bool
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }
+
+# ================================
 # CONSTANTS
 # ================================
 

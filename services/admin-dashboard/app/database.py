@@ -870,6 +870,272 @@ class CronoscitaRepository:
             return False
 
 # ================================
+# REFERTO SECTIONS REPOSITORY
+# ================================
+
+class RefertoSectionRepository:
+    """Repository for Referto Sections operations"""
+    
+    def __init__(self, db: AsyncIOMotorDatabase):
+        self.database = db
+        self.section_collection = db.referto_sections
+        self.cronoscita_collection = db.cronoscita
+    
+    async def create_section(self, section_data: Dict[str, Any]) -> str:
+        """Create new referto section"""
+        try:
+            # Verify owning cronoscita exists
+            cronoscita_id = section_data.get("cronoscita_id")
+            cronoscita = await self.cronoscita_collection.find_one({"_id": ObjectId(cronoscita_id)})
+            
+            if not cronoscita:
+                raise ValueError(f"Cronoscita with ID {cronoscita_id} not found")
+            
+            # Verify linked cronoscita exists
+            linked_cronoscita_id = section_data.get("linked_cronoscita_id")
+            linked_cronoscita = await self.cronoscita_collection.find_one({"_id": ObjectId(linked_cronoscita_id)})
+            
+            if not linked_cronoscita:
+                raise ValueError(f"Linked Cronoscita with ID {linked_cronoscita_id} not found")
+            
+            # Check for duplicate linked_cronoscita_id within same owning cronoscita
+            existing = await self.section_collection.find_one({
+                "cronoscita_id": cronoscita_id,
+                "linked_cronoscita_id": linked_cronoscita_id
+            })
+            
+            if existing:
+                raise ValueError(f"Sezione per '{linked_cronoscita['nome']}' esiste già per questa Cronoscita")
+            
+            section_doc = {
+                "cronoscita_id": cronoscita_id,
+                "linked_cronoscita_id": linked_cronoscita_id,
+                "section_name": section_data["section_name"],
+                "section_code": section_data["section_code"],
+                "description": section_data.get("description", ""),
+                "display_order": section_data.get("display_order", 0),
+                "is_required": section_data.get("is_required", False),
+                "is_active": section_data.get("is_active", True),
+                "created_at": datetime.now(),
+                "updated_at": datetime.now()
+            }
+            
+            result = await self.section_collection.insert_one(section_doc)
+            logger.info(f"✅ Referto section created: {section_data['section_name']} (links to {linked_cronoscita['nome']}) for Cronoscita {cronoscita['nome']}")
+            
+            return str(result.inserted_id)
+            
+        except ValueError as e:
+            raise
+        except Exception as e:
+            logger.error(f"❌ Error creating referto section: {e}")
+            raise
+    
+    async def get_section_by_id(self, section_id: str) -> Optional[Dict[str, Any]]:
+        """Get referto section by ID"""
+        try:
+            section = await self.section_collection.find_one({"_id": ObjectId(section_id)})
+            
+            if section:
+                # Get owning cronoscita name
+                cronoscita = await self.cronoscita_collection.find_one({"_id": ObjectId(section["cronoscita_id"])})
+                
+                # Get linked cronoscita name
+                linked_cronoscita = await self.cronoscita_collection.find_one({"_id": ObjectId(section["linked_cronoscita_id"])})
+                
+                section["id"] = str(section["_id"])
+                del section["_id"]
+                
+                if cronoscita:
+                    section["cronoscita_nome"] = cronoscita["nome"]
+                
+                if linked_cronoscita:
+                    section["linked_cronoscita_nome"] = linked_cronoscita["nome"]
+            
+            return section
+            
+        except Exception as e:
+            logger.error(f"❌ Error getting referto section: {e}")
+            return None
+    
+    async def get_sections_by_cronoscita(self, cronoscita_id: str) -> List[Dict[str, Any]]:
+        """Get all referto sections for a cronoscita"""
+        try:
+            # Get cronoscita info
+            cronoscita = await self.cronoscita_collection.find_one({"_id": ObjectId(cronoscita_id)})
+            
+            if not cronoscita:
+                logger.warning(f"⚠️ Cronoscita {cronoscita_id} not found")
+                return []
+            
+            # Get sections ordered by display_order
+            sections_cursor = self.section_collection.find({
+                "cronoscita_id": cronoscita_id
+            }).sort("display_order", 1)
+            
+            sections = await sections_cursor.to_list(length=None)
+            
+            result = []
+            for section in sections:
+                # Handle old sections without linked_cronoscita_id (migration support)
+                linked_cronoscita_id = section.get("linked_cronoscita_id")
+                linked_cronoscita_nome = "N/A"
+                
+                if linked_cronoscita_id:
+                    # Get linked cronoscita name
+                    linked_cronoscita = await self.cronoscita_collection.find_one({"_id": ObjectId(linked_cronoscita_id)})
+                    linked_cronoscita_nome = linked_cronoscita["nome"] if linked_cronoscita else "N/A"
+                else:
+                    # Old section without link - use same cronoscita as default
+                    linked_cronoscita_id = cronoscita_id
+                    linked_cronoscita_nome = cronoscita["nome"]
+                
+                section_data = {
+                    "id": str(section["_id"]),
+                    "cronoscita_id": cronoscita_id,
+                    "cronoscita_nome": cronoscita["nome"],
+                    "linked_cronoscita_id": linked_cronoscita_id,
+                    "linked_cronoscita_nome": linked_cronoscita_nome,
+                    "section_name": section["section_name"],
+                    "section_code": section["section_code"],
+                    "description": section.get("description", ""),
+                    "display_order": section.get("display_order", 0),
+                    "is_required": section.get("is_required", False),
+                    "is_active": section.get("is_active", True),
+                    "created_at": section["created_at"],
+                    "updated_at": section["updated_at"]
+                }
+                result.append(section_data)
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"❌ Error getting referto sections: {e}")
+            return []
+    
+    async def get_active_sections_by_cronoscita(self, cronoscita_id: str) -> List[Dict[str, Any]]:
+        """Get only active referto sections for a cronoscita"""
+        try:
+            sections_cursor = self.section_collection.find({
+                "cronoscita_id": cronoscita_id,
+                "is_active": True
+            }).sort("display_order", 1)
+            
+            sections = await sections_cursor.to_list(length=None)
+            
+            result = []
+            for section in sections:
+                # Handle old sections without linked_cronoscita_id (migration support)
+                linked_cronoscita_id = section.get("linked_cronoscita_id")
+                
+                if linked_cronoscita_id:
+                    # Get linked cronoscita name
+                    linked_cronoscita = await self.cronoscita_collection.find_one({"_id": ObjectId(linked_cronoscita_id)})
+                    linked_cronoscita_nome = linked_cronoscita["nome"] if linked_cronoscita else "N/A"
+                else:
+                    # Old section - use same cronoscita as default
+                    linked_cronoscita_id = cronoscita_id
+                    linked_cronoscita_nome = "SAME"
+                
+                section_data = {
+                    "id": str(section["_id"]),
+                    "cronoscita_id": cronoscita_id,
+                    "linked_cronoscita_id": linked_cronoscita_id,
+                    "linked_cronoscita_nome": linked_cronoscita_nome,
+                    "section_name": section["section_name"],
+                    "section_code": section["section_code"],
+                    "description": section.get("description", ""),
+                    "display_order": section.get("display_order", 0),
+                    "is_required": section.get("is_required", False),
+                    "created_at": section["created_at"],
+                    "updated_at": section["updated_at"]
+                }
+                result.append(section_data)
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"❌ Error getting active referto sections: {e}")
+            return []
+    
+    async def update_section(self, section_id: str, update_data: Dict[str, Any]) -> bool:
+        """Update referto section"""
+        try:
+            # Get existing section
+            existing = await self.section_collection.find_one({"_id": ObjectId(section_id)})
+            
+            if not existing:
+                raise ValueError(f"Sezione con ID {section_id} non trovata")
+            
+            # If updating section_code, check for duplicates
+            if "section_code" in update_data and update_data["section_code"] != existing["section_code"]:
+                duplicate = await self.section_collection.find_one({
+                    "cronoscita_id": existing["cronoscita_id"],
+                    "section_code": update_data["section_code"],
+                    "_id": {"$ne": ObjectId(section_id)}
+                })
+                
+                if duplicate:
+                    raise ValueError(f"Sezione con codice '{update_data['section_code']}' esiste già per questa Cronoscita")
+            
+            # Update fields
+            update_fields = {k: v for k, v in update_data.items() if v is not None}
+            update_fields["updated_at"] = datetime.now()
+            
+            result = await self.section_collection.update_one(
+                {"_id": ObjectId(section_id)},
+                {"$set": update_fields}
+            )
+            
+            if result.modified_count > 0:
+                logger.info(f"✅ Referto section updated: {section_id}")
+                return True
+            
+            return False
+            
+        except ValueError as e:
+            raise
+        except Exception as e:
+            logger.error(f"❌ Error updating referto section: {e}")
+            raise
+    
+    async def delete_section(self, section_id: str) -> bool:
+        """Delete referto section (soft delete by setting is_active=False)"""
+        try:
+            result = await self.section_collection.update_one(
+                {"_id": ObjectId(section_id)},
+                {"$set": {
+                    "is_active": False,
+                    "updated_at": datetime.now()
+                }}
+            )
+            
+            if result.modified_count > 0:
+                logger.info(f"✅ Referto section deleted (soft): {section_id}")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"❌ Error deleting referto section: {e}")
+            return False
+    
+    async def hard_delete_section(self, section_id: str) -> bool:
+        """Permanently delete referto section"""
+        try:
+            result = await self.section_collection.delete_one({"_id": ObjectId(section_id)})
+            
+            if result.deleted_count > 0:
+                logger.info(f"✅ Referto section permanently deleted: {section_id}")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"❌ Error permanently deleting referto section: {e}")
+            return False
+
+# ================================
 # DATABASE HEALTH CHECK
 # ================================
 

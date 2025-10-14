@@ -16,6 +16,7 @@ import {
 import { styles } from './styles';
 import DraggableIframeModal from './components/DraggableIframeModal';
 import { loadAvailablePathologie, hasAvailablePathologie, getPatologieOptions } from './api';
+import RefertoSection from './components/RefertoSection';
 
 // ================================
 // CLEAN HEADER
@@ -1286,7 +1287,7 @@ export const InnovativeTimeline = ({ appointments, patientId, doctorId, onTimeli
 // 🔥 STEP 2: PROFESSIONAL TABBED SECTION
 // ================================
 
-const ProfessionalTabs = ({ patientId, doctorId, patologia, onRefertoSaved, onDirtyStateChange, hasFutureAppointment }) => {
+const ProfessionalTabs = ({ patientId, doctorId, patologia, cronoscitaId, onRefertoSaved, onDirtyStateChange, hasFutureAppointment }) => {
   const [activeTab, setActiveTab] = useState('refertazione');
   const [referto, setReferto] = useState('');
   const [diario, setDiario] = useState('');
@@ -1338,7 +1339,7 @@ const ProfessionalTabs = ({ patientId, doctorId, patologia, onRefertoSaved, onDi
   `;
 
   const tabs = [
-    { id: 'refertazione', label: 'Refertazione', icon: '📄', color: '#3b82f6' },
+    { id: 'refertazione', label: 'Valutazione', icon: '📄', color: '#3b82f6' },
     { id: 'diario', label: 'Diario Clinico', icon: '📝', color: '#10b981' },
     { id: 'esami', label: 'Esami Laboratorio', icon: '🧪', color: '#f59e0b' }
   ];
@@ -1504,13 +1505,24 @@ const ProfessionalTabs = ({ patientId, doctorId, patologia, onRefertoSaved, onDi
   const renderTabContent = () => {
     switch (activeTab) {
       case 'refertazione':
-        // 🔥 NEW LOGIC: Allow editing until future appointment exists
-        // isReadOnly: Lock editing ONLY if future appointment is scheduled
-        // canSave: Can save if there's content AND (no existing referto OR referto has been modified)
-        const isReadOnly = hasFutureAppointment; // Lock only when future appointment exists
-        const canSave = !isReadOnly && referto.trim().length > 0; // Can save if not locked and has content
+        return (
+          <RefertoSection
+            patientId={patientId}
+            doctorId={doctorId}
+            patologia={patologia}
+            cronoscitaId={cronoscitaId}
+            onRefertoSaved={onRefertoSaved}
+            onDirtyStateChange={onDirtyStateChange}
+            hasFutureAppointment={hasFutureAppointment}
+          />
+        );
 
-        const handleSaveReferto = async () => {
+      case 'refertazione_old_backup':
+        // OLD CODE - BACKUP (can be removed after testing)
+        const isReadOnly = hasFutureAppointment;
+        const canSave = !isReadOnly && referto.trim().length > 0;
+
+        const handleSaveReferto_old = async () => {
           // Allow re-saving as long as no future appointment exists
           if (!canSave) {
             setSaveMessage('Referto vuoto. Inserisci del testo per salvare.');
@@ -1626,7 +1638,7 @@ const ProfessionalTabs = ({ patientId, doctorId, patologia, onRefertoSaved, onDi
                 fontWeight: '600',
                 color: '#1d4ed8'
               }}>
-                Refertazione Medica
+                Valutazione {patologia ? patologia.toUpperCase() : ''}
               </h3>
 
               {/* Salva Referto Button */}
@@ -2530,6 +2542,7 @@ Ricaricare la pagina e selezionare la cronicità corretta.`;
         patientId={patientId} 
         doctorId={doctorId}
         patologia={patologia}
+        cronoscitaId={timeline?.cronoscita_id}
         onRefertoSaved={checkCanScheduleNext}
         onDirtyStateChange={handleRefertoStateChange}
         hasFutureAppointment={timeline?.successivo && timeline.successivo.length > 0}
