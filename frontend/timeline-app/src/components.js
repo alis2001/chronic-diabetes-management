@@ -542,7 +542,7 @@ export const PatientRegistration = ({ lookupResult, formData, onRegistrationSucc
 // Layout: Past (max 5) → OGGI (center, large) → SUCCESSIVO (right)
 // ================================
 
-export const InnovativeTimeline = ({ appointments, patientId, doctorId, onTimelineUpdate, canScheduleNext, checkingReferto, onOpenScheduler }) => {
+export const InnovativeTimeline = ({ appointments, patientId, doctorId, onTimelineUpdate, canScheduleNext, checkingReferto, onOpenScheduler, timeline }) => {
   const [hoveredStep, setHoveredStep] = useState(null);
   const [pastScrollOffset, setPastScrollOffset] = useState(0);
 
@@ -1084,26 +1084,60 @@ export const InnovativeTimeline = ({ appointments, patientId, doctorId, onTimeli
                           }}>
                             🔒
                           </div>
+                          
+                          {/* Question Mark with Custom Tooltip */}
                           <div style={{
                             position: 'absolute',
                             top: '90px',
                             left: '50%',
                             transform: 'translateX(-50%)',
-                            minWidth: '180px',
-                            maxWidth: '220px',
-                            padding: '12px 14px',
-                            backgroundColor: 'white',
-                            borderRadius: '12px',
-                            border: '2px solid #d1d5db',
-                            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
-                            fontSize: '11px',
-                            color: '#6b7280',
-                            lineHeight: '1.4',
-                            textAlign: 'center'
-                          }}>
-                            <div style={{ fontSize: '10px', fontStyle: 'italic' }}>
-                              Completa e salva il referto per abilitare il prossimo appuntamento
+                            zIndex: 30
+                          }}
+                          onMouseEnter={() => setHoveredStep('tooltip')}
+                          onMouseLeave={() => setHoveredStep(null)}
+                          >
+                            <div style={{
+                              width: '20px',
+                              height: '20px',
+                              borderRadius: '50%',
+                              backgroundColor: '#3b82f6',
+                              color: 'white',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '12px',
+                              fontWeight: 'bold',
+                              cursor: 'help',
+                              boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)'
+                            }}>
+                              ?
                             </div>
+                            
+                            {/* Custom Tooltip - Exact same styling as before */}
+                            {hoveredStep === 'tooltip' && (
+                              <div style={{
+                                position: 'absolute',
+                                top: '25px',
+                                left: '50%',
+                                transform: 'translateX(-50%)',
+                                minWidth: '180px',
+                                maxWidth: '220px',
+                                padding: '12px 14px',
+                                backgroundColor: 'white',
+                                borderRadius: '12px',
+                                border: '2px solid #d1d5db',
+                                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+                                fontSize: '11px',
+                                color: '#6b7280',
+                                lineHeight: '1.4',
+                                textAlign: 'center',
+                                zIndex: 31
+                              }}>
+                                <div style={{ fontSize: '10px', fontStyle: 'italic' }}>
+                                  Completa e salva il referto per abilitare il prossimo appuntamento
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </>
                       )}
@@ -1116,17 +1150,18 @@ export const InnovativeTimeline = ({ appointments, patientId, doctorId, onTimeli
         </ProgressBar>
       </div>
 
+
       {/* Timeline Legend */}
       <div style={{
         display: 'flex', 
         justifyContent: 'center',
         gap: '40px',
-        marginTop: '30px',
+        marginTop: '20px',
         paddingTop: '20px',
         borderTop: '1px solid #e5e7eb',
         fontSize: '14px',
         fontWeight: '500',
-        marginLeft: '-30px'
+        marginLeft: '-25px'
       }}>
         <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
           {/* Più Vecchie button */}
@@ -1924,6 +1959,7 @@ const EmbeddedDiarioWindow = ({
   );
 };
 
+
 // ================================
 // 🔥 STEP 2: UPDATED PATIENT TIMELINE - COMPRESSED INFO + TABS
 // ================================
@@ -2461,6 +2497,7 @@ Ricaricare la pagina e selezionare la cronicità corretta.`;
         canScheduleNext={canScheduleNext}
         checkingReferto={checkingReferto}
         onOpenScheduler={handleOpenScheduler} // UPDATED - Use new handler
+        timeline={timeline} // Pass timeline data to calendar
       />
 
       <ProfessionalTabs 
