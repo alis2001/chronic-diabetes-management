@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { timelineAPI, doctorPhrasesAPI } from '../api';
+import VoiceTranscriptionButton from './VoiceTranscriptionButton';
 
 const RefertoSection = ({ 
   patientId, 
@@ -266,65 +267,86 @@ const RefertoSection = ({
 
   const canSave = referto.trim().length > 0 && !isReadOnly;
 
-  const handleVoiceRecording = async () => {
-    try {
-      console.log('🎤 Starting voice recording workflow...');
+  // Voice transcription state
+  const [voiceTranscriptionStatus, setVoiceTranscriptionStatus] = useState({
+    isConnected: false,
+    isRecording: false,
+    isProcessing: false,
+    error: null,
+    status: 'disconnected'
+  });
+
+  const handleVoiceTranscriptionUpdate = React.useCallback((status) => {
+    setVoiceTranscriptionStatus(status);
+  }, []);
+
+  // Refs to track partial text replacement
+  const lastPartialTextRef = React.useRef('');
+  const lastInsertionPositionRef = React.useRef({ start: 0, end: 0 });
+
+  const handleVoiceTranscriptionTextInsert = React.useCallback((text, isPartial = false) => {
+    if (isReadOnly) return;
+    
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    
+    // Get current textarea value (not state)
+    const currentValue = textarea.value;
+    let newReferto;
+    
+    // Check if we should replace previous partial text
+    const shouldReplace = isPartial && 
+                         lastPartialTextRef.current && 
+                         lastPartialTextRef.current.trim().length > 0 &&
+                         lastInsertionPositionRef.current.start !== lastInsertionPositionRef.current.end;
+    
+    if (shouldReplace) {
+      // Replace the last partial text
+      const { start, end } = lastInsertionPositionRef.current;
+      const beforePartial = currentValue.substring(0, start);
+      const afterPartial = currentValue.substring(end);
+      newReferto = beforePartial + text + ' ' + afterPartial;
       
-      if (!doctorId || !patientId) {
-        alert('Errore: Dati sessione mancanti. Ricarica la pagina.');
-        return;
-      }
-
-      console.log('📡 Creating Melody workflow...');
-
-      const requestData = {
-        doctor_id: doctorId,
-        patient_cf: patientId,
-        return_url: window.location.href,
-        platform: 'chronic'
-      };
-
-      const API_BASE = process.env.REACT_APP_API_GATEWAY_URL || 'http://localhost:8080';
-      const response = await fetch(`${API_BASE}/api/timeline/melody/create-voice-workflow`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(requestData),
-        credentials: 'include'
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error('❌ Melody workflow creation failed:', errorData);
-        
-        if (response.status === 503) {
-          alert('⚠️ Servizio Melody temporaneamente non disponibile. Riprova tra qualche minuto.');
-        } else {
-          alert(`❌ Errore durante la creazione del workflow Melody: ${errorData.detail || 'Errore sconosciuto'}`);
-        }
-        return;
-      }
-
-      const workflowData = await response.json();
-      console.log('✅ Melody workflow created:', workflowData);
-
-      if (workflowData.success && workflowData.workflow_url) {
-        console.log('🚀 Navigating to Melody workflow:', workflowData.workflow_url);
-        window.location.href = workflowData.workflow_url;
-      } else {
-        alert('❌ Errore nella risposta del servizio Melody.');
-      }
-
-    } catch (error) {
-      console.error('❌ Voice recording error:', error);
-      if (error.name === 'TypeError' && error.message.includes('fetch')) {
-        alert('⚠️ Errore di connessione. Verificare la connessione al servizio Melody.');
-      } else {
-        alert('❌ Errore durante l\'avvio della registrazione vocale.');
-      }
+      // Update insertion position for next replacement
+      const newCursorPos = start + text.length + 1;
+      lastInsertionPositionRef.current = { start, end: newCursorPos };
+      
+      console.log('🔄 Replacing partial text:', lastPartialTextRef.current, '->', text);
+    } else {
+      // First partial text or final text - insert normally
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const before = currentValue.substring(0, start);
+      const after = currentValue.substring(end);
+      
+      newReferto = before + text + ' ' + after;
+      
+      // Store insertion position for future replacements
+      const newCursorPos = start + text.length + 1;
+      lastInsertionPositionRef.current = { start, end: newCursorPos };
+      
+      console.log('🔄 Inserting new text:', text, 'at position:', start);
     }
-  };
+    
+    // Store the current partial text for next time
+    if (isPartial) {
+      lastPartialTextRef.current = text;
+    } else {
+      // Clear partial text tracking for final text
+      lastPartialTextRef.current = '';
+      lastInsertionPositionRef.current = { start: 0, end: 0 };
+    }
+    
+    setReferto(newReferto);
+    setIsDirty(true);
+    
+    // Set cursor position after inserted text
+    setTimeout(() => {
+      const newCursorPos = lastInsertionPositionRef.current.end;
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+      textarea.focus();
+    }, 0);
+  }, [isReadOnly]);
 
   // ===========================
   // FRASARIO FUNCTIONS
@@ -551,16 +573,20 @@ const RefertoSection = ({
             Valutazione {patologia ? patologia.toUpperCase() : ''}
           </h3>
           
-          {/* Voice Recording Button - next to title */}
+          {/* Voice Transcription Button - next to title */}
           {!isReadOnly && (
-            <button
-              onClick={handleVoiceRecording}
-              style={styles.voiceButton}
-              title="Registrazione vocale con AI"
-            >
-              <span className="ai-sparkle" style={styles.sparkle}>✨</span>
-              <span>🎤 Valutazione Vocale AI</span>
-            </button>
+            <VoiceTranscriptionButton
+              doctorId={doctorId}
+              patientCf={patientId}
+              cronoscitaId={cronoscitaId}
+              textAreaRef={textareaRef}
+              onTranscriptionUpdate={handleVoiceTranscriptionUpdate}
+              onTextInsert={handleVoiceTranscriptionTextInsert}
+              style={{
+                ...styles.voiceButton,
+                marginLeft: '20px'
+              }}
+            />
           )}
         </div>
 

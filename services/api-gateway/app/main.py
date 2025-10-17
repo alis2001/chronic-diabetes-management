@@ -4,7 +4,7 @@ Professional API Gateway with Request Routing
 Central entry point for all microservices in diabetes management system
 """
 
-from fastapi import FastAPI, Request, HTTPException, Depends
+from fastapi import FastAPI, Request, HTTPException, Depends, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -13,6 +13,7 @@ import httpx
 import os
 import logging
 import time
+import asyncio
 from typing import Dict, Any
 
 # Configure logging
@@ -74,7 +75,8 @@ SERVICES = {
     "scheduler": os.getenv("SCHEDULER_SERVICE_URL", "http://scheduler-service:8003"),
     "diario": os.getenv("DIARIO_SERVICE_URL", "http://diario-service:8005"),
     "admin": os.getenv("ADMIN_SERVICE_URL", "http://admin-dashboard:8084"),
-    "melody": os.getenv("MELODY_SERVICE_URL", "http://localhost:5002")   
+    "melody": os.getenv("MELODY_SERVICE_URL", "http://localhost:5002"),
+    "voice-transcription": os.getenv("VOICE_TRANSCRIPTION_SERVICE_URL", "http://voice-transcription-service:5003")
 }
 
 class HealthResponse(BaseModel):
@@ -363,6 +365,86 @@ async def melody_proxy(path: str, request: Request):
     """Route all /api/melody/* requests to Melody service"""
     logger.info(f"🎤 Melody route: /api/melody/{path}")
     return await proxy_request("melody", f"/refertazione/{path}", request)
+
+# voice transcription service route (NEW)
+@app.api_route("/api/voice-transcription/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def voice_transcription_proxy(path: str, request: Request):
+    """Route all /api/voice-transcription/* requests to voice transcription service"""
+    logger.info(f"🎙️ Voice Transcription route: /api/voice-transcription/{path}")
+    return await proxy_request("voice-transcription", f"/{path}", request)
+
+@app.websocket("/api/voice-transcription/ws/transcribe/{session_id}")
+async def voice_transcription_websocket(websocket: WebSocket, session_id: str):
+    """WebSocket proxy for voice transcription service"""
+    logger.info(f"🎙️ Voice Transcription WebSocket: /api/voice-transcription/ws/transcribe/{session_id}")
+    
+    # Get the voice transcription service URL
+    service_url = SERVICES["voice-transcription"]
+    target_ws_url = f"ws://voice-transcription-service:5003/ws/transcribe/{session_id}"
+    
+    try:
+        # Accept the WebSocket connection
+        await websocket.accept()
+        logger.info(f"✅ WebSocket connection accepted for session: {session_id}")
+        
+        # Connect to the voice transcription service WebSocket
+        import websockets
+        async with websockets.connect(target_ws_url) as target_websocket:
+            logger.info(f"🔌 Connected to voice transcription service WebSocket")
+            
+            # Forward messages between client and service
+            async def forward_to_service():
+                try:
+                    while True:
+                        logger.info(f"🔄 Waiting for message from client...")
+                        # Try to receive text first, then binary
+                        try:
+                            message = await websocket.receive_text()
+                            logger.info(f"📤 Received text message: {message[:100]}...")
+                            await target_websocket.send(message)
+                            logger.info(f"📤 Forwarded text message: {message[:100]}...")
+                        except:
+                            # If text fails, try binary
+                            try:
+                                message = await websocket.receive_bytes()
+                                logger.info(f"📤 Received binary message: {len(message)} bytes")
+                                await target_websocket.send(message)
+                                logger.info(f"📤 Forwarded binary message: {len(message)} bytes")
+                            except Exception as e:
+                                logger.error(f"❌ Error receiving message: {e}")
+                                # If both fail, break the loop
+                                break
+                except WebSocketDisconnect:
+                    logger.info(f"🔌 Client WebSocket disconnected for session: {session_id}")
+                except Exception as e:
+                    logger.error(f"❌ Error forwarding to service: {e}")
+            
+            async def forward_to_client():
+                try:
+                    async for message in target_websocket:
+                        if isinstance(message, str):
+                            await websocket.send_text(message)
+                            logger.debug(f"📥 Forwarded text to client: {message[:100]}...")
+                        else:
+                            await websocket.send_bytes(message)
+                            logger.debug(f"📥 Forwarded binary to client: {len(message)} bytes")
+                except WebSocketDisconnect:
+                    logger.info(f"🔌 Service WebSocket disconnected for session: {session_id}")
+                except Exception as e:
+                    logger.error(f"❌ Error forwarding to client: {e}")
+            
+            # Run both forwarding tasks concurrently
+            await asyncio.gather(
+                forward_to_service(),
+                forward_to_client()
+            )
+            
+    except Exception as e:
+        logger.error(f"❌ WebSocket proxy error for session {session_id}: {e}")
+        try:
+            await websocket.close(code=1011, reason="Internal server error")
+        except:
+            pass
 
 @app.api_route("/api/admin/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
 async def admin_proxy(path: str, request: Request):
