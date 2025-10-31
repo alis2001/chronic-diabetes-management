@@ -55,6 +55,7 @@ export const useVoiceTranscription = (doctorId, patientCf, cronoscitaId, textAre
       // Set callbacks
       voiceTranscriptionAPI.setCallbacks({
         onTranscription: handleTranscription,
+        onWordTranscription: handleWordTranscription,
         onStatus: handleStatus,
         onError: handleError
       });
@@ -198,36 +199,50 @@ export const useVoiceTranscription = (doctorId, patientCf, cronoscitaId, textAre
   const handleTranscription = useCallback((data) => {
     console.log('📝 Transcription received:', data);
 
-    if (data.isFinal) {
-      console.log('🎯 Final transcription - finalizing text:', data.text);
-      
-      // Final transcription - add to history
-      setTranscriptionHistory(prev => [...prev, {
-        text: data.text,
-        timestamp: data.timestamp,
-        confidence: data.confidence
-      }]);
-
-      // Only insert if it's different from the last partial text (avoid duplicates)
-      if (data.text !== lastPartialTextRef.current) {
+    if (data.text && data.text.trim()) {
+      // Check if this is a partial or final result
+      if (data.isFinal) {
+        // Final result: append permanently
+        console.log('✅ Final transcription:', data.text);
         insertTextAtCursor(data.text);
-      }
-      
-      // Clear partial text tracking for next session
-      lastPartialTextRef.current = '';
-      lastInsertionPositionRef.current = { start: 0, end: 0 };
-    } else {
-      // Partial transcription - show in real-time
-      setCurrentText(data.text);
-      
-      // Insert or replace partial text directly into textarea for immediate feedback
-      // Only process if text is meaningful (not empty or very short)
-      if (data.text && data.text.trim() && data.text.trim().length > 1) {
-        console.log('🔄 Partial transcription - real-time update:', data.text);
+        
+        // Add to history
+        setTranscriptionHistory(prev => [...prev, {
+          text: data.text,
+          timestamp: data.timestamp,
+          confidence: data.confidence
+        }]);
+      } else {
+        // Partial result: replace previous partial
+        console.log('🔄 Partial transcription:', data.text);
         insertOrReplacePartialText(data.text);
       }
     }
   }, [insertTextAtCursor, insertOrReplacePartialText]);
+
+  const handleWordTranscription = useCallback((data) => {
+    console.log('📝 Word transcription received:', data);
+
+    // Process word-by-word transcription
+    if (data.words && data.words.length > 0) {
+      // Join words and insert
+      const wordText = data.words.map(word => word.word).join(' ');
+      if (wordText.trim()) {
+        console.log('🎤 Writing words immediately:', wordText);
+        
+        // Add to history
+        setTranscriptionHistory(prev => [...prev, {
+          text: wordText,
+          timestamp: data.timestamp,
+          confidence: data.words.reduce((acc, word) => acc + word.confidence, 0) / data.words.length
+        }]);
+
+        // Write to textarea immediately with space
+        insertTextAtCursor(wordText + ' ');
+        setCurrentText(wordText);
+      }
+    }
+  }, [insertTextAtCursor]);
 
   /**
    * Handle status updates

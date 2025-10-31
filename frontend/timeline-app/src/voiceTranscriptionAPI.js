@@ -14,6 +14,7 @@ class VoiceTranscriptionAPI {
     this.mediaRecorder = null;
     this.audioStream = null;
     this.onTranscriptionCallback = null;
+    this.onWordTranscriptionCallback = null;
     this.onStatusCallback = null;
     this.onErrorCallback = null;
   }
@@ -133,6 +134,15 @@ class VoiceTranscriptionAPI {
         }
         break;
 
+      case 'word_transcription':
+        if (this.onWordTranscriptionCallback) {
+          this.onWordTranscriptionCallback({
+            words: data.words,
+            timestamp: data.timestamp
+          });
+        }
+        break;
+
       case 'recording_started':
         console.log('🎤 Recording started');
         this.isRecording = true;
@@ -152,6 +162,17 @@ class VoiceTranscriptionAPI {
       case 'status':
         if (this.onStatusCallback) {
           this.onStatusCallback(data.status);
+        }
+        break;
+
+      case 'processing_status':
+        console.log('🔄 Processing status:', data.message);
+        if (this.onStatusCallback) {
+          this.onStatusCallback({ 
+            isRecording: this.isRecording, 
+            message: data.message,
+            timestamp: data.timestamp 
+          });
         }
         break;
 
@@ -264,35 +285,48 @@ class VoiceTranscriptionAPI {
          // Temporarily disable audio processing to debug
          // const processedData = this.processAudioData(inputData);
          
-         // Debug: Log audio data
-         if (Math.random() < 0.01) { // Log 1% of the time to avoid spam
-           console.log('🎵 Audio samples:', inputData.slice(0, 5));
-           console.log('🎵 Audio range:', Math.min(...inputData), 'to', Math.max(...inputData));
+         // Calculate RMS for gain adjustment
+         const rms = Math.sqrt(inputData.reduce((sum, sample) => sum + sample * sample, 0) / inputData.length);
+         
+         // CRITICAL: Conservative gain to prevent clipping and hallucinations
+         // Target RMS of 0.2-0.3 for clean transcription
+         let gain = 1.0;
+         if (rms > 0.05) {
+           // Very loud audio - reduce gain
+           gain = Math.min(2.0, 0.2 / rms);
+         } else if (rms > 0.01) {
+           // Normal audio - moderate gain  
+           gain = Math.min(5.0, 0.3 / rms);
+         } else if (rms > 0.001) {
+           // Quiet audio - moderate gain
+           gain = Math.min(15.0, 0.3 / rms);
+         } else {
+           // Very quiet audio - conservative gain limit
+           gain = 20.0; // Conservative limit to prevent distortion and hallucinations
          }
          
-         // Apply much higher gain to boost weak audio signals for Vosk
-         const rms = Math.sqrt(inputData.reduce((sum, sample) => sum + sample * sample, 0) / inputData.length);
-         const gain = rms > 0.01 ? 5.0 : 10.0; // Further reduced gain to avoid clipping
-         
+         // Apply gain and convert to int16
          const int16Array = new Int16Array(inputData.length);
          for (let i = 0; i < inputData.length; i++) {
            const amplifiedSample = inputData[i] * gain;
            int16Array[i] = Math.max(-32768, Math.min(32767, amplifiedSample * 32768));
          }
          
-         // Debug: Log int16 values after conversion
-         if (Math.random() < 0.01) { // Log 1% of the time to avoid spam
-           console.log('🎵 Int16 samples after gain:', int16Array.slice(0, 5));
-           console.log('🎵 Int16 range:', Math.min(...int16Array), 'to', Math.max(...int16Array));
+         // Log occasionally (every 100th chunk) for debugging
+         if (Math.random() < 0.01) {
+           const finalRms = Math.sqrt(Array.from(int16Array).reduce((sum, s) => sum + (s/32768)**2, 0) / int16Array.length);
+           console.log(`🔊 Audio: input RMS=${rms.toFixed(6)}, gain=${gain.toFixed(1)}x, output RMS=${finalRms.toFixed(6)}, range=[${Math.min(...int16Array)}, ${Math.max(...int16Array)}]`);
          }
          
          // Send raw PCM data
          if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
-           // Only log occasionally to avoid spam
-           if (Math.random() < 0.001) { // Log 0.1% of the time
-             console.log('📤 Sending PCM audio data:', int16Array.length * 2, 'bytes');
+           
+           // Send as binary data
+           try {
+             this.websocket.send(int16Array.buffer);
+           } catch (error) {
+             console.error('❌ Error sending audio data:', error);
            }
-           this.websocket.send(int16Array.buffer);
          }
        };
       
@@ -368,14 +402,26 @@ class VoiceTranscriptionAPI {
     if (this.isRecording) {
       await this.stopRecording();
     } else {
-      // First get microphone access and wait for it to be ready
+      // If no active session, create one first
+      if (!this.activeSession) {
+        await this.startSession();
+      }
+      
+      // Start recording audio
       await this.startRecording();
       
       // Wait a moment to ensure audio stream is fully ready
       await new Promise(resolve => setTimeout(resolve, 200));
       
-      // Then start the session and WebSocket connection
-      await this.startSession();
+      // Connect WebSocket if not already connected
+      if (!this.websocket || this.websocket.readyState !== WebSocket.OPEN) {
+        await this.connectWebSocket(
+          this.activeSession.session_id,
+          this.activeSession.doctor_id,
+          this.activeSession.patient_cf,
+          this.activeSession.cronoscita_id
+        );
+      }
     }
   }
 
@@ -461,8 +507,9 @@ class VoiceTranscriptionAPI {
   /**
    * Set callbacks
    */
-  setCallbacks({ onTranscription, onStatus, onError }) {
+  setCallbacks({ onTranscription, onWordTranscription, onStatus, onError }) {
     this.onTranscriptionCallback = onTranscription;
+    this.onWordTranscriptionCallback = onWordTranscription;
     this.onStatusCallback = onStatus;
     this.onErrorCallback = onError;
   }

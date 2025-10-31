@@ -287,65 +287,15 @@ const RefertoSection = ({
   const handleVoiceTranscriptionTextInsert = React.useCallback((text, isPartial = false) => {
     if (isReadOnly) return;
     
-    const textarea = textareaRef.current;
-    if (!textarea) return;
+    // SIMPLE: Just append every transcription to the end of the text
+    setReferto(prevReferto => {
+      const needsSpace = prevReferto.length > 0 && !prevReferto.endsWith(' ') && !prevReferto.endsWith('\n');
+      const spacePrefix = needsSpace ? ' ' : '';
+      return prevReferto + spacePrefix + text;
+    });
     
-    // Get current textarea value (not state)
-    const currentValue = textarea.value;
-    let newReferto;
-    
-    // Check if we should replace previous partial text
-    const shouldReplace = isPartial && 
-                         lastPartialTextRef.current && 
-                         lastPartialTextRef.current.trim().length > 0 &&
-                         lastInsertionPositionRef.current.start !== lastInsertionPositionRef.current.end;
-    
-    if (shouldReplace) {
-      // Replace the last partial text
-      const { start, end } = lastInsertionPositionRef.current;
-      const beforePartial = currentValue.substring(0, start);
-      const afterPartial = currentValue.substring(end);
-      newReferto = beforePartial + text + ' ' + afterPartial;
-      
-      // Update insertion position for next replacement
-      const newCursorPos = start + text.length + 1;
-      lastInsertionPositionRef.current = { start, end: newCursorPos };
-      
-      console.log('🔄 Replacing partial text:', lastPartialTextRef.current, '->', text);
-    } else {
-      // First partial text or final text - insert normally
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const before = currentValue.substring(0, start);
-      const after = currentValue.substring(end);
-      
-      newReferto = before + text + ' ' + after;
-      
-      // Store insertion position for future replacements
-      const newCursorPos = start + text.length + 1;
-      lastInsertionPositionRef.current = { start, end: newCursorPos };
-      
-      console.log('🔄 Inserting new text:', text, 'at position:', start);
-    }
-    
-    // Store the current partial text for next time
-    if (isPartial) {
-      lastPartialTextRef.current = text;
-    } else {
-      // Clear partial text tracking for final text
-      lastPartialTextRef.current = '';
-      lastInsertionPositionRef.current = { start: 0, end: 0 };
-    }
-    
-    setReferto(newReferto);
     setIsDirty(true);
-    
-    // Set cursor position after inserted text
-    setTimeout(() => {
-      const newCursorPos = lastInsertionPositionRef.current.end;
-      textarea.setSelectionRange(newCursorPos, newCursorPos);
-      textarea.focus();
-    }, 0);
+    console.log('🎤 Voice transcription added:', text);
   }, [isReadOnly]);
 
   // ===========================

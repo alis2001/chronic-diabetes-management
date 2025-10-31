@@ -1,0 +1,1447 @@
+"""
+Whisper Transcription Service
+High-accuracy Italian voice transcription using OpenAI Whisper
+"""
+
+import asyncio
+import json
+import logging
+import wave
+import io
+import tempfile
+import os
+import time
+from datetime import datetime
+from typing import Dict, Optional, List, AsyncGenerator
+from pathlib import Path
+
+from faster_whisper import WhisperModel
+import torch
+import numpy as np
+import webrtcvad
+from fastapi import WebSocket
+
+from config import get_settings
+from models import SessionInfo, TranscriptionChunk, TranscriptionStatus, WhisperConfig, TranscriptionResult, WordTranscription
+
+logger = logging.getLogger(__name__)
+settings = get_settings()
+
+# Compile hallucination blacklist patterns
+HALLUCINATION_PATTERNS = [
+    pattern.strip().lower() 
+    for pattern in settings.whisper_hallucination_blacklist.split(',')
+    if pattern.strip()
+]
+
+
+class VoiceActivityDetector:
+    """Voice Activity Detection using WebRTC VAD"""
+    
+    def __init__(self, aggressiveness: int = 3, sample_rate: int = 16000):
+        self.vad = webrtcvad.Vad(aggressiveness)
+        self.sample_rate = sample_rate
+        self.frame_duration = 30  # 30ms frames
+        self.frame_size = int(sample_rate * self.frame_duration / 1000)
+        
+    def is_speech(self, audio_chunk: np.ndarray) -> bool:
+        """Check if audio chunk contains speech"""
+        try:
+            # Ensure audio is 16-bit PCM
+            if audio_chunk.dtype != np.int16:
+                audio_chunk = (audio_chunk * 32767).astype(np.int16)
+            
+            # Pad or truncate to frame size
+            if len(audio_chunk) < self.frame_size:
+                audio_chunk = np.pad(audio_chunk, (0, self.frame_size - len(audio_chunk)))
+            elif len(audio_chunk) > self.frame_size:
+                audio_chunk = audio_chunk[:self.frame_size]
+            
+            # Convert to bytes
+            audio_bytes = audio_chunk.tobytes()
+            
+            # Check for speech
+            return self.vad.is_speech(audio_bytes, self.sample_rate)
+        except Exception as e:
+            logger.warning(f"VAD error: {e}")
+            return True  # Default to speech if VAD fails
+    
+    def calculate_energy(self, audio_chunk: np.ndarray) -> float:
+        """Calculate RMS energy of audio chunk"""
+        if len(audio_chunk) == 0:
+            return 0.0
+        return np.sqrt(np.mean(audio_chunk.astype(np.float32) ** 2))
+
+
+class WordLevelProcessor:
+    """Process word-level transcriptions for real-time streaming"""
+    
+    def __init__(self, session_id: str):
+        self.session_id = session_id
+        self.word_buffer: List[WordTranscription] = []
+        self.last_word_time = 0.0
+        
+    def process_whisper_result(self, result: Dict, audio_duration: float) -> List[WordTranscription]:
+        """Extract word-level information from Whisper result"""
+        words = []
+        
+        if "segments" in result:
+            for segment in result["segments"]:
+                if "words" in segment:
+                    for word_info in segment["words"]:
+                        word = WordTranscription(
+                            word=word_info.get("word", "").strip(),
+                            start=word_info.get("start", 0.0),
+                            end=word_info.get("end", 0.0),
+                            confidence=word_info.get("probability", 0.0),
+                            is_final=True
+                        )
+                        
+                        # Filter out low-confidence words
+                        if word.confidence >= settings.word_confidence_threshold:
+                            words.append(word)
+        
+        return words
+    
+    def add_words(self, words: List[WordTranscription]):
+        """Add words to buffer"""
+        self.word_buffer.extend(words)
+        if words:
+            self.last_word_time = words[-1].end
+    
+    def should_flush_buffer(self) -> bool:
+        """Check if buffer should be flushed"""
+        if not self.word_buffer:
+            return False
+        
+        # Flush if buffer is full or timeout reached
+        return (len(self.word_buffer) >= settings.word_buffer_size or 
+                (time.time() - self.last_word_time) > settings.word_timeout)
+    
+    def flush_buffer(self) -> List[WordTranscription]:
+        """Flush and return buffered words"""
+        words = self.word_buffer.copy()
+        self.word_buffer.clear()
+        return words
+
+
+def filter_hallucination_text(text: str) -> str:
+    """Filter out known hallucination patterns from transcription text"""
+    if not text or not text.strip():
+        return ""
+    
+    # Known hallucination patterns (Italian)
+    hallucination_patterns = [
+        "Sottotitoli creati dalla comunità Amara.org",
+        "Sottotitoli a cura di QTSS",
+        "Sottotitoli e revisione a cura di QTSS",
+        "Grazie a tutti",
+        "Grazie",
+        "Sottotitoli",
+        "Amara.org",
+        "QTSS",
+        "comunità",
+        "creati dalla",
+        "a cura di",
+        "Alla prossima!",
+        "buon appetito",
+        "Sott'è",
+        "e non è una cosa che",
+        "non è una cosa che non è",
+        "una cosa che non è una cosa",
+        "Non si può fare tutto questo perché è preciso",
+        "e guarda che è bello",
+        "guarda che è bello",
+        "e guarda che",
+        "che è bello",
+        "disarroche",
+        "Genovole",
+        "Bye!",
+        "eh, disarroche",
+        "non farò cose complicate",
+        "non fare le cose complicate"
+    ]
+    
+    # Check if text matches any hallucination pattern
+    text_lower = text.lower().strip()
+    for pattern in hallucination_patterns:
+        if pattern.lower() in text_lower:
+            logger.info(f"🚫 Filtered hallucination text: '{text}'")
+            return ""
+    
+    # Filter out very short text that might be noise
+    if len(text.strip()) < 3:
+        return ""
+    
+    # Filter out repetitive text (e.g., "grazie grazie grazie")
+    words = text.strip().split()
+    if len(words) > 1:
+        # Check if all words are the same
+        if len(set(words)) == 1:
+            logger.info(f"🚫 Filtered repetitive text: '{text}'")
+            return ""
+    
+    # Filter out text with excessive punctuation
+    if len(text.strip()) < 15 and text.count('!') > 2:
+        logger.info(f"🚫 Filtered excessive punctuation: '{text}'")
+        return ""
+    
+    # Filter out text that's mostly repeated phrases
+    if len(text.strip()) > 20:
+        # Check if text is mostly the same phrase repeated
+        words = text.strip().split()
+        if len(words) > 4:
+            # Check if first few words repeat
+            first_phrase = " ".join(words[:3])
+            remaining_text = " ".join(words[3:])
+            if first_phrase in remaining_text:
+                logger.info(f"🚫 Filtered repeated phrase: '{text}'")
+                return ""
+    
+    return text.strip()
+
+
+def clean_transcription_text(text: str) -> str:
+    """Clean transcription text by removing hallucinated parts and keeping only real speech"""
+    if not text or not text.strip():
+        return ""
+    
+    # Split text into sentences/phrases
+    sentences = text.split('.')
+    cleaned_sentences = []
+    
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+            
+        # Check if this sentence contains hallucination patterns
+        sentence_lower = sentence.lower()
+        is_hallucination = False
+        
+        # Common hallucination indicators
+        hallucination_indicators = [
+            "guarda che è bello",
+            "e guarda che",
+            "che è bello",
+            "disarroche",
+            "genovole",
+            "bye!",
+            "eh, disarroche",
+            "non farò cose complicate",
+            "non fare le cose complicate",
+            "e non è una cosa che",
+            "non è una cosa che non è",
+            "una cosa che non è una cosa"
+        ]
+        
+        for indicator in hallucination_indicators:
+            if indicator in sentence_lower:
+                is_hallucination = True
+                break
+        
+        # Only keep sentences that don't appear to be hallucinations
+        if not is_hallucination and len(sentence.strip()) > 2:
+            cleaned_sentences.append(sentence)
+    
+    # Join cleaned sentences
+    result = '. '.join(cleaned_sentences).strip()
+    
+    # If we removed everything, return empty
+    if not result or len(result) < 3:
+        return ""
+    
+    return result
+
+
+class WhisperTranscriptionService:
+    """Service for high-accuracy voice transcription using Whisper"""
+    
+    def __init__(self):
+        self.model = None
+        self.device = None
+        self.active_sessions: Dict[str, Dict] = {}
+        self.is_initialized = False
+        self.vad = VoiceActivityDetector(
+            aggressiveness=settings.vad_aggressiveness,
+            sample_rate=settings.sample_rate
+        )
+        self.word_buffer: Dict[str, List[WordTranscription]] = {}
+        self.word_timers: Dict[str, asyncio.Task] = {}
+        
+    async def initialize_model(self):
+        """Initialize Whisper model for Italian transcription"""
+        try:
+            logger.info("🔄 Initializing Whisper model for Italian transcription...")
+            
+            # Determine device
+            if settings.whisper_device == "auto":
+                self.device = "cuda" if torch.cuda.is_available() else "cpu"
+            else:
+                self.device = settings.whisper_device
+            
+            logger.info(f"🎯 Using device: {self.device}")
+            
+            # Load Faster-Whisper model
+            model_name = settings.whisper_model_size
+            logger.info(f"📥 Loading Faster-Whisper model: {model_name}")
+            
+            # Determine compute type based on device
+            if self.device == "cuda":
+                compute_type = "float32"  # Use float32 for GPU (more compatible, doesn't require cuDNN ops)
+                logger.info("🎯 Using CUDA with float32 precision (avoiding cuDNN)")
+            else:
+                compute_type = "int8"  # Use int8 for CPU
+                logger.info("🎯 Using CPU with int8 precision")
+            
+            self.model = WhisperModel(
+                model_name,
+                device=self.device,
+                compute_type=compute_type,
+                download_root=settings.model_cache_path,
+                local_files_only=False  # Allow downloading if needed
+            )
+            
+            # Note: Using Faster-Whisper with streaming approach
+            logger.info("🔄 Faster-Whisper model ready for streaming transcription...")
+            
+            self.is_initialized = True
+            logger.info(f"✅ Faster-Whisper model {model_name} initialized successfully on {self.device}")
+            
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize Whisper model: {e}")
+            raise
+    
+    def is_model_loaded(self) -> bool:
+        """Check if model is loaded and ready"""
+        return self.is_initialized and self.model is not None
+    
+    async def start_session(self, websocket: WebSocket, session_info: SessionInfo, voice_file_path: str):
+        """Start a new transcription session"""
+        try:
+            logger.info(f"🎤 Starting Whisper transcription session: {session_info.session_id}")
+            
+            # Initialize session data
+            session_data = {
+                "session_info": session_info,
+                "websocket": websocket,
+                "voice_file_path": voice_file_path,
+                "audio_buffer": io.BytesIO(),
+                "transcription_chunks": [],
+                "is_recording": False,
+                "start_time": datetime.now(),
+                "last_activity": datetime.now(),
+                "audio_segments": [],
+                "word_processor": WordLevelProcessor(session_info.session_id) if settings.word_level_transcription else None,
+                "last_partial_emit": 0.0,
+                "last_partial_text": "",
+                "recent_texts": []
+            }
+            
+            # Store session
+            self.active_sessions[session_info.session_id] = session_data
+            
+            # Send session ready message
+            await websocket.send_text(json.dumps({
+                "type": "session_ready",
+                "session_id": session_info.session_id,
+                "message": "Whisper transcription session ready. Send 'start' to begin recording.",
+                "model": settings.whisper_model_name,
+                "language": session_info.language
+            }))
+            
+            # Handle WebSocket messages
+            await self._handle_websocket_messages(session_info.session_id)
+            
+        except Exception as e:
+            logger.error(f"❌ Error starting session {session_info.session_id}: {e}")
+            await websocket.send_text(json.dumps({
+                "type": "error",
+                "message": f"Failed to start session: {str(e)}"
+            }))
+    
+    async def _handle_websocket_messages(self, session_id: str):
+        """Handle WebSocket messages for a session"""
+        session_data = self.active_sessions.get(session_id)
+        if not session_data:
+            return
+        
+        websocket = session_data["websocket"]
+        
+        try:
+            while True:
+                # Receive message
+                message = await websocket.receive()
+                logger.info(f"📨 WebSocket message received: {message}")
+                
+                if message["type"] == "websocket.receive":
+                    if "text" in message:
+                        logger.info(f"📝 Text message: {message['text']}")
+                        await self._handle_text_message(session_id, message["text"])
+                    elif "bytes" in message:
+                        logger.info(f"🎵 Binary message: {len(message['bytes'])} bytes")
+                        await self._handle_audio_data(session_id, message["bytes"])
+                    else:
+                        logger.warning(f"⚠️ Unknown message format: {message}")
+                
+        except Exception as e:
+            logger.error(f"❌ WebSocket error for session {session_id}: {e}")
+            import traceback
+            logger.error(f"❌ WebSocket traceback: {traceback.format_exc()}")
+        finally:
+            await self.stop_session(session_id)
+    
+    async def _handle_text_message(self, session_id: str, text: str):
+        """Handle text messages from WebSocket"""
+        session_data = self.active_sessions.get(session_id)
+        if not session_data:
+            return
+        
+        websocket = session_data["websocket"]
+        
+        try:
+            message_data = json.loads(text)
+            message_type = message_data.get("type")
+            
+            if message_type == "start_recording":
+                await self._start_recording(session_id)
+            elif message_type == "stop_recording":
+                await self._stop_recording(session_id)
+            elif message_type == "get_status":
+                await self._send_status(session_id)
+            else:
+                logger.warning(f"⚠️ Unknown message type: {message_type}")
+                
+        except json.JSONDecodeError:
+            logger.warning(f"⚠️ Invalid JSON message: {text}")
+        except Exception as e:
+            logger.error(f"❌ Error handling text message: {e}")
+    
+    async def _handle_audio_data(self, session_id: str, audio_data: bytes):
+        """Handle audio data from WebSocket"""
+        session_data = self.active_sessions.get(session_id)
+        if not session_data:
+            logger.warning(f"⚠️ No session data found for {session_id}")
+            return
+        
+        if not session_data["is_recording"]:
+            logger.warning(f"⚠️ Not recording for session {session_id}")
+            return
+        
+        try:
+            # Add audio data to buffer
+            session_data["audio_buffer"].write(audio_data)
+            
+            # Update last activity
+            session_data["last_activity"] = datetime.now()
+            
+            # For Whisper, we'll process audio in chunks and do real-time transcription
+            await self._process_audio_chunk(session_id, audio_data)
+            
+        except Exception as e:
+            logger.error(f"❌ Error handling audio data: {e}")
+            import traceback
+            logger.error(f"❌ Traceback: {traceback.format_exc()}")
+    
+    async def _process_audio_chunk(self, session_id: str, audio_data: bytes):
+        """Process audio chunk for transcription using Whisper with VAD filtering"""
+        try:
+            session_data = self.active_sessions.get(session_id)
+            if not session_data:
+                return
+            
+            # Convert bytes to numpy array - CRITICAL: Must be int16
+            audio_array = np.frombuffer(audio_data, dtype=np.int16)
+            
+            # Log audio statistics to debug quality
+            if len(audio_array) > 0:
+                audio_rms = np.sqrt(np.mean(audio_array.astype(np.float32)**2))
+                audio_max = np.max(np.abs(audio_array))
+                logger.debug(f"🎤 Audio chunk stats: samples={len(audio_array)}, RMS={audio_rms:.1f}, max={audio_max}, range=[{np.min(audio_array)}, {np.max(audio_array)}]")
+            
+            # Store audio segment for later processing
+            session_data["audio_segments"].append(audio_array)
+            session_data["last_speech_time"] = datetime.now()
+            
+            total_samples = sum(len(arr) for arr in session_data["audio_segments"])
+            logger.debug(f"✅ Audio segment added: {len(session_data['audio_segments'])} segments, {total_samples} total samples ({total_samples/settings.sample_rate:.2f}s)")
+            
+            # Process audio for streaming - use configured chunk and overlap
+            current_time = datetime.now()
+            last_processing = session_data.get("last_processing_time")
+            
+            # Calculate samples needed for streaming
+            chunk_samples = int(settings.chunk_duration * settings.sample_rate)
+            overlap_samples = int(settings.overlap_duration * settings.sample_rate)
+            
+            # Calculate total samples in current audio
+            total_samples = sum(len(arr) for arr in session_data["audio_segments"])
+            
+            # Process on cadence OR if we have enough samples (minimum configured)
+            min_samples = int(settings.min_chunk_duration * settings.sample_rate)
+            should_process = False
+            if last_processing is None:
+                # First processing: start as soon as we have minimum audio
+                should_process = total_samples >= min_samples
+            else:
+                time_since_last = (current_time - last_processing).total_seconds()
+                # Process if enough time passed OR if we have enough samples
+                should_process = (time_since_last >= settings.chunk_duration and total_samples >= min_samples) or total_samples >= chunk_samples
+            
+            logger.info(f"🔍 Processing check: total_samples={total_samples}, min_samples={min_samples}, chunk_samples={chunk_samples}, should_process={should_process}")
+            
+            if should_process:
+                logger.info(f"🔄 Triggering streaming audio processing after {len(session_data['audio_segments'])} segments (~{settings.chunk_duration}s)")
+                session_data["last_processing_time"] = current_time
+                
+                # Send status update to frontend
+                await session_data["websocket"].send_text(json.dumps({
+                    "type": "processing_status",
+                    "message": f"Processing {settings.chunk_duration} seconds of audio for streaming transcription...",
+                    "timestamp": current_time.isoformat()
+                }))
+                
+                # Try streaming first, fallback to regular processing
+                try:
+                    logger.info(f"🔄 Attempting streaming processing for session {session_id}")
+                    await self._process_streaming_audio(session_id, overlap_samples)
+                except Exception as e:
+                    logger.error(f"❌ Streaming processing failed, trying regular processing: {e}")
+                    logger.info(f"🔄 Falling back to regular processing for session {session_id}")
+                    await self._process_accumulated_audio(session_id)
+            
+        except Exception as e:
+            logger.error(f"❌ Error processing audio chunk: {e}")
+            import traceback
+            logger.error(f"❌ Traceback: {traceback.format_exc()}")
+    
+    async def _process_streaming_audio(self, session_id: str, overlap_samples: int):
+        """Process audio using streaming approach with overlapping windows"""
+        session_data = self.active_sessions.get(session_id)
+        if not session_data:
+            return
+        
+        try:
+            audio_arrays = session_data["audio_segments"]
+            if len(audio_arrays) == 0:
+                logger.warning(f"⚠️ No audio segments for streaming")
+                return
+            
+            # Get current chunk with proper sample-based overlap - accept any audio
+            current_chunk = audio_arrays[-len(audio_arrays):]  # All current audio
+            combined_audio = np.concatenate(current_chunk) if len(current_chunk) > 0 else np.array([], dtype=np.int16)
+            
+            # Check minimum audio length
+            if len(combined_audio) < 1600:  # Need at least 0.1 seconds
+                logger.info(f"⚠️ Not enough audio samples for streaming: {len(combined_audio)}/1600")
+                return
+            
+            # Calculate overlap in samples and keep that much from the end
+            if overlap_samples > 0 and len(combined_audio) > overlap_samples:
+                overlap_chunk = [combined_audio[-overlap_samples:]]
+                # Keep the overlap for next processing
+                session_data["audio_segments"] = overlap_chunk
+            else:
+                overlap_chunk = []
+                session_data["audio_segments"] = []
+            
+            # Convert to float32 for processing - CRITICAL: Must be in range [-1.0, 1.0]
+            audio_float = combined_audio.astype(np.float32) / 32768.0
+            
+            # Ensure audio is in correct range
+            audio_float = np.clip(audio_float, -1.0, 1.0)
+            
+            # Debug audio properties
+            rms_energy = np.sqrt(np.mean(audio_float**2))
+            max_amp = np.max(np.abs(audio_float))
+            logger.info(f"🎵 Audio debug - Length: {len(audio_float)}, Duration: {len(audio_float)/settings.sample_rate:.2f}s")
+            logger.info(f"🎵 Audio range: {audio_float.min():.6f} to {audio_float.max():.6f}")
+            logger.info(f"🎵 Audio RMS: {rms_energy:.6f}, Max amplitude: {max_amp:.6f}")
+            
+            # Normalize audio if too quiet to boost it
+            if rms_energy > 0 and rms_energy < 0.01:
+                gain = 0.3 / rms_energy  # Boost to target RMS of 0.3
+                gain = min(gain, 10.0)  # Limit gain to prevent distortion
+                audio_float = audio_float * gain
+                audio_float = np.clip(audio_float, -1.0, 1.0)
+                logger.info(f"🔊 Applied gain: {gain:.2f}x, new RMS: {np.sqrt(np.mean(audio_float**2)):.6f}")
+            
+            # Try transcription even if quiet - let Whisper decide
+            logger.info(f"🔄 Attempting transcription with {len(audio_float)} samples ({len(audio_float)/settings.sample_rate:.2f}s)")
+            
+            # Get previous transcription for context
+            previous_text = session_data.get("last_transcription", "")
+            
+            logger.info(f"🎵 Processing streaming audio: {len(audio_float)} samples, context: '{previous_text[:50]}...'")
+            
+            # Use Faster-Whisper with streaming approach and VAD if enabled
+            result = await self._process_with_streaming_approach(
+                audio_float, 
+                previous_text, 
+                session_data["session_info"].language
+            )
+            
+            logger.info(f"🔍 Streaming processing result: {result}")
+            
+            # DEBUG: Log full result structure
+            if result:
+                logger.info(f"🔍 Result type: {type(result)}")
+                logger.info(f"🔍 Result keys: {list(result.keys()) if isinstance(result, dict) else 'not a dict'}")
+                logger.info(f"🔍 Result text value: '{result.get('text', 'NO TEXT KEY')}'")
+                logger.info(f"🔍 Result segments: {len(result.get('segments', []))} segments")
+            
+            text = result.get("text", "").strip() if result else ""
+            
+            if text:
+                # Check for known hallucination patterns
+                text_lower = text.lower()
+                for pattern in HALLUCINATION_PATTERNS:
+                    if pattern in text_lower:
+                        logger.warning(f"🚫 Filtered hallucination pattern '{pattern}' in streaming text: '{text}'")
+                        return
+                
+                # Update last transcription for context
+                session_data["last_transcription"] = text
+                
+                logger.info(f"✅ ✅ ✅ SUCCESS: Streaming transcription result: '{text}' (length: {len(text)})")
+                
+                # Send streaming transcription
+                await self._send_streaming_transcription(session_id, result, is_final=False)
+                
+                # Overlap already handled above
+            else:
+                # CRITICAL DEBUG: Log everything to understand why no transcription
+                logger.error(f"❌ ❌ ❌ FAILED: No transcription result or empty text from streaming processing!")
+                logger.error(f"❌ Result object type: {type(result)}")
+                logger.error(f"❌ Result object: {result}")
+                logger.error(f"❌ Result keys (if dict): {list(result.keys()) if isinstance(result, dict) else 'N/A'}")
+                logger.error(f"❌ Audio length: {len(audio_float)}, duration: {len(audio_float)/settings.sample_rate:.2f}s")
+                logger.error(f"❌ Audio RMS after processing: {np.sqrt(np.mean(audio_float**2)):.6f}")
+                logger.error(f"❌ Audio max amplitude: {np.max(np.abs(audio_float)):.6f}")
+                
+                # Send debug info to frontend
+                await session_data["websocket"].send_text(json.dumps({
+                    "type": "processing_status",
+                    "message": f"Elaborazione audio... (durata: {len(audio_float)/settings.sample_rate:.1f}s, RMS: {np.sqrt(np.mean(audio_float**2)):.4f})",
+                    "timestamp": datetime.now().isoformat(),
+                    "debug": {
+                        "audio_duration": len(audio_float)/settings.sample_rate,
+                        "audio_rms": float(np.sqrt(np.mean(audio_float**2))),
+                        "max_amplitude": float(np.max(np.abs(audio_float)))
+                    }
+                }))
+                
+        except Exception as e:
+            logger.error(f"❌ Error in streaming audio processing: {e}")
+            import traceback
+            logger.error(f"❌ Traceback: {traceback.format_exc()}")
+
+    async def _process_accumulated_audio(self, session_id: str):
+        """Process accumulated audio for real-time transcription"""
+        try:
+            session_data = self.active_sessions.get(session_id)
+            if not session_data or not session_data["audio_segments"]:
+                logger.warning(f"⚠️ No session data or audio segments for {session_id}")
+                return
+            
+            # Concatenate audio segments
+            audio_arrays = session_data["audio_segments"]
+            logger.info(f"🎵 Processing {len(audio_arrays)} audio segments for session {session_id}")
+            
+            # Combine audio segments - accept even single segments for faster response
+            combined_audio = np.concatenate(audio_arrays) if len(audio_arrays) > 0 else np.array([], dtype=np.int16)
+            
+            if len(combined_audio) < 1600:  # Need at least 0.1 seconds of audio at 16kHz
+                logger.info(f"⚠️ Not enough audio samples yet: {len(combined_audio)}/1600")
+                return
+            
+            # Convert to float32 and normalize - CRITICAL: Must be in range [-1.0, 1.0]
+            audio_float = combined_audio.astype(np.float32) / 32768.0
+            
+            # Ensure audio is in correct range
+            audio_float = np.clip(audio_float, -1.0, 1.0)
+            
+            # Check audio quality - very lenient threshold
+            audio_rms = np.sqrt(np.mean(audio_float ** 2))
+            max_amplitude = np.max(np.abs(audio_float))
+            
+            logger.info(f"🔍 Audio stats: RMS={audio_rms:.6f}, max_amplitude={max_amplitude:.6f}, samples={len(audio_float)}, duration={len(audio_float)/settings.sample_rate:.2f}s")
+            
+            if audio_rms < 0.0001:  # Very low threshold - only skip if truly silent
+                logger.warning(f"⚠️ Audio very quiet (RMS: {audio_rms:.6f}), but attempting transcription anyway")
+                # Don't return - try transcription anyway
+            
+            # Normalize audio if too quiet to boost it
+            if audio_rms > 0 and audio_rms < 0.01:
+                gain = 0.3 / audio_rms  # Boost to target RMS of 0.3
+                gain = min(gain, 10.0)  # Limit gain to prevent distortion
+                audio_float = audio_float * gain
+                audio_float = np.clip(audio_float, -1.0, 1.0)
+                logger.info(f"🔊 Applied gain: {gain:.2f}x, new RMS: {np.sqrt(np.mean(audio_float**2)):.6f}")
+            
+            # Check for audio clipping or distortion
+            max_amplitude = np.max(np.abs(audio_float))
+            if max_amplitude > 0.95:  # Audio is clipped
+                logger.info(f"🚫 Audio clipped (max: {max_amplitude:.3f}), skipping transcription")
+                return
+            
+            # Check for silence duration - if we've been silent too long, skip
+            last_speech = session_data.get("last_speech_time")
+            if last_speech:
+                silence_duration = (datetime.now() - last_speech).total_seconds()
+                if silence_duration > 3.0:  # Skip if silent for more than 3 seconds
+                    logger.info(f"🚫 Too much silence ({silence_duration:.1f}s), skipping transcription")
+                    return
+            
+            # Check for repetitive patterns in raw audio (sign of noise/hallucination)
+            if len(audio_float) > 1000:
+                # Check if audio is too repetitive (sign of noise)
+                chunk_size = len(audio_float) // 10
+                chunks = [audio_float[i:i+chunk_size] for i in range(0, len(audio_float)-chunk_size, chunk_size)]
+                if len(chunks) > 3:
+                    correlations = []
+                    for i in range(len(chunks)-1):
+                        corr = np.corrcoef(chunks[i], chunks[i+1])[0,1]
+                        if not np.isnan(corr):
+                            correlations.append(corr)
+                    
+                    if correlations and np.mean(correlations) > 0.8:  # Very high correlation = repetitive
+                        logger.info(f"🚫 Audio too repetitive (corr: {np.mean(correlations):.3f}), skipping transcription")
+                        return
+            
+            logger.info(f"✅ Audio quality check passed (RMS: {audio_rms:.4f})")
+            
+            # Process with Faster-Whisper - use VERY lenient parameters
+            logger.info(f"🔄 Calling Faster-Whisper transcribe (accumulated)...")
+            logger.info(f"🔄 Audio: {len(audio_float)} samples, {len(audio_float)/settings.sample_rate:.2f}s, RMS={np.sqrt(np.mean(audio_float**2)):.6f}")
+            
+            segments, info = self.model.transcribe(
+                audio_float,
+                language=session_data["session_info"].language,
+                temperature=0.0,
+                condition_on_previous_text=True,
+                no_speech_threshold=0.2,  # VERY LOW - accept almost everything
+                log_prob_threshold=-2.0,  # VERY LOW - accept low confidence
+                compression_ratio_threshold=4.0,  # VERY HIGH - very lenient
+                beam_size=1,
+                best_of=1,
+                patience=1.0,
+                length_penalty=1.0,
+                suppress_tokens=[-1],
+                initial_prompt=None,
+                word_timestamps=True,
+                vad_filter=False  # DISABLED
+            )
+            
+            # Convert Faster-Whisper result to Whisper format
+            result = self._convert_faster_whisper_result(segments, info)
+            
+            # Get text and confidence from result
+            text = result.get("text", "").strip()
+            confidence = result.get("confidence", 0.0)
+            
+            logger.info(f"📝 Whisper transcription result: text='{text}', length={len(text)}, confidence={confidence:.3f}")
+            
+            # CRITICAL: If text is empty, log detailed info and try to understand why
+            if not text:
+                logger.error(f"❌ CRITICAL: Empty transcription result!")
+                logger.error(f"❌ Result keys: {list(result.keys())}")
+                logger.error(f"❌ Segments count: {len(result.get('segments', []))}")
+                logger.error(f"❌ Audio length: {len(audio_float)}, duration: {len(audio_float)/settings.sample_rate:.2f}s")
+                logger.error(f"❌ Audio RMS: {np.sqrt(np.mean(audio_float**2)):.6f}")
+                logger.error(f"❌ Info object: {info}")
+                # Send a status message to frontend so user knows processing happened
+                await session_data["websocket"].send_text(json.dumps({
+                    "type": "processing_status",
+                    "message": "Nessuna trascrizione rilevata nell'audio",
+                    "timestamp": datetime.now().isoformat()
+                }))
+                return
+            
+            # Check for known hallucination patterns
+            text_lower = text.lower()
+            for pattern in HALLUCINATION_PATTERNS:
+                if pattern in text_lower:
+                    logger.warning(f"🚫 Filtered hallucination pattern '{pattern}' in text: '{text}'")
+                    return
+            
+            # Only filter obvious hallucinations - be more lenient
+            words = text.split()
+            # Only filter if text is clearly repetitive (same word repeated many times)
+            if len(words) > 5 and len(set(words)) == 1:
+                logger.info(f"🚫 Repetitive text (same word): '{text}'")
+                return
+            
+            # Less aggressive duplicate filtering - allow similar but not identical text
+            recent_texts = session_data.get("recent_texts", [])
+            # Only skip if exact same text was sent very recently (last 2 entries)
+            if text in recent_texts[-2:]:
+                logger.info(f"🚫 Skipping duplicate text (last 2): '{text}'")
+                return
+            
+            # Add to recent texts (keep last 5 for less memory)
+            recent_texts.append(text)
+            if len(recent_texts) > 5:
+                recent_texts.pop(0)
+            session_data["recent_texts"] = recent_texts
+            
+            logger.info(f"📤 Sending high-confidence transcription (conf: {confidence:.3f}): '{text}'")
+            await self._send_transcription(
+                session_id, 
+                text, 
+                False,  # Partial result
+                confidence,
+                result.get("language", session_data["session_info"].language)
+            )
+            
+            # Clear processed segments (keep last few for context)
+            session_data["audio_segments"] = audio_arrays[-10:]  # Keep last 10 segments
+            
+        except Exception as e:
+            logger.error(f"❌ Error processing accumulated audio: {e}")
+            import traceback
+            logger.error(f"❌ Traceback: {traceback.format_exc()}")
+    
+    async def _send_transcription(self, session_id: str, text: str, is_final: bool, confidence: float, language: str = "it"):
+        """Send transcription result to WebSocket"""
+        session_data = self.active_sessions.get(session_id)
+        if not session_data:
+            return
+        
+        websocket = session_data["websocket"]
+        
+        try:
+            # Create transcription chunk
+            chunk = TranscriptionChunk(
+                text=text,
+                confidence=confidence,
+                timestamp=datetime.now(),
+                is_final=is_final,
+                language=language
+            )
+            
+            # Store chunk
+            session_data["transcription_chunks"].append(chunk)
+            
+            # Send to frontend
+            message = {
+                "type": "transcription",
+                "text": text,
+                "is_final": is_final,
+                "confidence": confidence,
+                "language": language,
+                "timestamp": chunk.timestamp.isoformat()
+            }
+            
+            await websocket.send_text(json.dumps(message))
+            
+            logger.debug(f"📝 Sent transcription: {text[:50]}... (final: {is_final})")
+            
+        except Exception as e:
+            logger.error(f"❌ Error sending transcription: {e}")
+    
+    async def _send_word_transcription(self, session_id: str, words: List[WordTranscription]):
+        """Send word-level transcription to WebSocket"""
+        session_data = self.active_sessions.get(session_id)
+        if not session_data:
+            return
+        
+        websocket = session_data["websocket"]
+        
+        try:
+            # Create word-level message
+            message = {
+                "type": "word_transcription",
+                "words": [word.dict() for word in words],
+                "timestamp": datetime.now().isoformat(),
+                "session_id": session_id
+            }
+            
+            # Send to frontend
+            await websocket.send_text(json.dumps(message))
+            
+            # Log for debugging
+            word_text = " ".join([word.word for word in words])
+            logger.info(f"📝 Word transcription sent: '{word_text}' ({len(words)} words)")
+            
+        except Exception as e:
+            logger.error(f"❌ Error sending word transcription: {e}")
+            import traceback
+            logger.error(f"❌ Traceback: {traceback.format_exc()}")
+    
+    async def _start_recording(self, session_id: str):
+        """Start recording for a session"""
+        session_data = self.active_sessions.get(session_id)
+        if not session_data:
+            return
+        
+        session_data["is_recording"] = True
+        session_data["start_time"] = datetime.now()
+        session_data["audio_segments"] = []  # Reset audio segments
+        
+        await session_data["websocket"].send_text(json.dumps({
+            "type": "recording_started",
+            "message": "Recording started. Speak now.",
+            "model": settings.whisper_model_name,
+            "language": session_data["session_info"].language
+        }))
+        
+        logger.info(f"🎤 Recording started for session: {session_id}")
+    
+    async def _stop_recording(self, session_id: str):
+        """Stop recording for a session and do final transcription"""
+        session_data = self.active_sessions.get(session_id)
+        if not session_data:
+            return
+        
+        session_data["is_recording"] = False
+        
+        try:
+            # Process final audio
+            await self._process_final_audio(session_id)
+            
+        except Exception as e:
+            logger.error(f"❌ Error in final processing: {e}")
+        
+        await session_data["websocket"].send_text(json.dumps({
+            "type": "recording_stopped",
+            "message": "Recording stopped. Processing final transcription...",
+            "model": settings.whisper_model_name
+        }))
+        
+        logger.info(f"🛑 Recording stopped for session: {session_id}")
+    
+    async def _process_final_audio(self, session_id: str):
+        """Process final audio for complete transcription"""
+        try:
+            session_data = self.active_sessions.get(session_id)
+            if not session_data or not session_data["audio_segments"]:
+                return
+            
+            # Get all audio data
+            audio_arrays = session_data["audio_segments"]
+            combined_audio = np.concatenate(audio_arrays)
+            
+            # Convert to float32 and normalize
+            audio_float = combined_audio.astype(np.float32) / 32768.0
+            
+            # Process with Faster-Whisper for final result (only if long enough)
+            duration_seconds = len(audio_float) / settings.sample_rate
+            min_duration = 0.5  # Minimum 0.5 seconds for meaningful transcription
+            
+            if duration_seconds < min_duration:
+                logger.warning(f"⚠️ Final audio too short ({duration_seconds:.2f}s < {min_duration}s), skipping transcription")
+                return
+                
+            logger.info(f"🔄 Processing final audio with Faster-Whisper: {len(audio_float)} samples ({duration_seconds:.2f}s)")
+            
+            segments, info = self.model.transcribe(
+                audio_float,
+                language=session_data["session_info"].language,
+                temperature=settings.whisper_temperature,
+                beam_size=settings.whisper_beam_size,
+                best_of=settings.whisper_best_of,
+                patience=settings.whisper_patience,
+                length_penalty=settings.whisper_length_penalty,
+                condition_on_previous_text=settings.whisper_condition_on_previous_text,
+                no_speech_threshold=settings.whisper_no_speech_threshold,
+                log_prob_threshold=settings.whisper_logprob_threshold,  # Note: log_prob not logprob
+                compression_ratio_threshold=settings.whisper_compression_ratio_threshold
+            )
+            
+            # Convert Faster-Whisper result to Whisper format
+            result = self._convert_faster_whisper_result(segments, info)
+            
+            # Temporarily disable text filtering for testing
+            # filtered_text = filter_hallucination_text(result["text"])
+            # if filtered_text:
+            #     await self._send_transcription(
+            #         session_id, 
+            #         filtered_text, 
+            #         True,  # Final result
+            #         result.get("confidence", 0.0),
+            #         result.get("language", session_data["session_info"].language)
+            #     )
+            
+            # Filter out repetitive and hallucinated text
+            text = result["text"].strip()
+            if text and not self._is_repetitive_text(text):
+                logger.info(f"📝 Sending filtered transcription: '{text}'")
+                await self._send_transcription(
+                    session_id, 
+                    text, 
+                    True,  # Final result
+                    result.get("confidence", 0.0),
+                    result.get("language", session_data["session_info"].language)
+                )
+            else:
+                logger.warning(f"⚠️ Filtered out repetitive/hallucinated text: '{text}'")
+                # Send a simple message to indicate processing completed
+                await self._send_transcription(
+                    session_id, 
+                    "[Transcrizione completata]", 
+                    True,  # Final result
+                    0.0,
+                    session_data["session_info"].language
+                )
+            
+            # Store detailed result
+            session_data["final_result"] = TranscriptionResult(
+                text=result["text"],
+                language=result.get("language", session_data["session_info"].language),
+                confidence=result.get("confidence", 0.0),
+                duration=len(audio_float) / settings.sample_rate,
+                segments=result.get("segments", []),
+                words=result.get("words", [])
+            )
+            
+            logger.info(f"✅ Final transcription completed: {result['text'][:100]}...")
+            
+        except Exception as e:
+            logger.error(f"❌ Error processing final audio: {e}")
+            import traceback
+            logger.error(f"❌ Traceback: {traceback.format_exc()}")
+    
+    async def _send_status(self, session_id: str):
+        """Send current status to WebSocket"""
+        session_data = self.active_sessions.get(session_id)
+        if not session_data:
+            return
+        
+        websocket = session_data["websocket"]
+        
+        try:
+            # Calculate session duration
+            duration = (datetime.now() - session_data["start_time"]).total_seconds()
+            
+            # Get current text
+            current_text = ""
+            if session_data["transcription_chunks"]:
+                current_text = " ".join([chunk.text for chunk in session_data["transcription_chunks"] if chunk.is_final])
+            
+            status = TranscriptionStatus(
+                is_recording=session_data["is_recording"],
+                is_processing=False,  # Could be enhanced
+                current_text=current_text,
+                confidence=0.0,  # Could be calculated from chunks
+                words_per_minute=0.0,  # Could be calculated
+                session_duration=int(duration),
+                language=session_data["session_info"].language
+            )
+            
+            await websocket.send_text(json.dumps({
+                "type": "status",
+                "status": status.dict()
+            }))
+            
+        except Exception as e:
+            logger.error(f"❌ Error sending status: {e}")
+    
+    async def stop_session(self, session_id: str):
+        """Stop and cleanup a transcription session"""
+        session_data = self.active_sessions.get(session_id)
+        if not session_data:
+            return
+        
+        try:
+            # Stop recording if active
+            if session_data["is_recording"]:
+                await self._stop_recording(session_id)
+            
+            # Save voice file
+            await self._save_voice_file(session_id)
+            
+            # Save transcription file
+            await self._save_transcription_file(session_id)
+            
+            # Cleanup session
+            del self.active_sessions[session_id]
+            
+            logger.info(f"✅ Session {session_id} stopped and cleaned up")
+            
+        except Exception as e:
+            logger.error(f"❌ Error stopping session {session_id}: {e}")
+    
+    async def _save_voice_file(self, session_id: str):
+        """Save voice file for a session"""
+        session_data = self.active_sessions.get(session_id)
+        if not session_data:
+            return
+        
+        try:
+            voice_file_path = session_data["voice_file_path"]
+            audio_buffer = session_data["audio_buffer"]
+            
+            # Get raw audio data
+            raw_audio = audio_buffer.getvalue()
+            
+            if not raw_audio:
+                logger.warning(f"⚠️ No audio data to save for session {session_id}")
+                return
+            
+            # Convert to numpy array to count samples
+            audio_array = np.frombuffer(raw_audio, dtype=np.int16)
+            num_samples = len(audio_array)
+            sample_rate = settings.sample_rate
+            
+            logger.info(f"💾 Saving {num_samples} samples ({num_samples/sample_rate:.2f}s) to {voice_file_path}")
+            
+            # Write WAV file with proper header
+            with wave.open(voice_file_path, 'wb') as wav_file:
+                wav_file.setnchannels(1)  # Mono
+                wav_file.setsampwidth(2)  # 16-bit (2 bytes per sample)
+                wav_file.setframerate(sample_rate)
+                wav_file.writeframesraw(raw_audio)
+            
+            logger.info(f"💾 Voice file saved: {voice_file_path}")
+            
+        except Exception as e:
+            logger.error(f"❌ Error saving voice file: {e}")
+            import traceback
+            logger.error(f"❌ Traceback: {traceback.format_exc()}")
+    
+    async def _save_transcription_file(self, session_id: str):
+        """Save transcription file for a session"""
+        session_data = self.active_sessions.get(session_id)
+        if not session_data:
+            return
+        
+        try:
+            # Create transcription file path
+            voice_file_path = Path(session_data["voice_file_path"])
+            transcription_file_path = voice_file_path.with_suffix(".txt")
+            
+            # Save transcription
+            with open(transcription_file_path, "w", encoding="utf-8") as f:
+                f.write(f"Whisper Transcription Session: {session_id}\n")
+                f.write(f"Doctor: {session_data['session_info'].doctor_id}\n")
+                f.write(f"Patient: {session_data['session_info'].patient_cf}\n")
+                f.write(f"Cronoscita: {session_data['session_info'].cronoscita_id}\n")
+                f.write(f"Language: {session_data['session_info'].language}\n")
+                f.write(f"Model: {settings.whisper_model_name}\n")
+                f.write(f"Start Time: {session_data['start_time'].isoformat()}\n")
+                f.write(f"End Time: {datetime.now().isoformat()}\n")
+                f.write("-" * 50 + "\n\n")
+                
+                for chunk in session_data["transcription_chunks"]:
+                    if chunk.is_final:
+                        f.write(f"[{chunk.timestamp.isoformat()}] {chunk.text}\n")
+                
+                # Add final result if available
+                if "final_result" in session_data:
+                    final_result = session_data["final_result"]
+                    f.write("\n" + "=" * 50 + "\n")
+                    f.write("FINAL TRANSCRIPTION RESULT\n")
+                    f.write("=" * 50 + "\n")
+                    f.write(f"Text: {final_result.text}\n")
+                    f.write(f"Language: {final_result.language}\n")
+                    f.write(f"Confidence: {final_result.confidence:.3f}\n")
+                    f.write(f"Duration: {final_result.duration:.2f} seconds\n")
+            
+            logger.info(f"📝 Transcription file saved: {transcription_file_path}")
+            
+        except Exception as e:
+            logger.error(f"❌ Error saving transcription file: {e}")
+    
+    async def cleanup(self):
+        """Cleanup all active sessions"""
+        logger.info("🧹 Cleaning up all active sessions...")
+        
+        for session_id in list(self.active_sessions.keys()):
+            await self.stop_session(session_id)
+        
+        logger.info("✅ All sessions cleaned up")
+    
+    async def _process_with_streaming_approach(self, audio_float: np.ndarray, previous_text: str, language: str) -> Dict:
+        """Process audio using Faster-Whisper with streaming approach"""
+        try:
+            logger.info("🔄 Processing with Faster-Whisper streaming approach...")
+            
+            # CRITICAL FIX: Use Faster-Whisper with correct parameters for real-time transcription
+            # Disable VAD filter initially to ensure we get transcriptions
+            # Lower thresholds significantly to accept more audio
+            # CRITICAL: Use VERY lenient parameters to ensure we get transcriptions
+            logger.info(f"🔄 Calling Faster-Whisper transcribe with lenient parameters...")
+            logger.info(f"🔄 Audio: {len(audio_float)} samples, {len(audio_float)/settings.sample_rate:.2f}s, RMS={np.sqrt(np.mean(audio_float**2)):.6f}")
+            
+            segments, info = self.model.transcribe(
+                audio_float,
+                language=language,
+                initial_prompt=previous_text if previous_text else None,
+                condition_on_previous_text=False,
+                temperature=0.0,
+                no_speech_threshold=0.2,  # VERY LOW - accept almost everything (was 0.3, original 0.6)
+                log_prob_threshold=-2.0,  # VERY LOW - accept low confidence (was -1.5, original -1.0)
+                compression_ratio_threshold=4.0,  # VERY HIGH - very lenient (was 3.0, original 2.4)
+                word_timestamps=True,
+                beam_size=1,
+                best_of=1,
+                patience=1.0,
+                length_penalty=1.0,
+                vad_filter=False  # DISABLED - don't filter audio
+            )
+            
+            # Convert Faster-Whisper segments to Whisper format
+            logger.info(f"🔄 Converting Faster-Whisper result... (v2)")
+            logger.info(f"📊 Info object: language={getattr(info, 'language', 'N/A')}, language_probability={getattr(info, 'language_probability', 'N/A')}")
+            
+            # CRITICAL: Iterate segments generator - this actually triggers transcription
+            logger.info(f"📊 Starting segment iteration... (this triggers Faster-Whisper transcription)")
+            logger.info(f"📊 Audio being transcribed: {len(audio_float)} samples ({len(audio_float)/settings.sample_rate:.2f}s)")
+            logger.info(f"📊 Audio RMS: {np.sqrt(np.mean(audio_float**2)):.6f}, Max: {np.max(np.abs(audio_float)):.6f}")
+            
+            segments_list = []
+            segment_count = 0
+            
+            try:
+                # Iterate through generator - THIS IS WHERE TRANSCRIPTION HAPPENS
+                for segment in segments:
+                    segment_count += 1
+                    try:
+                        seg_text = getattr(segment, 'text', None) or segment.text if hasattr(segment, 'text') else None
+                        seg_start = getattr(segment, 'start', None) or segment.start if hasattr(segment, 'start') else 0
+                        seg_end = getattr(segment, 'end', None) or segment.end if hasattr(segment, 'end') else 0
+                        
+                        if seg_text:
+                            logger.info(f"📊 ✅ SEGMENT {segment_count}: start={seg_start:.2f}s, end={seg_end:.2f}s, text='{seg_text}' (full length: {len(seg_text)})")
+                        else:
+                            logger.warning(f"📊 ⚠️ SEGMENT {segment_count}: NO TEXT ATTRIBUTE! Segment: {segment}")
+                        
+                        segments_list.append(segment)
+                    except Exception as seg_err:
+                        logger.error(f"❌ Error accessing segment {segment_count}: {seg_err}")
+                        logger.error(f"❌ Segment object: {segment}, type: {type(segment)}")
+                        segments_list.append(segment)  # Add anyway
+                
+                logger.info(f"📊 ✅ Total segments found: {len(segments_list)}")
+                
+                if not segments_list:
+                    logger.error("❌ ❌ ❌ CRITICAL: Generator returned ZERO segments - Faster-Whisper found NO SPEECH!")
+                    logger.error(f"❌ Audio duration: {len(audio_float)/settings.sample_rate:.2f}s")
+                    logger.error(f"❌ Audio RMS: {np.sqrt(np.mean(audio_float**2)):.6f}")
+                    logger.error(f"❌ Audio max: {np.max(np.abs(audio_float)):.6f}, min: {np.min(audio_float):.6f}")
+                    logger.error(f"❌ Info language: {getattr(info, 'language', 'N/A')}")
+                    logger.error(f"❌ Info language_probability: {getattr(info, 'language_probability', 'N/A')}")
+                    return {"text": "", "language": language, "segments": [], "confidence": 0.0, "info": str(info), "debug": "zero_segments"}
+                    
+            except Exception as e:
+                logger.error(f"❌ Error converting segments iterator: {e}")
+                import traceback
+                logger.error(f"❌ Traceback: {traceback.format_exc()}")
+                return {"text": "", "language": language, "segments": [], "confidence": 0.0}
+            
+            try:
+                result = self._convert_faster_whisper_result(segments_list, info)
+                logger.info(f"✅ Conversion completed successfully")
+            except Exception as e:
+                logger.error(f"❌ Error in _convert_faster_whisper_result: {e}")
+                import traceback
+                logger.error(f"❌ Traceback: {traceback.format_exc()}")
+                return {"text": "", "language": language, "segments": [], "confidence": 0.0}
+            
+            logger.info(f"📝 Streaming result: '{result.get('text', '')}'")
+            logger.info(f"📝 Full result keys: {list(result.keys())}")
+            logger.info(f"📝 Result text length: {len(result.get('text', ''))}")
+            if 'segments' in result:
+                logger.info(f"📝 Number of segments: {len(result['segments'])}")
+                for i, seg in enumerate(result['segments'][:3]):  # Log first 3 segments
+                    logger.info(f"📝 Segment {i}: '{seg.get('text', '')[:50]}...'")
+            
+            # Check if result is empty
+            if not result.get('text', '').strip():
+                logger.warning("⚠️ Empty transcription result from Faster-Whisper - VAD may have filtered all audio")
+            else:
+                logger.info(f"✅ Got transcription: '{result.get('text', '')}' (length: {len(result.get('text', ''))})")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"❌ Error in streaming processing: {e}")
+            return {}
+    
+    def _is_repetitive_text(self, text: str) -> bool:
+        """Check if text is repetitive or hallucinated - SIMPLIFIED"""
+        if not text or len(text.strip()) < 2:
+            return True
+            
+        # Only filter out obvious hallucinations
+        hallucination_patterns = [
+            "buon appetito",
+            "alla prossima", 
+            "sottotitoli",
+            "amara.org",
+            "qtss"
+        ]
+        
+        text_lower = text.lower().strip()
+        for pattern in hallucination_patterns:
+            if pattern in text_lower:
+                return True
+                
+        # Allow most other text through
+        return False
+
+    def _convert_faster_whisper_result(self, segments, info) -> Dict:
+        """Convert Faster-Whisper result to Whisper format"""
+        try:
+            # Segments is already a list from the caller
+            if not isinstance(segments, list):
+                segments_list = list(segments)
+            else:
+                segments_list = segments
+            
+            logger.info(f"🔄 Converting {len(segments_list)} segments from Faster-Whisper")
+            
+            if not segments_list:
+                logger.warning("⚠️ No segments to convert")
+                return {"text": "", "language": "it", "segments": [], "confidence": 0.0}
+            
+            # Combine all segment text - handle both attribute and property access
+            text_parts = []
+            for seg in segments_list:
+                seg_text = getattr(seg, 'text', None)
+                if seg_text:
+                    text_parts.append(seg_text.strip())
+                    logger.debug(f"📝 Adding segment text: '{seg_text[:50]}...'")
+            
+            text = " ".join(text_parts)
+            logger.info(f"📝 ✅ Combined text from {len(segments_list)} segments: '{text}' (length: {len(text)})")
+            
+            if not text:
+                logger.error(f"❌ CRITICAL: Combined text is empty even though we have {len(segments_list)} segments!")
+                logger.error(f"❌ Segment details:")
+                for i, seg in enumerate(segments_list):
+                    logger.error(f"❌   Segment {i}: {seg}, attributes: {[a for a in dir(seg) if not a.startswith('_')]}")
+                    logger.error(f"❌   Segment {i} text attr: {getattr(seg, 'text', 'NO TEXT ATTRIBUTE')}")
+            
+            # Convert segments to Whisper format
+            whisper_segments = []
+            for segment in segments_list:
+                whisper_segment = {
+                    "id": segment.id,
+                    "seek": segment.seek,
+                    "start": segment.start,
+                    "end": segment.end,
+                    "text": segment.text,
+                    "tokens": segment.tokens,
+                    "temperature": segment.temperature,
+                    "avg_logprob": segment.avg_logprob,
+                    "compression_ratio": segment.compression_ratio,
+                    "no_speech_prob": segment.no_speech_prob,
+                    "words": []
+                }
+                
+                # Add word-level timestamps if available
+                if hasattr(segment, 'words') and segment.words:
+                    for word in segment.words:
+                        whisper_segment["words"].append({
+                            "word": word.word,
+                            "start": word.start,
+                            "end": word.end,
+                            "probability": getattr(word, 'probability', 0.0)
+                        })
+                
+                whisper_segments.append(whisper_segment)
+            
+            return {
+                "text": text,
+                "language": info.language if hasattr(info, 'language') else 'it',
+                "segments": whisper_segments,
+                "confidence": getattr(info, 'language_probability', 0.0)
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error converting Faster-Whisper result: {e}")
+            return {"text": "", "language": "it", "segments": [], "confidence": 0.0}
+    
+    async def _send_streaming_transcription(self, session_id: str, result: Dict, is_final: bool = False):
+        """Send streaming transcription with word-level timestamps. is_final controls interim vs final."""
+        try:
+            session_data = self.active_sessions.get(session_id)
+            if not session_data:
+                return
+            
+            text = result.get("text", "").strip()
+            logger.info(f"📝 Raw text from Whisper: '{text}'")
+            if not text:
+                logger.warning("⚠️ Empty text from Whisper, skipping transcription")
+                return
+            
+            # Only filter obvious hallucinations for partials, be very lenient
+            # For final results, apply stricter filtering
+            if is_final and self._is_repetitive_text(text):
+                logger.warning(f"⚠️ Filtered out repetitive/hallucinated final text: '{text}'")
+                # Send processing status
+                await session_data["websocket"].send_text(json.dumps({
+                    "type": "processing_status",
+                    "message": "Transcrizione completata",
+                    "timestamp": datetime.now().isoformat()
+                }))
+                return
+            # For partials, only filter if it's clearly noise
+            elif not is_final:
+                # Only filter if it's the exact same repetitive pattern
+                if len(text.strip()) > 0 and text.strip() == text.strip() * (len(text.strip()) // max(1, len(text.strip().split()[0]) if text.strip().split() else 1)):
+                    logger.debug(f"⏭️ Skipping clearly repetitive partial: '{text[:30]}...'")
+                    return
+            
+            # Throttle partial emissions only if text hasn't changed significantly
+            if not is_final and settings.partials_enabled:
+                now_ts = time.time()
+                last_partial = session_data.get("last_partial_emit", 0.0)
+                last_text = session_data.get("last_partial_text", "")
+                min_gap = settings.partial_emit_interval_ms / 1000.0
+                
+                # Always send if text is significantly different
+                text_changed = text != last_text and len(text) > len(last_text)
+                
+                if not text_changed and last_partial and (now_ts - last_partial) < min_gap:
+                    logger.debug(f"⏭️ Skipping partial (throttled): '{text[:30]}...'")
+                    return
+                    
+                session_data["last_partial_emit"] = now_ts
+                session_data["last_partial_text"] = text
+
+            logger.info(f"📝 Sending streaming transcription: '{text}' (is_final={is_final})")
+            
+            # Extract word-level information if available
+            words = []
+            if "segments" in result:
+                for segment in result["segments"]:
+                    if "words" in segment:
+                        for word_info in segment["words"]:
+                            words.append(WordTranscription(
+                                word=word_info.get("word", ""),
+                                start=word_info.get("start", 0.0),
+                                end=word_info.get("end", 0.0),
+                                confidence=word_info.get("probability", 0.0),
+                                is_final=True
+                            ))
+            
+            # Send word-level transcription if available
+            if words:
+                await session_data["websocket"].send_text(json.dumps({
+                    "type": "word_transcription",
+                    "session_id": session_id,
+                    "words": [word.dict() for word in words],
+                    "timestamp": datetime.now().isoformat()
+                }))
+            
+            # Send complete text transcription - CRITICAL: Frontend expects this format
+            transcription_message = {
+                "type": "transcription",
+                "session_id": session_id,
+                "text": text,
+                "is_final": is_final,
+                "confidence": result.get("confidence", 0.0),
+                "language": result.get("language", session_data["session_info"].language),
+                "timestamp": datetime.now().isoformat()
+            }
+            
+            await session_data["websocket"].send_text(json.dumps(transcription_message))
+            
+            logger.info(f"📤 ✅ SENT TRANSCRIPTION MESSAGE: type=transcription, text='{text[:100]}', is_final={is_final}, length={len(text)}")
+            logger.debug(f"📤 Full message: {transcription_message}")
+            
+        except Exception as e:
+            logger.error(f"❌ Error sending streaming transcription: {e}")

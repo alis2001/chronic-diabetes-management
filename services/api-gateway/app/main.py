@@ -76,7 +76,7 @@ SERVICES = {
     "diario": os.getenv("DIARIO_SERVICE_URL", "http://diario-service:8005"),
     "admin": os.getenv("ADMIN_SERVICE_URL", "http://admin-dashboard:8084"),
     "melody": os.getenv("MELODY_SERVICE_URL", "http://localhost:5002"),
-    "voice-transcription": os.getenv("VOICE_TRANSCRIPTION_SERVICE_URL", "http://voice-transcription-service:5003")
+    "whisper-transcription": os.getenv("WHISPER_TRANSCRIPTION_SERVICE_URL", "http://192.168.125.193:5005")
 }
 
 class HealthResponse(BaseModel):
@@ -369,18 +369,18 @@ async def melody_proxy(path: str, request: Request):
 # voice transcription service route (NEW)
 @app.api_route("/api/voice-transcription/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
 async def voice_transcription_proxy(path: str, request: Request):
-    """Route all /api/voice-transcription/* requests to voice transcription service"""
-    logger.info(f"🎙️ Voice Transcription route: /api/voice-transcription/{path}")
-    return await proxy_request("voice-transcription", f"/{path}", request)
+    """Route all /api/voice-transcription/* requests to Whisper transcription service"""
+    logger.info(f"🎙️ Whisper Transcription route: /api/voice-transcription/{path}")
+    return await proxy_request("whisper-transcription", f"/{path}", request)
 
 @app.websocket("/api/voice-transcription/ws/transcribe/{session_id}")
 async def voice_transcription_websocket(websocket: WebSocket, session_id: str):
-    """WebSocket proxy for voice transcription service"""
-    logger.info(f"🎙️ Voice Transcription WebSocket: /api/voice-transcription/ws/transcribe/{session_id}")
+    """WebSocket proxy for Whisper transcription service"""
+    logger.info(f"🎙️ Whisper Transcription WebSocket: /api/voice-transcription/ws/transcribe/{session_id}")
     
-    # Get the voice transcription service URL
-    service_url = SERVICES["voice-transcription"]
-    target_ws_url = f"ws://voice-transcription-service:5003/ws/transcribe/{session_id}"
+    # Get the Whisper transcription service URL
+    service_url = SERVICES["whisper-transcription"]
+    target_ws_url = f"ws://192.168.125.193:5005/ws/transcribe/{session_id}"
     
     try:
         # Accept the WebSocket connection
